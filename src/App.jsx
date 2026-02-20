@@ -5,13 +5,13 @@ import {
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { 
   getFirestore, doc, setDoc, getDoc, collection, onSnapshot, 
-  serverTimestamp, updateDoc, addDoc, runTransaction
+  serverTimestamp, updateDoc, addDoc, runTransaction, deleteDoc
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 import { 
   User, Briefcase, ArrowRight, CheckCircle2, Send, Sparkles, 
   Globe, Info, ChevronLeft, ChevronRight, Lock, 
   LogIn, Save, Search, Settings, Eye, ExternalLink, Upload, MapPin, FileText, LayoutDashboard, Users, Loader2, Image as ImageIcon,
-  Megaphone, Cpu, Coffee, Truck, ShieldCheck, Briefcase as PortfolioIcon
+  Megaphone, Cpu, Coffee, Truck, ShieldCheck, Briefcase as PortfolioIcon, XCircle, CheckCircle
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -21,7 +21,6 @@ const getEnv = (key) => {
   try { return import.meta.env[key] || ""; } catch (e) { return ""; }
 };
 
-// Cloudinary 및 Firebase 설정 불러오기
 const CLOUDINARY_NAME = getEnv('VITE_CLOUDINARY_CLOUD_NAME');
 const CLOUDINARY_API_KEY = getEnv('VITE_CLOUDINARY_API_KEY');
 const CLOUDINARY_PRESET = getEnv('VITE_CLOUDINARY_UPLOAD_PRESET');
@@ -60,11 +59,21 @@ const App = () => {
     privacyAgreed: false
   });
 
+  // URL 파라미터 감지 및 관리자 뷰 전환
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'admin' && isAdmin) {
+      setViewMode('admin');
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        setIsAdmin(ADMIN_EMAILS.includes(u.email));
+        const isUserAdmin = ADMIN_EMAILS.includes(u.email);
+        setIsAdmin(isUserAdmin);
+        
         // 임시저장 데이터 로드
         const draftRef = doc(db, 'artifacts', appId, 'users', u.uid, 'drafts', 'current');
         const draftSnap = await getDoc(draftRef);
@@ -128,14 +137,14 @@ const App = () => {
         setViewMode={setViewMode} 
         handleLogin={handleLogin} 
         handleSignOut={handleSignOut} 
-        reset={() => {setCurrentStep(1); setIsSubmitSuccess(false); setSelectedDate(null);}}
+        reset={() => {setCurrentStep(1); setIsSubmitSuccess(false); setSelectedDate(null); setViewMode('user');}}
       />
 
       <main className="max-w-7xl mx-auto px-6 pt-32 pb-32">
         {isSubmitSuccess ? (
           <SuccessView onReturn={() => {setIsSubmitSuccess(false); setCurrentStep(1); setSelectedDate(null);}} />
         ) : viewMode === 'admin' ? (
-          <AdminDashboard applications={applications} />
+          <AdminDashboard applications={applications} db={db} appId={appId} />
         ) : (
           <div className="transition-all duration-700 ease-in-out">
             {currentStep === 1 && (
@@ -186,7 +195,7 @@ const Navbar = ({ user, isAdmin, viewMode, setViewMode, handleLogin, handleSignO
       {isAdmin && (
         <button 
           onClick={() => setViewMode(viewMode === 'user' ? 'admin' : 'user')}
-          className="text-[9px] font-black uppercase tracking-[0.2em] bg-black text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-[#004aad] transition-all"
+          className="text-[9px] font-black uppercase tracking-[0.2em] bg-black text-white px-4 py-2 rounded-full flex items-center gap-2 hover:bg-[#004aad] transition-all shadow-lg"
         >
           {viewMode === 'user' ? <><LayoutDashboard size={12}/> Admin Panel</> : <><User size={12}/> User View</>}
         </button>
@@ -243,11 +252,11 @@ const LandingPage = ({ onStart }) => (
           <h3 className="text-5xl md:text-7xl font-black tracking-tight leading-tight mb-12 uppercase">예술적 실천을 위한<br />정직한 약속</h3>
           <p className="text-xl text-gray-500 font-light leading-relaxed break-keep italic">언프레임은 공간이 작가의 언어를 온전히 담아낼 때 그 가치가 완성된다고 믿습니다. 우리는 작가님들이 활동을 지속할 수 있는 <span className="text-black font-bold">지속 가능한 전시 환경</span>을 지향합니다.</p>
         </div>
-        <div className="bg-white border border-gray-100 p-12 md:p-20 shadow-2xl rounded-[64px] relative overflow-hidden group">
+        <div className="bg-white border border-gray-100 p-10 md:p-12 lg:p-16 shadow-2xl rounded-[64px] relative overflow-hidden group">
           <span className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-300 mb-10 block">Rental Investment</span>
-          <div className="flex items-baseline gap-6 mb-16">
-            <span className="text-7xl md:text-9xl font-black tracking-tighter">2,800,000</span>
-            <span className="text-2xl text-gray-400 font-bold uppercase">KRW / WEEK</span>
+          <div className="flex flex-wrap items-baseline gap-4 mb-16">
+            <span className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter">2,800,000</span>
+            <span className="text-lg sm:text-xl md:text-2xl text-gray-400 font-bold uppercase whitespace-nowrap">KRW / WEEK</span>
           </div>
           <button 
             onClick={onStart}
@@ -343,7 +352,6 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
   const workListInputRef = useRef(null);
   const portfolioInputRef = useRef(null);
 
-  // Cloudinary 통합 업로드 함수 (이미지, PDF, ZIP 모두 지원)
   const handleCloudinaryUpload = async (e, fieldName) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -354,11 +362,9 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
     }
 
     setIsUploading(fieldName);
-    
     const uploadData = new FormData();
     uploadData.append('file', file);
     uploadData.append('upload_preset', CLOUDINARY_PRESET);
-    uploadData.append('api_key', CLOUDINARY_API_KEY);
 
     try {
       const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_NAME}/auto/upload`, {
@@ -372,7 +378,6 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
         throw new Error(result.error?.message || "Upload failed");
       }
     } catch (e) {
-      console.error(e);
       alert("파일 업로드 실패: " + e.message);
     } finally {
       setIsUploading(null);
@@ -447,20 +452,20 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <button onClick={() => portfolioInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden">
+            <button onClick={() => portfolioInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden text-center break-keep">
               {isUploading === 'portfolioUrl' ? <Loader2 className="animate-spin" size={20}/> : <PortfolioIcon size={20}/>}
               {formData.portfolioUrl ? "포트폴리오 완료" : "포트폴리오 업로드"}
-              <div className="text-[8px] text-gray-300">PDF, ZIP, 이미지</div>
+              <div className="text-[8px] text-gray-300 px-2 leading-tight">PDF, ZIP, 이미지</div>
             </button>
-            <button onClick={() => workListInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden">
+            <button onClick={() => workListInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden text-center break-keep">
               {isUploading === 'workListUrl' ? <Loader2 className="animate-spin" size={20}/> : <FileText size={20}/>}
               {formData.workListUrl ? "리스트 완료" : "작품 리스트 업로드"}
-              <div className="text-[8px] text-gray-300">PDF, ZIP 가능</div>
+              <div className="text-[8px] text-gray-300 px-2 leading-tight">PDF, ZIP 가능</div>
             </button>
-            <button onClick={() => highResInputRef.current.click()} className="py-8 bg-[#004aad]/5 text-[#004aad] border border-[#004aad]/10 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-[#004aad]/10 transition-all shadow-sm relative overflow-hidden lg:col-span-1 md:col-span-2">
+            <button onClick={() => highResInputRef.current.click()} className="py-8 bg-[#004aad]/5 text-[#004aad] border border-[#004aad]/10 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-[#004aad]/10 transition-all shadow-sm relative overflow-hidden lg:col-span-1 md:col-span-2 text-center break-keep">
               {isUploading === 'highResPhotosUrl' ? <Loader2 className="animate-spin" size={20}/> : <ImageIcon size={20}/>}
               {formData.highResPhotosUrl ? "사진 완료" : "고화질 사진 업로드"}
-              <div className="text-[8px] opacity-50 uppercase">Images only</div>
+              <div className="text-[8px] opacity-50 uppercase px-2 leading-tight">Images only</div>
             </button>
         </div>
 
@@ -476,38 +481,127 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
             <input type="checkbox" checked={formData.privacyAgreed} onChange={e => setFormData({...formData, privacyAgreed: e.target.checked})} className="w-8 h-8 accent-[#004aad] rounded border-gray-200" />
             <span className="text-lg font-black text-gray-400 group-hover:text-black transition-colors uppercase tracking-widest">개인정보 수집 및 이용 동의</span>
           </label>
-          <button onClick={handleSubmit} className="w-full bg-black text-white py-10 rounded-[40px] font-black uppercase tracking-[0.4em] text-2xl flex items-center justify-center gap-6 hover:bg-[#004aad] transition-all shadow-2xl active:scale-95 shadow-black/10">Submit Proposal <ArrowRight size={32}/></button>
+          <button onClick={handleSubmit} className="w-full bg-black text-white py-10 rounded-[40px] font-black uppercase tracking-[0.4em] text-2xl flex items-center justify-center gap-6 hover:bg-[#004aad] transition-all shadow-2xl active:scale-95 shadow-black/10 text-center break-keep">Submit Proposal <ArrowRight size={32}/></button>
         </div>
       </div>
     </section>
   );
 };
 
-const AdminDashboard = ({ applications }) => (
-  <section className="animate-in fade-in duration-700">
-    <h2 className="text-5xl font-black tracking-tighter uppercase mb-12">Applications Panel</h2>
-    <div className="grid gap-6">
-      {applications.sort((a,b) => b.submittedAt - a.submittedAt).map(app => (
-        <div key={app.id} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6 hover:border-[#004aad] transition-all">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-4">
-                  <span className={`px-2 py-1 rounded text-[8px] font-black uppercase text-white ${app.status === 'review' ? 'bg-[#004aad]' : 'bg-green-400'}`}>{app.status}</span>
-                  <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">{app.selectedDate}</span>
-              </div>
-              <h3 className="text-2xl font-black mb-1 uppercase tracking-tight break-all leading-tight">{app.exhibitionTitle || "Untitled"}</h3>
-              <p className="text-xs text-gray-400 font-bold uppercase tracking-widest text-sm">Artist: {app.name}</p>
-            </div>
-            <div className="flex gap-3 flex-wrap">
-              {app.portfolioUrl && <a href={app.portfolioUrl} target="_blank" className="px-4 py-4 border border-gray-100 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase hover:bg-gray-50"><PortfolioIcon size={14}/> Portfolio</a>}
-              {app.workListUrl && <a href={app.workListUrl} target="_blank" className="px-4 py-4 border border-gray-100 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase hover:bg-gray-50"><FileText size={14}/> List</a>}
-              <button className="px-6 py-4 bg-[#004aad] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#003d8f]">Confirm</button>
-            </div>
+// --- ADMIN DASHBOARD ---
+const AdminDashboard = ({ applications, db, appId }) => {
+  const groupedApps = useMemo(() => {
+    const groups = {};
+    applications.forEach(app => {
+      if (!groups[app.selectedDate]) groups[app.selectedDate] = [];
+      groups[app.selectedDate].push(app);
+    });
+    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [applications]);
+
+  const handleAction = async (appDoc, date, status) => {
+    try {
+      if (status === 'confirmed') {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'applications', appDoc.id), { status: 'confirmed' });
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'reservations', date), { 
+          status: 'confirmed', 
+          confirmedArtist: appDoc.name 
+        });
+      } else if (status === 'rejected') {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'applications', appDoc.id), { status: 'rejected' });
+        const resRef = doc(db, 'artifacts', appId, 'public', 'data', 'reservations', date);
+        const resSnap = await getDoc(resRef);
+        if (resSnap.exists()) {
+          const newCount = Math.max(0, (resSnap.data().applicantCount || 1) - 1);
+          await updateDoc(resRef, { applicantCount: newCount });
+        }
+      }
+    } catch (e) {
+      alert("처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  return (
+    <section className="animate-in fade-in duration-700">
+      <div className="flex justify-between items-end mb-20">
+        <h2 className="text-5xl font-black tracking-tighter uppercase leading-none">Review Board</h2>
+        <div className="text-right">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Active Applications</p>
+          <p className="text-4xl font-black text-[#004aad]">{applications.length}</p>
         </div>
-      ))}
-      {applications.length === 0 && <div className="py-40 text-center text-gray-400 font-bold uppercase tracking-widest">No proposals found</div>}
-    </div>
-  </section>
-);
+      </div>
+
+      <div className="space-y-32">
+        {groupedApps.map(([date, apps]) => (
+          <div key={date} className="relative">
+            <div className="sticky top-24 z-10 bg-[#fdfbf7]/80 backdrop-blur-sm py-4 border-b border-gray-100 flex items-center justify-between mb-10">
+              <h3 className="text-3xl font-black uppercase tracking-tighter text-[#004aad]">{date} <span className="text-sm font-bold text-gray-400 ml-4">(Thu)</span></h3>
+              <div className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                {apps.length} Applicants
+              </div>
+            </div>
+
+            <div className="grid gap-12">
+              {apps.map(app => (
+                <div key={app.id} className={`bg-white p-10 md:p-16 rounded-[60px] border transition-all ${app.status === 'confirmed' ? 'border-green-400 shadow-green-100 shadow-xl' : 'border-gray-50 shadow-2xl shadow-gray-200/50'}`}>
+                  <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
+                    <div className="flex-1 space-y-12">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${app.status === 'review' ? 'bg-[#004aad]' : app.status === 'confirmed' ? 'bg-green-500' : 'bg-gray-400'}`}>
+                            {app.status}
+                          </div>
+                          <h4 className="text-4xl font-black tracking-tight leading-tight uppercase break-all">{app.exhibitionTitle || "Untitled Project"}</h4>
+                          <p className="text-xl text-gray-400 font-bold uppercase tracking-widest mt-2">{app.name} / {app.birthDate}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-12">
+                        <div className="space-y-4">
+                          <h5 className="text-[10px] font-black uppercase text-[#004aad] tracking-[0.2em] border-b border-gray-100 pb-2">Artist Note</h5>
+                          <p className="text-sm leading-relaxed text-gray-600 font-medium whitespace-pre-wrap italic">"{app.artistNote}"</p>
+                        </div>
+                        <div className="space-y-4">
+                          <h5 className="text-[10px] font-black uppercase text-[#004aad] tracking-[0.2em] border-b border-gray-100 pb-2">Experimental Trial</h5>
+                          <p className="text-sm leading-relaxed text-gray-600 font-medium whitespace-pre-wrap italic">"{app.experimentText}"</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 flex-wrap">
+                        {app.portfolioUrl && <a href={app.portfolioUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><PortfolioIcon size={14}/> View Portfolio</a>}
+                        {app.workListUrl && <a href={app.workListUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><FileText size={14}/> Work List</a>}
+                        {app.snsLink && <a href={app.snsLink.startsWith('http') ? app.snsLink : `https://instagram.com/${app.snsLink.replace('@', '')}`} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><Globe size={14}/> SNS / WEB</a>}
+                      </div>
+                    </div>
+
+                    <div className="w-full lg:w-[280px] bg-gray-50 rounded-[40px] p-8 space-y-6">
+                      <h5 className="text-center text-[10px] font-black uppercase tracking-widest text-gray-400">Decision Panel</h5>
+                      <div className="space-y-3">
+                        <button 
+                          disabled={app.status === 'confirmed'}
+                          onClick={() => handleAction(app, date, 'confirmed')}
+                          className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-[#004aad] transition-all disabled:bg-gray-200"
+                        >
+                          <CheckCircle size={14}/> Approve & Confirm
+                        </button>
+                        <button 
+                          onClick={() => handleAction(app, date, 'rejected')}
+                          className="w-full py-5 border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all"
+                        >
+                          <XCircle size={14}/> Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const SuccessView = ({ onReturn }) => (
   <section className="max-w-xl mx-auto py-40 text-center animate-in zoom-in-95 duration-700">
