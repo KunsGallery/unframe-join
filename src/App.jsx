@@ -1,11 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { 
-  getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut 
+  getAuth, 
+  signInWithPopup, 
+  signInAnonymously,
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut 
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
 import { 
-  getFirestore, doc, setDoc, getDoc, collection, onSnapshot, 
-  serverTimestamp, updateDoc, addDoc, runTransaction, deleteDoc
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection, 
+  onSnapshot, 
+  serverTimestamp, 
+  updateDoc, 
+  addDoc, 
+  runTransaction 
 } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 import { 
   User, Briefcase, ArrowRight, CheckCircle2, Send, Sparkles, 
@@ -17,12 +30,16 @@ import {
 // --- CONFIGURATION ---
 const ADMIN_EMAILS = ["gallerykuns@gmail.com", "sklove887@gmail.com"];
 
+// 환경 변수 안전 접근 (Vite 빌드 타겟 이슈 해결)
 const getEnv = (key) => {
-  try { return import.meta.env[key] || ""; } catch (e) { return ""; }
+  try {
+    return import.meta.env[key] || "";
+  } catch (e) {
+    return "";
+  }
 };
 
 const CLOUDINARY_NAME = getEnv('VITE_CLOUDINARY_CLOUD_NAME');
-const CLOUDINARY_API_KEY = getEnv('VITE_CLOUDINARY_API_KEY');
 const CLOUDINARY_PRESET = getEnv('VITE_CLOUDINARY_UPLOAD_PRESET');
 
 const firebaseConfig = {
@@ -34,11 +51,11 @@ const firebaseConfig = {
   appId: getEnv('VITE_FIREBASE_APP_ID')
 };
 
-const finalConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
-const app = initializeApp(finalConfig);
+// 파이어베이스 초기화
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'unframe-join';
+const appId = "unframe-join";
 
 // --- MAIN APP COMPONENT ---
 const App = () => {
@@ -59,7 +76,77 @@ const App = () => {
     privacyAgreed: false
   });
 
-  // URL 파라미터 감지 및 관리자 뷰 전환
+  // 1. 인증 처리 (Firestore Rule 3 준수: 쿼리 전 인증 필수)
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // 우선 익명 로그인으로 세션 확보 (읽기 권한용)
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth initialization failed:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u && !u.isAnonymous) {
+        setIsAdmin(ADMIN_EMAILS.includes(u.email));
+        // 임시저장 데이터 로드 (Private Path)
+        try {
+          const draftRef = doc(db, 'artifacts', appId, 'users', u.uid, 'drafts', 'current');
+          const draftSnap = await getDoc(draftRef);
+          if (draftSnap.exists()) {
+            const data = draftSnap.data();
+            setFormData(prev => ({ ...prev, ...data.formData }));
+            setSelectedDate(data.selectedDate);
+          }
+        } catch (e) { console.error("Draft load error:", e); }
+      } else {
+        setIsAdmin(false);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. 데이터 구독 (인증 후에만 실행되도록 가드)
+  useEffect(() => {
+    if (!user) return;
+
+    // 공용 예약 현황 구독 (Public Path)
+    const resRef = collection(db, 'artifacts', appId, 'public', 'data', 'reservations');
+    const unsubscribeRes = onSnapshot(resRef, 
+      (snap) => {
+        const resMap = {};
+        snap.forEach(d => { resMap[d.id] = d.data(); });
+        setReservations(resMap);
+      }, 
+      (err) => console.error("Reservations sync error:", err)
+    );
+
+    let unsubscribeApp = () => {};
+    if (isAdmin && viewMode === 'admin') {
+      const appRef = collection(db, 'artifacts', appId, 'public', 'data', 'applications');
+      unsubscribeApp = onSnapshot(appRef, 
+        (snap) => {
+          const appList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setApplications(appList);
+        },
+        (err) => console.error("Applications sync error:", err)
+      );
+    }
+
+    return () => {
+      unsubscribeRes();
+      unsubscribeApp();
+    };
+  }, [user, isAdmin, viewMode]);
+
+  // URL 파라미터 감지 (?view=admin)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('view') === 'admin' && isAdmin) {
@@ -67,63 +154,27 @@ const App = () => {
     }
   }, [isAdmin]);
 
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const isUserAdmin = ADMIN_EMAILS.includes(u.email);
-        setIsAdmin(isUserAdmin);
-        
-        // 임시저장 데이터 로드
-        const draftRef = doc(db, 'artifacts', appId, 'users', u.uid, 'drafts', 'current');
-        const draftSnap = await getDoc(draftRef);
-        if (draftSnap.exists()) {
-          const data = draftSnap.data();
-          setFormData(prev => ({ ...prev, ...data.formData }));
-          setSelectedDate(data.selectedDate);
-        }
-      } else {
-        setIsAdmin(false);
-        setViewMode('user');
-      }
-      setLoading(false);
-    });
-
-    const resRef = collection(db, 'artifacts', appId, 'public', 'data', 'reservations');
-    const unsubscribeRes = onSnapshot(resRef, (snap) => {
-      const resMap = {};
-      snap.forEach(d => { resMap[d.id] = d.data(); });
-      setReservations(resMap);
-    }, (err) => console.error("Firebase Error:", err));
-
-    return () => { unsubscribeAuth(); unsubscribeRes(); };
-  }, []);
-
-  useEffect(() => {
-    if (!isAdmin || viewMode !== 'admin') return;
-    const appRef = collection(db, 'artifacts', appId, 'public', 'data', 'applications');
-    const unsubscribeApp = onSnapshot(appRef, (snap) => {
-      const appList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setApplications(appList);
-    });
-    return () => unsubscribeApp();
-  }, [isAdmin, viewMode]);
-
   const handleLogin = () => signInWithPopup(auth, new GoogleAuthProvider());
-  const handleSignOut = () => signOut(auth);
+  const handleSignOut = () => {
+    signOut(auth);
+    window.location.href = window.location.pathname; 
+  };
 
   const saveDraft = async () => {
-    if (!user) return;
+    if (!user || user.isAnonymous) {
+      alert("로그인이 필요한 서비스입니다.");
+      handleLogin();
+      return;
+    }
     try {
       await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'drafts', 'current'), {
         formData, selectedDate, lastSaved: serverTimestamp()
       });
-    } catch (e) { console.error("Draft Save Error:", e); }
-  };
-
-  const handleStepTransition = (step) => {
-    setCurrentStep(step);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+      alert("진행 상황이 임시 저장되었습니다.");
+    } catch (e) { 
+      console.error(e); 
+      alert("임시 저장 중 오류가 발생했습니다.");
+    }
   };
 
   if (loading) return <LoadingOverlay />;
@@ -131,12 +182,8 @@ const App = () => {
   return (
     <div className="min-h-screen bg-[#fdfbf7] text-[#1a1a1a] font-sans selection:bg-[#004aad] selection:text-white overflow-x-hidden">
       <Navbar 
-        user={user} 
-        isAdmin={isAdmin} 
-        viewMode={viewMode} 
-        setViewMode={setViewMode} 
-        handleLogin={handleLogin} 
-        handleSignOut={handleSignOut} 
+        user={user} isAdmin={isAdmin} viewMode={viewMode} setViewMode={setViewMode} 
+        handleLogin={handleLogin} handleSignOut={handleSignOut} 
         reset={() => {setCurrentStep(1); setIsSubmitSuccess(false); setSelectedDate(null); setViewMode('user');}}
       />
 
@@ -144,47 +191,40 @@ const App = () => {
         {isSubmitSuccess ? (
           <SuccessView onReturn={() => {setIsSubmitSuccess(false); setCurrentStep(1); setSelectedDate(null);}} />
         ) : viewMode === 'admin' ? (
-          <AdminDashboard applications={applications} db={db} appId={appId} />
+          <AdminDashboard applications={applications} db={db} appId={appId} reservations={reservations} />
         ) : (
           <div className="transition-all duration-700 ease-in-out">
-            {currentStep === 1 && (
-              <LandingPage onStart={() => handleStepTransition(2)} />
-            )}
+            {currentStep === 1 && <LandingPage onStart={() => setCurrentStep(2)} />}
             {currentStep === 2 && (
               <CalendarStep 
                 reservations={reservations} 
-                onSelect={(date) => {setSelectedDate(date); handleStepTransition(3);}} 
-                onBack={() => handleStepTransition(1)}
+                onSelect={(date) => {setSelectedDate(date); setCurrentStep(3);}} 
+                onBack={() => setCurrentStep(1)}
               />
             )}
             {currentStep === 3 && (
               <ProposalFormStep 
-                selectedDate={selectedDate}
-                formData={formData}
-                setFormData={setFormData}
-                saveDraft={saveDraft}
-                onBack={() => handleStepTransition(2)}
+                selectedDate={selectedDate} formData={formData} setFormData={setFormData}
+                saveDraft={saveDraft} onBack={() => setCurrentStep(2)}
                 onSubmitSuccess={() => setIsSubmitSuccess(true)}
-                db={db}
-                appId={appId}
-                user={user}
+                db={db} appId={appId} user={user} reservations={reservations}
+                handleLogin={handleLogin}
               />
             )}
           </div>
         )}
       </main>
-
       <Footer />
     </div>
   );
 };
 
-// --- SUB-COMPONENTS ---
+// --- 서브 컴포넌트 ---
 
 const LoadingOverlay = () => (
-  <div className="h-screen flex flex-col items-center justify-center font-black text-[#004aad] bg-[#fdfbf7] z-[1000]">
+  <div className="h-screen flex flex-col items-center justify-center font-black text-[#004aad] bg-[#fdfbf7]">
     <Loader2 className="animate-spin size-12 mb-4" />
-    <span className="animate-pulse tracking-[0.5em] uppercase text-xs">Unframe Resonance</span>
+    <span className="animate-pulse tracking-[0.5em] uppercase text-xs text-zinc-400">Unframe Resonance</span>
   </div>
 );
 
@@ -200,7 +240,7 @@ const Navbar = ({ user, isAdmin, viewMode, setViewMode, handleLogin, handleSignO
           {viewMode === 'user' ? <><LayoutDashboard size={12}/> Admin Panel</> : <><User size={12}/> User View</>}
         </button>
       )}
-      {user ? (
+      {user && !user.isAnonymous ? (
         <div className="flex items-center gap-4 border-l pl-6 border-gray-100">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{user.displayName}</span>
           <button onClick={handleSignOut} className="text-[10px] font-black text-red-400 uppercase">Logout</button>
@@ -216,32 +256,32 @@ const LandingPage = ({ onStart }) => (
   <div className="animate-in fade-in duration-1000 space-y-40">
     <header className="min-h-[80vh] flex flex-col items-center justify-center text-center">
       <span className="text-[#004aad] uppercase tracking-[0.5em] text-xs font-black mb-8 block animate-bounce">Collaboration & Rental</span>
-      <h1 className="text-7xl md:text-[11rem] font-black uppercase leading-[0.85] mb-12 tracking-tighter">Start Your<br />Resonance</h1>
-      <p className="max-w-2xl mx-auto text-xl text-gray-400 font-light leading-relaxed px-4 break-keep">작가의 철학과 공간의 조화, 새로운 감각이 연결되는 순간.<br/>언프레임이 제안하는 파트너십을 확인해 보세요.</p>
+      <h1 className="text-6xl md:text-[11rem] font-black uppercase leading-[0.85] mb-12 tracking-tighter">Start Your<br />Resonance</h1>
+      <p className="max-w-2xl mx-auto text-xl text-gray-400 font-light leading-relaxed px-4 break-keep italic font-serif">"작가의 철학과 공간의 조화, 새로운 감각이 연결되는 순간."</p>
     </header>
 
-    <section className="min-h-[90vh] py-32 border-t border-gray-100">
+    <section className="py-32 border-t border-gray-100">
       <div className="mb-24">
         <h2 className="text-xs font-bold uppercase tracking-[0.6em] mb-4 text-[#004aad]">What We Offer</h2>
-        <h3 className="text-5xl md:text-8xl font-black tracking-tighter uppercase">🤝 UNFRAME 지원사항</h3>
+        <h3 className="text-5xl md:text-8xl font-black tracking-tighter uppercase leading-none">🤝 UNFRAME 지원사항</h3>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <SupportCard icon={<Megaphone size={48} />} title="홍보 및 큐레이션 지원" desc="갤러리 공식 SNS 포스팅은 물론 현수막, 홍보 엽서 제작을 지원합니다. 또한 작가님의 세계관을 깊이 전달할 수 있는 Curatorial Notes를 작성해 드립니다." />
-        <SupportCard icon={<Cpu size={48} />} title="장비 대여 및 설치 지원" desc="최적의 관람 환경을 위해 레일 스포트라이트 조명, 고해상도 빔프로젝터 및 스피커 등을 제공합니다. 기술적인 고민 없이 작품에만 집중하세요." />
-        <SupportCard icon={<User size={48} />} title="전시 운영 인력 상주" desc="전시 기간 동안 전문 디렉터가 상주하며 관람객 안내, 소중한 작품의 보호, 그리고 구매 문의에 대한 응대를 책임집집니다." />
-        <SupportCard icon={<Coffee size={48} />} title="행사 및 편의 지원" desc="오프닝 리셉션 등 행사 시 다과 세팅을 지원하며, 방문하시는 작가님과 내빈을 위한 무료 주차(1시간) 서비스를 제공합니다." />
+        <SupportCard icon={<Megaphone size={48} />} title="홍보 및 큐레이션 지원" desc="SNS 공식 채널 포스팅 및 현수막/엽서 제작을 지원하며, 작품 세계관을 심도 있게 전달하는 Curatorial Note를 작성해 드립니다." />
+        <SupportCard icon={<Cpu size={48} />} title="장비 대여 및 설치 지원" desc="최적의 관람 환경을 위한 레일 스포트라이트 조명, 미디어용 프로젝터 및 사운드 시스템 등 전시 장비를 무상 제공합니다." />
+        <SupportCard icon={<User size={48} />} title="전시 운영 인력 상주" desc="전시 기간 중 전문 디렉터가 상주하여 관람객 응대, 작품 보호 및 콜렉터 구매 문의를 직접 책임지고 관리합니다." />
+        <SupportCard icon={<Coffee size={48} />} title="행사 및 편의 지원" desc="오프닝 리셉션 다과 세팅을 지원하며, 작가님과 귀빈분들을 위한 무료 주차(1시간) 및 케이터링 편의를 제공합니다." />
       </div>
     </section>
 
-    <section className="bg-[#1a1a1a] text-white py-48 px-8 md:px-20 rounded-[80px] relative overflow-hidden min-h-screen flex flex-col justify-center shadow-2xl">
+    <section className="bg-[#1a1a1a] text-white py-48 px-8 md:px-20 rounded-[80px] relative overflow-hidden shadow-2xl">
       <div className="mb-32 text-center">
         <h2 className="text-xs font-bold uppercase tracking-[0.6em] mb-4 text-[#004aad]">Preparation</h2>
         <h3 className="text-5xl md:text-8xl font-black tracking-tighter uppercase">🧳 작가님 준비사항</h3>
       </div>
       <div className="grid md:grid-cols-3 gap-20 max-w-6xl mx-auto">
-        <PreparationItem icon={<Truck size={40} className="text-[#004aad]" />} title="운송 및 철수" desc="작품의 운송, 포장, 설치 및 철수 작업은 작가님이 직접 주관합니다. 전시 후에는 공간을 원래 모습 그대로 원상복구 해주시는 배려를 부탁드립니다." />
-        <PreparationItem icon={<FileText size={40} className="text-[#004aad]" />} title="전시 정보 전달" desc="효과적인 홍보를 위해 고화질 작품 사진, 최종 리스트, 작가 노트를 미리 전달해 주세요. 보내주시는 이미지는 마케팅 목적으로 사용될 수 있습니다." />
-        <PreparationItem icon={<ShieldCheck size={40} className="text-[#004aad]" />} title="작품 관리" desc="전시 기간 중 발생할 수 있는 파손이나 도난에 대비한 보험 가입은 선택 사항입니다. 갤러리는 고의나 중과실이 없는 한 책임지지 않습니다." />
+        <PreparationItem icon={<Truck size={40} className="text-[#004aad]" />} title="운송 및 철수" desc="작품의 포장, 운송 및 설치/철수 작업은 작가님 주관으로 진행됩니다. 전시 후에는 공간의 원래 모습 그대로 원상복구를 부탁드립니다." />
+        <PreparationItem icon={<FileText size={40} className="text-[#004aad]" />} title="전시 정보 전달" desc="홍보물 제작을 위해 고화질 작품 사진, 작가 노트 및 캡션 리스트를 사전에 전달해 주세요. 자료는 마케팅 목적으로 활용될 수 있습니다." />
+        <PreparationItem icon={<ShieldCheck size={40} className="text-[#004aad]" />} title="작품 관리" desc="보험 가입은 선택 사항이며, 갤러리는 고의나 중과실이 없는 한 작품 파손이나 도난에 대해 책임을 지지 않으므로 각별한 관리를 부탁드립니다." />
       </div>
     </section>
 
@@ -252,11 +292,11 @@ const LandingPage = ({ onStart }) => (
           <h3 className="text-5xl md:text-7xl font-black tracking-tight leading-tight mb-12 uppercase">예술적 실천을 위한<br />정직한 약속</h3>
           <p className="text-xl text-gray-500 font-light leading-relaxed break-keep italic">언프레임은 공간이 작가의 언어를 온전히 담아낼 때 그 가치가 완성된다고 믿습니다. 우리는 작가님들이 활동을 지속할 수 있는 <span className="text-black font-bold">지속 가능한 전시 환경</span>을 지향합니다.</p>
         </div>
-        <div className="bg-white border border-gray-100 p-10 md:p-12 lg:p-16 shadow-2xl rounded-[64px] relative overflow-hidden group">
+        <div className="bg-white border border-gray-100 p-10 md:p-16 shadow-2xl rounded-[64px] relative overflow-hidden group">
           <span className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-300 mb-10 block">Rental Investment</span>
           <div className="flex flex-wrap items-baseline gap-4 mb-16">
-            <span className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tighter">2,800,000</span>
-            <span className="text-lg sm:text-xl md:text-2xl text-gray-400 font-bold uppercase whitespace-nowrap">KRW / WEEK</span>
+            <span className="text-5xl md:text-7xl font-black tracking-tighter">2,800,000</span>
+            <span className="text-xl text-gray-400 font-bold uppercase whitespace-nowrap">KRW / WEEK</span>
           </div>
           <button 
             onClick={onStart}
@@ -272,7 +312,6 @@ const LandingPage = ({ onStart }) => (
 
 const CalendarStep = ({ reservations, onSelect, onBack }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  
   const daysInMonth = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(), [currentDate]);
   const firstDayOfMonth = useMemo(() => {
     const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
@@ -283,25 +322,25 @@ const CalendarStep = ({ reservations, onSelect, onBack }) => {
     <section className="animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto py-20">
       <div className="text-center mb-24">
         <h2 className="text-6xl md:text-9xl font-black tracking-tighter uppercase mb-8 leading-none">Schedule<br/>Calendar</h2>
-        <p className="text-gray-400 text-lg font-light uppercase tracking-widest break-keep">전시 시작일인 <span className="text-black font-bold">목요일</span>을 선택해주세요.</p>
+        <p className="text-gray-400 text-lg font-light uppercase tracking-widest break-keep text-center italic">전시 시작일인 <span className="text-[#004aad] font-bold">목요일</span>을 선택해 주세요.</p>
       </div>
 
-      <div className="bg-white p-12 md:p-20 rounded-[80px] shadow-2xl border border-gray-50">
+      <div className="bg-white p-6 md:p-20 rounded-[80px] shadow-2xl border border-gray-50">
         <div className="flex justify-between items-center mb-16 px-4">
-          <h3 className="text-4xl font-black tracking-tighter uppercase">{currentDate.getFullYear()}. {(currentDate.getMonth() + 1).toString().padStart(2, '0')}</h3>
-          <div className="flex gap-6">
-            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-4 bg-gray-50 hover:bg-[#004aad] hover:text-white rounded-full transition-all"><ChevronLeft size={32}/></button>
-            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-4 bg-gray-50 hover:bg-[#004aad] hover:text-white rounded-full transition-all"><ChevronRight size={32}/></button>
+          <h3 className="text-2xl md:text-4xl font-black tracking-tighter uppercase">{currentDate.getFullYear()}. {(currentDate.getMonth() + 1).toString().padStart(2, '0')}</h3>
+          <div className="flex gap-4">
+            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-3 md:p-4 bg-gray-50 hover:bg-[#004aad] hover:text-white rounded-full transition-all shadow-sm"><ChevronLeft size={24}/></button>
+            <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-3 md:p-4 bg-gray-50 hover:bg-[#004aad] hover:text-white rounded-full transition-all shadow-sm"><ChevronRight size={24}/></button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-6 mb-10 border-b border-gray-100 pb-10">
+        <div className="grid grid-cols-7 gap-2 md:gap-6 mb-10 border-b border-gray-100 pb-10">
           {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d, idx) => (
-            <div key={d} className={`text-center text-xs font-black uppercase tracking-[0.2em] ${idx === 6 ? 'text-red-500' : 'text-gray-300'}`}>{d}</div>
+            <div key={d} className={`text-center text-[10px] md:text-xs font-black uppercase tracking-[0.1em] ${idx === 6 ? 'text-red-500' : 'text-gray-300'}`}>{d}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-5">
+        <div className="grid grid-cols-7 gap-2 md:gap-5">
           {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`} className="aspect-square opacity-0" />)}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
@@ -317,19 +356,19 @@ const CalendarStep = ({ reservations, onSelect, onBack }) => {
                 <button 
                   disabled={!isThu || res?.status === 'confirmed'}
                   onClick={() => onSelect(dateStr)}
-                  className={`w-full h-full rounded-3xl flex flex-col items-center justify-center transition-all border-2
-                    ${!isThu ? 'border-transparent text-gray-200 cursor-default' : 
-                      res?.status === 'confirmed' ? 'bg-gray-50 border-gray-50 text-gray-300' :
-                      applicantCount > 0 ? 'bg-[#004aad]/5 border-[#004aad]/30 text-[#004aad] scale-105 shadow-inner' :
-                      'border-gray-100 hover:border-[#004aad] text-black font-black hover:scale-105'}`}
+                  className={`w-full h-full rounded-2xl md:rounded-3xl flex flex-col items-center justify-center transition-all border-2
+                    ${!isThu ? 'border-transparent text-gray-200 cursor-default opacity-40' : 
+                      res?.status === 'confirmed' ? 'bg-gray-50 border-gray-50 text-gray-300 cursor-not-allowed' :
+                      applicantCount > 0 ? 'bg-[#004aad]/5 border-[#004aad]/30 text-[#004aad] scale-105' :
+                      'border-gray-50 hover:border-[#004aad] text-black font-black hover:scale-105'}`}
                 >
-                  <span className={`text-xl ${isSun ? 'text-red-500' : ''} ${!isThu && !isSun ? 'text-gray-300' : ''}`}>{day}</span>
+                  <span className={`text-sm md:text-xl ${isSun ? 'text-red-500' : ''}`}>{day}</span>
                   {isThu && applicantCount > 0 && res?.status !== 'confirmed' && (
-                    <div className="mt-2 flex items-center gap-1 text-[10px]"><Users size={10} /> {applicantCount}</div>
+                    <div className="mt-1 flex items-center gap-1 text-[8px] md:text-[10px]"><Users size={10} /> {applicantCount}</div>
                   )}
                 </button>
                 {res && (
-                  <div className={`absolute -top-2 -right-1 px-2 py-1 rounded-lg text-[8px] font-black text-white uppercase shadow-sm z-10
+                  <div className={`absolute -top-1 -right-1 md:-top-2 md:-right-1 px-1.5 md:px-2 py-0.5 md:py-1 rounded-md md:rounded-lg text-[6px] md:text-[8px] font-black text-white uppercase shadow-sm z-10
                     ${res.status === 'confirmed' ? 'bg-gray-400' : applicantCount > 0 ? 'bg-[#004aad]' : 'bg-orange-400 animate-pulse'}`}>
                     {res.status === 'confirmed' ? '마감' : applicantCount > 0 ? `심사중(${applicantCount})` : '작성중'}
                   </div>
@@ -344,9 +383,8 @@ const CalendarStep = ({ reservations, onSelect, onBack }) => {
   );
 };
 
-const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBack, onSubmitSuccess, db, appId, user }) => {
+const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBack, onSubmitSuccess, db, appId, user, reservations, handleLogin }) => {
   const [isUploading, setIsUploading] = useState(null);
-  
   const profileInputRef = useRef(null);
   const highResInputRef = useRef(null);
   const workListInputRef = useRef(null);
@@ -355,11 +393,7 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
   const handleCloudinaryUpload = async (e, fieldName) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    if (!CLOUDINARY_NAME || !CLOUDINARY_PRESET) {
-      alert("Cloudinary 설정이 필요합니다. .env 파일을 확인해 주세요.");
-      return;
-    }
+    if (!CLOUDINARY_NAME || !CLOUDINARY_PRESET) return alert("Cloudinary 환경 변수가 설정되지 않았습니다.");
 
     setIsUploading(fieldName);
     const uploadData = new FormData();
@@ -372,32 +406,40 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
         body: uploadData
       });
       const result = await response.json();
-      if (result.secure_url) {
-        setFormData(prev => ({ ...prev, [fieldName]: result.secure_url }));
-      } else {
-        throw new Error(result.error?.message || "Upload failed");
-      }
-    } catch (e) {
-      alert("파일 업로드 실패: " + e.message);
-    } finally {
-      setIsUploading(null);
-    }
+      if (result.secure_url) setFormData(prev => ({ ...prev, [fieldName]: result.secure_url }));
+      else throw new Error(result.error?.message || "Upload failed");
+    } catch (e) { 
+      console.error(e);
+      alert("파일 업로드 실패: " + e.message); 
+    } finally { setIsUploading(null); }
   };
 
   const handleSubmit = async () => {
-    if (!formData.privacyAgreed) return alert("개인정보 동의가 필요합니다.");
+    if (!user || user.isAnonymous) {
+      alert("로그인이 필요합니다.");
+      handleLogin();
+      return;
+    }
+    if (!formData.privacyAgreed) return alert("개인정보 수집 및 이용에 동의해 주세요.");
+    
     try {
       const resDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'reservations', selectedDate);
-      await runTransaction(db, async (transaction) => {
-        const resSnap = await transaction.get(resDocRef);
-        const newCount = (resSnap.exists() ? (resSnap.data().applicantCount || 0) : 0) + 1;
-        transaction.set(resDocRef, { status: 'review', applicantCount: newCount, updatedAt: serverTimestamp() }, { merge: true });
-      });
+      const currentCount = reservations[selectedDate]?.applicantCount || 0;
+      
+      await setDoc(resDocRef, { 
+        status: 'review', 
+        applicantCount: currentCount + 1, 
+        updatedAt: serverTimestamp() 
+      }, { merge: true });
+
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'applications'), {
         userId: user.uid, status: 'review', selectedDate, ...formData, submittedAt: serverTimestamp()
       });
       onSubmitSuccess();
-    } catch (e) { alert("Submission Error"); }
+    } catch (e) { 
+      console.error(e);
+      alert("제출 중 오류가 발생했습니다. 권한 설정을 확인하세요."); 
+    }
   };
 
   return (
@@ -411,10 +453,10 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
         <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase mb-6 flex items-center gap-4 break-keep leading-tight">
           <Sparkles className="text-[#004aad] size-10 flex-shrink-0" /> 작가님과 전시에 대해 알려주세요
         </h2>
-        <span className="bg-[#004aad]/10 text-[#004aad] px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-sm inline-block">Selected Date: {selectedDate} (Thu)</span>
+        <span className="bg-[#004aad]/10 text-[#004aad] px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-sm inline-block tracking-tighter">Selected Date: {selectedDate} (Thu)</span>
       </header>
 
-      <div className="bg-white border border-gray-100 p-10 md:p-20 rounded-[80px] shadow-2xl space-y-16">
+      <div className="bg-white border border-gray-100 p-8 md:p-20 rounded-[60px] md:rounded-[80px] shadow-2xl space-y-16">
         <input type="file" ref={profileInputRef} className="hidden" accept="image/*" onChange={(e) => handleCloudinaryUpload(e, 'profilePhotoUrl')} />
         <input type="file" ref={highResInputRef} className="hidden" accept="image/*" onChange={(e) => handleCloudinaryUpload(e, 'highResPhotosUrl')} />
         <input type="file" ref={workListInputRef} className="hidden" accept=".pdf,.doc,.docx,.zip" onChange={(e) => handleCloudinaryUpload(e, 'workListUrl')} />
@@ -448,19 +490,19 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
 
         <div className="space-y-6 pt-10 border-t border-gray-50">
           <label className="text-[11px] font-black uppercase text-[#004aad] tracking-widest">작가 노트 (Artist Note)</label>
-          <textarea className="w-full bg-gray-50/50 border border-gray-100 p-10 rounded-[60px] h-80 text-base outline-none focus:bg-white transition-all resize-none shadow-sm" value={formData.artistNote} onChange={e => setFormData({...formData, artistNote: e.target.value})} />
+          <textarea className="w-full bg-gray-50/50 border border-gray-100 p-6 md:p-10 rounded-[40px] md:rounded-[60px] h-80 text-base outline-none focus:bg-white transition-all resize-none shadow-sm" value={formData.artistNote} onChange={e => setFormData({...formData, artistNote: e.target.value})} />
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
             <button onClick={() => portfolioInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden text-center break-keep">
               {isUploading === 'portfolioUrl' ? <Loader2 className="animate-spin" size={20}/> : <PortfolioIcon size={20}/>}
               {formData.portfolioUrl ? "포트폴리오 완료" : "포트폴리오 업로드"}
-              <div className="text-[8px] text-gray-300 px-2 leading-tight">PDF, ZIP, 이미지</div>
+              <div className="text-[8px] text-gray-300 px-2 leading-tight uppercase">PDF, ZIP, Image</div>
             </button>
             <button onClick={() => workListInputRef.current.click()} className="py-8 border border-gray-100 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-gray-50 transition-all shadow-sm relative overflow-hidden text-center break-keep">
               {isUploading === 'workListUrl' ? <Loader2 className="animate-spin" size={20}/> : <FileText size={20}/>}
               {formData.workListUrl ? "리스트 완료" : "작품 리스트 업로드"}
-              <div className="text-[8px] text-gray-300 px-2 leading-tight">PDF, ZIP 가능</div>
+              <div className="text-[8px] text-gray-300 px-2 leading-tight uppercase">PDF, ZIP</div>
             </button>
             <button onClick={() => highResInputRef.current.click()} className="py-8 bg-[#004aad]/5 text-[#004aad] border border-[#004aad]/10 rounded-[32px] text-[10px] font-black uppercase tracking-widest flex flex-col items-center justify-center gap-3 hover:bg-[#004aad]/10 transition-all shadow-sm relative overflow-hidden lg:col-span-1 md:col-span-2 text-center break-keep">
               {isUploading === 'highResPhotosUrl' ? <Loader2 className="animate-spin" size={20}/> : <ImageIcon size={20}/>}
@@ -470,26 +512,25 @@ const ProposalFormStep = ({ selectedDate, formData, setFormData, saveDraft, onBa
         </div>
 
         <div className="space-y-8 pt-10 border-t border-gray-50">
-            <label className="text-base font-black leading-relaxed text-gray-700 break-keep bg-[#004aad]/5 p-10 rounded-[50px] border border-[#004aad]/10 block shadow-inner italic">
-              💥 <span className="text-[#004aad] not-italic">UNFRAME</span>은 작가님의 '틀을 깨는 시도'를 응원합니다. 이번 전시에서 작가님이 도전하고자 하는 실험은 무엇인가요?
+            <label className="text-base font-black leading-relaxed text-gray-700 break-keep bg-[#004aad]/5 p-8 md:p-10 rounded-[40px] md:rounded-[50px] border border-[#004aad]/10 block shadow-inner italic">
+              💥 <span className="text-[#004aad] not-italic font-black">UNFRAME</span>은 작가님의 '틀을 깨는 시도'를 응원합니다. 이번 전시에서 작가님이 도전하고자 하는 실험은 무엇인가요?
             </label>
-            <textarea className="w-full border-2 border-dashed border-gray-100 p-10 rounded-[60px] h-80 text-base outline-none focus:border-[#004aad]/30 transition-all resize-none font-medium" value={formData.experimentText} onChange={e => setFormData({...formData, experimentText: e.target.value})} />
+            <textarea className="w-full border-2 border-dashed border-gray-100 p-6 md:p-10 rounded-[40px] md:rounded-[60px] h-80 text-base outline-none focus:border-[#004aad]/30 transition-all resize-none font-medium" value={formData.experimentText} onChange={e => setFormData({...formData, experimentText: e.target.value})} />
         </div>
 
         <div className="pt-20 flex flex-col items-center">
           <label className="flex items-center gap-6 cursor-pointer mb-16 group">
             <input type="checkbox" checked={formData.privacyAgreed} onChange={e => setFormData({...formData, privacyAgreed: e.target.checked})} className="w-8 h-8 accent-[#004aad] rounded border-gray-200" />
-            <span className="text-lg font-black text-gray-400 group-hover:text-black transition-colors uppercase tracking-widest">개인정보 수집 및 이용 동의</span>
+            <span className="text-sm md:text-lg font-black text-gray-400 group-hover:text-black transition-colors uppercase tracking-widest text-center">개인정보 수집 및 이용 동의</span>
           </label>
-          <button onClick={handleSubmit} className="w-full bg-black text-white py-10 rounded-[40px] font-black uppercase tracking-[0.4em] text-2xl flex items-center justify-center gap-6 hover:bg-[#004aad] transition-all shadow-2xl active:scale-95 shadow-black/10 text-center break-keep">Submit Proposal <ArrowRight size={32}/></button>
+          <button onClick={handleSubmit} className="w-full bg-black text-white py-8 md:py-10 rounded-[40px] font-black uppercase tracking-[0.4em] text-xl md:text-2xl flex items-center justify-center gap-6 hover:bg-[#004aad] transition-all shadow-2xl active:scale-95 shadow-black/10 text-center break-keep">Submit Proposal <ArrowRight size={32}/></button>
         </div>
       </div>
     </section>
   );
 };
 
-// --- ADMIN DASHBOARD ---
-const AdminDashboard = ({ applications, db, appId }) => {
+const AdminDashboard = ({ applications, db, appId, reservations }) => {
   const groupedApps = useMemo(() => {
     const groups = {};
     applications.forEach(app => {
@@ -507,55 +548,40 @@ const AdminDashboard = ({ applications, db, appId }) => {
           status: 'confirmed', 
           confirmedArtist: appDoc.name 
         });
+        alert("전시가 최종 확정되었습니다.");
       } else if (status === 'rejected') {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'applications', appDoc.id), { status: 'rejected' });
-        const resRef = doc(db, 'artifacts', appId, 'public', 'data', 'reservations', date);
-        const resSnap = await getDoc(resRef);
-        if (resSnap.exists()) {
-          const newCount = Math.max(0, (resSnap.data().applicantCount || 1) - 1);
-          await updateDoc(resRef, { applicantCount: newCount });
-        }
+        const currentCount = reservations[date]?.applicantCount || 1;
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'reservations', date), { 
+          applicantCount: Math.max(0, currentCount - 1) 
+        });
+        alert("심사 거절 처리되었습니다.");
       }
-    } catch (e) {
-      alert("처리 중 오류가 발생했습니다.");
-    }
+    } catch (e) { alert("처리 중 오류가 발생했습니다."); }
   };
 
   return (
     <section className="animate-in fade-in duration-700">
       <div className="flex justify-between items-end mb-20">
-        <h2 className="text-5xl font-black tracking-tighter uppercase leading-none">Review Board</h2>
-        <div className="text-right">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Active Applications</p>
-          <p className="text-4xl font-black text-[#004aad]">{applications.length}</p>
-        </div>
+        <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none">Review Board</h2>
       </div>
-
       <div className="space-y-32">
         {groupedApps.map(([date, apps]) => (
           <div key={date} className="relative">
             <div className="sticky top-24 z-10 bg-[#fdfbf7]/80 backdrop-blur-sm py-4 border-b border-gray-100 flex items-center justify-between mb-10">
-              <h3 className="text-3xl font-black uppercase tracking-tighter text-[#004aad]">{date} <span className="text-sm font-bold text-gray-400 ml-4">(Thu)</span></h3>
-              <div className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
-                {apps.length} Applicants
-              </div>
+              <h3 className="text-xl md:text-3xl font-black uppercase tracking-tighter text-[#004aad]">{date} <span className="text-xs md:text-sm font-bold text-gray-400 ml-4">(Thu)</span></h3>
+              <div className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest shadow-sm">{apps.length} Applicants</div>
             </div>
-
             <div className="grid gap-12">
               {apps.map(app => (
-                <div key={app.id} className={`bg-white p-10 md:p-16 rounded-[60px] border transition-all ${app.status === 'confirmed' ? 'border-green-400 shadow-green-100 shadow-xl' : 'border-gray-50 shadow-2xl shadow-gray-200/50'}`}>
+                <div key={app.id} className={`bg-white p-8 md:p-16 rounded-[40px] md:rounded-[60px] border transition-all ${app.status === 'confirmed' ? 'border-green-400 shadow-xl' : 'border-gray-50 shadow-2xl shadow-gray-200/50'}`}>
                   <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
                     <div className="flex-1 space-y-12">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${app.status === 'review' ? 'bg-[#004aad]' : app.status === 'confirmed' ? 'bg-green-500' : 'bg-gray-400'}`}>
-                            {app.status}
-                          </div>
-                          <h4 className="text-4xl font-black tracking-tight leading-tight uppercase break-all">{app.exhibitionTitle || "Untitled Project"}</h4>
-                          <p className="text-xl text-gray-400 font-bold uppercase tracking-widest mt-2">{app.name} / {app.birthDate}</p>
-                        </div>
+                      <div>
+                        <div className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${app.status === 'review' ? 'bg-[#004aad]' : app.status === 'confirmed' ? 'bg-green-500' : 'bg-gray-400'}`}>{app.status}</div>
+                        <h4 className="text-2xl md:text-4xl font-black tracking-tight leading-tight uppercase break-all">{app.exhibitionTitle || "Untitled Project"}</h4>
+                        <p className="text-sm md:text-xl text-gray-400 font-bold uppercase tracking-widest mt-2">{app.name} / {app.birthDate} / {app.phone}</p>
                       </div>
-
                       <div className="grid md:grid-cols-2 gap-12">
                         <div className="space-y-4">
                           <h5 className="text-[10px] font-black uppercase text-[#004aad] tracking-[0.2em] border-b border-gray-100 pb-2">Artist Note</h5>
@@ -566,30 +592,18 @@ const AdminDashboard = ({ applications, db, appId }) => {
                           <p className="text-sm leading-relaxed text-gray-600 font-medium whitespace-pre-wrap italic">"{app.experimentText}"</p>
                         </div>
                       </div>
-
                       <div className="flex gap-4 flex-wrap">
-                        {app.portfolioUrl && <a href={app.portfolioUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><PortfolioIcon size={14}/> View Portfolio</a>}
-                        {app.workListUrl && <a href={app.workListUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><FileText size={14}/> Work List</a>}
-                        {app.snsLink && <a href={app.snsLink.startsWith('http') ? app.snsLink : `https://instagram.com/${app.snsLink.replace('@', '')}`} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"><Globe size={14}/> SNS / WEB</a>}
+                        {app.portfolioUrl && <a href={app.portfolioUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"><PortfolioIcon size={14}/> Portfolio</a>}
+                        {app.workListUrl && <a href={app.workListUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"><FileText size={14}/> Work List</a>}
+                        {app.profilePhotoUrl && <a href={app.profilePhotoUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-gray-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm"><ImageIcon size={14}/> Profile</a>}
+                        {app.highResPhotosUrl && <a href={app.highResPhotosUrl} target="_blank" className="flex items-center gap-2 px-6 py-3 border border-[#004aad]/20 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#004aad]/5 transition-all text-[#004aad] shadow-sm"><Sparkles size={14}/> High-Res Photos</a>}
                       </div>
                     </div>
-
                     <div className="w-full lg:w-[280px] bg-gray-50 rounded-[40px] p-8 space-y-6">
                       <h5 className="text-center text-[10px] font-black uppercase tracking-widest text-gray-400">Decision Panel</h5>
                       <div className="space-y-3">
-                        <button 
-                          disabled={app.status === 'confirmed'}
-                          onClick={() => handleAction(app, date, 'confirmed')}
-                          className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-[#004aad] transition-all disabled:bg-gray-200"
-                        >
-                          <CheckCircle size={14}/> Approve & Confirm
-                        </button>
-                        <button 
-                          onClick={() => handleAction(app, date, 'rejected')}
-                          className="w-full py-5 border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all"
-                        >
-                          <XCircle size={14}/> Reject
-                        </button>
+                        <button disabled={app.status === 'confirmed'} onClick={() => handleAction(app, date, 'confirmed')} className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-[#004aad] transition-all disabled:bg-gray-200 shadow-xl"><CheckCircle size={14}/> Approve & Confirm</button>
+                        <button onClick={() => handleAction(app, date, 'rejected')} className="w-full py-5 border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 hover:text-red-500 transition-all shadow-sm"><XCircle size={14}/> Reject</button>
                       </div>
                     </div>
                   </div>
@@ -598,6 +612,7 @@ const AdminDashboard = ({ applications, db, appId }) => {
             </div>
           </div>
         ))}
+        {groupedApps.length === 0 && <div className="py-60 text-center text-gray-300 font-black uppercase tracking-[0.5em]">No applications received yet.</div>}
       </div>
     </section>
   );
@@ -609,43 +624,40 @@ const SuccessView = ({ onReturn }) => (
       <CheckCircle2 size={48} strokeWidth={3} />
     </div>
     <h2 className="text-4xl font-black tracking-tighter uppercase mb-6 text-[#004aad]">Proposal Received</h2>
-    <p className="text-gray-500 font-light leading-relaxed mb-12 break-keep text-base">
-      작가님의 소중한 제안서가 성공적으로 전달되었습니다. <br/>
-      언프레임 큐레이터 팀이 검토 후 48시간 내에 연락드리겠습니다.
-    </p>
+    <p className="text-gray-500 font-light leading-relaxed mb-12 break-keep text-base">작가님의 소중한 제안서가 성공적으로 전달되었습니다. <br/>언프레임 큐레이터 팀이 검토 후 48시간 내에 연락드리겠습니다.</p>
     <button onClick={onReturn} className="px-12 py-5 bg-black text-white rounded-full font-black uppercase tracking-widest text-xs transition-all hover:scale-110 shadow-xl">Return to Home</button>
   </section>
 );
 
 const SupportCard = ({ icon, title, desc }) => (
-  <div className="bg-white p-16 border border-gray-50 shadow-sm rounded-[60px] hover:border-[#004aad] hover:-translate-y-4 transition-all duration-500 group">
-    <div className="mb-12 text-gray-200 group-hover:text-[#004aad] transition-all transform group-hover:scale-110 duration-700">{icon}</div>
-    <h4 className="text-3xl font-black mb-8 tracking-tighter uppercase leading-tight">{title}</h4>
-    <p className="text-lg text-gray-400 font-light leading-relaxed break-keep">{desc}</p>
+  <div className="bg-white p-8 md:p-16 border border-gray-50 shadow-sm rounded-[40px] md:rounded-[60px] hover:border-[#004aad] hover:-translate-y-4 transition-all duration-500 group">
+    <div className="mb-8 md:mb-12 text-gray-200 group-hover:text-[#004aad] transition-all transform group-hover:scale-110 duration-700">{icon}</div>
+    <h4 className="text-xl md:text-3xl font-black mb-4 md:mb-8 tracking-tighter uppercase leading-tight">{title}</h4>
+    <p className="text-base md:text-lg text-gray-400 font-light leading-relaxed break-keep">{desc}</p>
   </div>
 );
 
 const PreparationItem = ({ icon, title, desc }) => (
-  <div className="space-y-10 group">
-    <div className="flex items-center gap-6 transform group-hover:translate-x-4 transition-all duration-500">
-      <div className="p-5 bg-[#004aad]/10 rounded-3xl flex-shrink-0">{icon}</div>
-      <h4 className="text-3xl font-black uppercase tracking-tighter leading-tight">{title}</h4>
+  <div className="space-y-6 md:space-y-10 group">
+    <div className="flex items-center gap-4 md:gap-6 transform group-hover:translate-x-4 transition-all duration-500">
+      <div className="p-4 md:p-5 bg-[#004aad]/10 rounded-2xl md:rounded-3xl flex-shrink-0">{icon}</div>
+      <h4 className="text-xl md:text-3xl font-black uppercase tracking-tighter leading-tight">{title}</h4>
     </div>
-    <p className="text-gray-400 font-light leading-relaxed break-keep text-lg">{desc}</p>
+    <p className="text-base md:text-lg text-gray-400 font-light leading-relaxed break-keep">{desc}</p>
   </div>
 );
 
 const InputBlock = ({ label, placeholder, required, ...props }) => (
-  <div className="space-y-5">
-    <label className="text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2">{label} {required && <span className="text-red-500">*</span>}</label>
-    <input type="text" placeholder={placeholder} className="w-full bg-gray-50/50 border border-gray-100 p-7 rounded-[32px] focus:outline-none focus:bg-white transition-all font-bold text-lg shadow-sm" {...props} />
+  <div className="space-y-4 md:space-y-5">
+    <label className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2">{label} {required && <span className="text-red-500">*</span>}</label>
+    <input type="text" placeholder={placeholder} className="w-full bg-gray-50/50 border border-gray-100 p-5 md:p-7 rounded-[24px] md:rounded-[32px] focus:outline-none focus:bg-white transition-all font-bold text-base md:text-lg shadow-sm" {...props} />
   </div>
 );
 
 const Footer = () => (
-  <footer className="border-t border-gray-100 py-32 bg-white/50 text-center">
-    <div className="text-[11px] font-black text-gray-300 uppercase tracking-[1em] mb-4">Beyond the Frame, Into the Art</div>
-    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">© 2026 UNFRAME SEOUL</p>
+  <footer className="border-t border-gray-100 py-20 md:py-32 bg-white/50 text-center">
+    <div className="text-[10px] md:text-[11px] font-black text-gray-300 uppercase tracking-[1em] mb-4">Beyond the Frame, Into the Art</div>
+    <p className="text-[8px] md:text-[10px] text-gray-400 font-bold uppercase tracking-widest">© 2026 UNFRAME SEOUL</p>
   </footer>
 );
 
