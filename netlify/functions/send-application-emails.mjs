@@ -129,6 +129,7 @@ export async function handler(event) {
     const payload = JSON.parse(event.body || "{}");
     const {
       type,
+      status,
       applicantName,
       applicantEmail,
       exhibitionTitle,
@@ -138,21 +139,23 @@ export async function handler(event) {
       rejectionReason = "",
     } = payload;
 
+    const mailType = type || status;
+
     if (!applicantEmail) {
       return json(400, { error: "Applicant email is required" });
     }
 
-    if (!type || !["approved", "rejected"].includes(type)) {
+    if (!mailType || !["approved", "rejected"].includes(mailType)) {
       return json(400, { error: "Invalid email type" });
     }
 
     const subject =
-      type === "approved"
+      mailType === "approved"
         ? `[UNFRAME] 신청이 승인되었습니다`
         : `[UNFRAME] 신청 검토 결과를 안내드립니다`;
 
     const html =
-      type === "approved"
+      mailType === "approved"
         ? buildApprovedHtml({
             applicantName,
             exhibitionTitle,

@@ -172,6 +172,7 @@ export const sendApplicationEmails = async ({
 
 export const sendApplicationStatusEmail = async ({
   type,
+  status,
   applicantName,
   applicantEmail,
   exhibitionTitle,
@@ -180,13 +181,19 @@ export const sendApplicationStatusEmail = async ({
   partnerType,
   rejectionReason = "",
 }) => {
+  const mailType = type || status;
+
+  if (!mailType || !["approved", "rejected"].includes(mailType)) {
+    throw new Error("Valid status is required");
+  }
+
   const response = await fetch("/.netlify/functions/send-application-status-email", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      type,
+      type: mailType,
       applicantName,
       applicantEmail,
       exhibitionTitle,
