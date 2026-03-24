@@ -5,12 +5,7 @@ import {
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 import { ADMIN_EMAILS } from "./constants/admin";
 import { auth, db, googleProvider, appId } from "./lib/firebase";
@@ -92,7 +87,14 @@ const App = () => {
   useEffect(() => {
     if (!user) return;
 
-    const resRef = collection(db, "artifacts", appId, "public", "data", "reservations");
+    const resRef = collection(
+      db,
+      "artifacts",
+      appId,
+      "public",
+      "data",
+      "reservations"
+    );
     const unsubscribeRes = onSnapshot(resRef, (snap) => {
       const resMap = {};
       snap.forEach((d) => {
@@ -101,7 +103,14 @@ const App = () => {
       setReservations(resMap);
     });
 
-    const appRef = collection(db, "artifacts", appId, "public", "data", "applications");
+    const appRef = collection(
+      db,
+      "artifacts",
+      appId,
+      "public",
+      "data",
+      "applications"
+    );
     const appQuery =
       isAdmin && viewMode === "admin"
         ? appRef
@@ -182,14 +191,19 @@ const App = () => {
         ) : (
           <div className="transition-all duration-700">
             {currentStep === 1 && (
-              <LandingPage onStart={() => handleStepTransition(2)} />
+              <LandingPage
+                onSelectProgram={(program) => {
+                  setSelectedProgram(program);
+                  handleStepTransition(2);
+                }}
+              />
             )}
 
             {currentStep === 2 && (
               <PartnerSelectStep
                 onSelect={(type) => {
                   setPartnerType(type);
-                  handleStepTransition(3);
+                  handleStepTransition(4);
                 }}
                 onBack={() => handleStepTransition(1)}
               />
@@ -199,9 +213,9 @@ const App = () => {
               <ProgramSelectStep
                 onSelect={(program) => {
                   setSelectedProgram(program);
-                  handleStepTransition(4);
+                  handleStepTransition(2);
                 }}
-                onBack={() => handleStepTransition(2)}
+                onBack={() => handleStepTransition(1)}
               />
             )}
 
@@ -214,7 +228,7 @@ const App = () => {
                 }}
                 onConfirm={() => handleStepTransition(5)}
                 selectedDate={selectedDate}
-                onBack={() => handleStepTransition(3)}
+                onBack={() => handleStepTransition(2)}
               />
             )}
 
