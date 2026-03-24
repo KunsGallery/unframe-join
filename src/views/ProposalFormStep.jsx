@@ -9,16 +9,19 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle2,
+  RefreshCcw,
+  Trash2,
 } from "lucide-react";
 import {
   doc,
   setDoc,
   updateDoc,
-  increment,
   serverTimestamp,
   runTransaction,
   addDoc,
   collection,
+  getDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import InputBlock from "../components/ui/InputBlock";
 import FileBtn from "../components/ui/FileBtn";
@@ -28,7 +31,35 @@ import {
   uploadDocumentToR2,
   validateImageFile,
   validateDocumentFile,
+  sendApplicationEmails,
 } from "../lib/uploads";
+
+const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+
+const EMPTY_FORM_DATA = {
+  name: "",
+  realName: "",
+  stageName: "",
+  englishName: "",
+  birthDate: "",
+  phone: "",
+  addressMain: "",
+  addressDetail: "",
+  profilePhotoUrl: "",
+  snsLink: "",
+  portfolioUrl: "",
+  exhibitionTitle: "",
+  artistNote: "",
+  workListUrl: "",
+  highResPhotosUrl: "",
+  experimentText: "",
+  brandName: "",
+  brandRole: "",
+  projectPurpose: "",
+  targetAudience: "",
+  budgetRange: "",
+  privacyAgreed: false,
+};
 
 const normalizePhone = (value) => value.replace(/[^\d]/g, "");
 
@@ -123,11 +154,15 @@ const ProposalFormStep = ({
   appId,
   user,
   handleLogin,
+  setSelectedDate,
+  setSelectedProgram,
+  setPartnerType,
 }) => {
   const [uploadingMap, setUploadingMap] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
   const [uploadErrors, setUploadErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftBanner, setDraftBanner] = useState(null);
 
   const fileInputRefs = {
     profile: useRef(),
@@ -142,8 +177,12 @@ const ProposalFormStep = ({
     [uploadingMap]
   );
 
-  useEffect(() => {
-    if (!selectedDate || !user || user.isAnonymous) return;
+  const draftDocRef = user?.uid
+    ? doc(db, "artifacts", appId, "users", user.uid, "drafts", "current")
+    : null;
+
+  const syncWritingPresence = async (date, uid, expiresAtMs = null) => {
+    if (!date || !uid) return;
 
     const resDocRef = doc(
       db,
@@ -152,27 +191,94 @@ const ProposalFormStep = ({
       "public",
       "data",
       "reservations",
-      selectedDate
+      date
     );
 
-    const trackWriting = async () => {
+    const snap = await getDoc(resDocRef);
+    const current = snap.exists() ? snap.data() : {};
+    const currentUsers = current.writingUsers || {};
+    const now = Date.now();
+
+    const prunedUsers = Object.fromEntries(
+      Object.entries(currentUsers).filter(([_, value]) => Number(value) > now)
+    );
+
+    if (expiresAtMs) {
+      prunedUsers[uid] = expiresAtMs;
+    } else {
+      delete prunedUsers[uid];
+    }
+
+    const activeCount = Object.keys(prunedUsers).length;
+    const currentStatus = current.status;
+
+    let nextStatus = currentStatus;
+    if (currentStatus === "writing" || currentStatus == null) {
+      nextStatus = activeCount > 0 ? "writing" : null;
+    }
+
+    await setDoc(
+      resDocRef,
+      {
+        writingUsers: prunedUsers,
+        writingCount: activeCount,
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  };
+
+  const deleteDraftCompletely = async (draftData) => {
+    if (!draftDocRef || !user?.uid) return;
+
+    try {
+      const targetDate = draftData?.selectedDate || selectedDate;
+      await deleteDoc(draftDocRef);
+      if (targetDate) {
+        await syncWritingPresence(targetDate, user.uid, null);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (!draftDocRef || !user || user.isAnonymous) return;
+
+    const restoreDraft = async () => {
       try {
-        await updateDoc(resDocRef, { writingCount: increment(1) });
-      } catch {
-        await setDoc(
-          resDocRef,
-          { writingCount: 1, status: "writing", updatedAt: serverTimestamp() },
-          { merge: true }
-        );
+        const snap = await getDoc(draftDocRef);
+        if (!snap.exists()) return;
+
+        const draft = snap.data();
+        const now = Date.now();
+        const expiresAt = Number(draft.expiresAt || 0);
+
+        if (!expiresAt || expiresAt <= now) {
+          await deleteDraftCompletely(draft);
+          return;
+        }
+
+        setFormData({ ...EMPTY_FORM_DATA, ...(draft.formData || {}) });
+
+        if (draft.selectedDate) setSelectedDate(draft.selectedDate);
+        if (draft.selectedProgram) setSelectedProgram(draft.selectedProgram);
+        if (draft.partnerType) setPartnerType(draft.partnerType);
+
+        setDraftBanner({
+          type: "restored",
+          expiresAt,
+          selectedDate: draft.selectedDate,
+          selectedProgram: draft.selectedProgram,
+        });
+      } catch (error) {
+        console.error(error);
       }
     };
 
-    trackWriting();
-
-    return () => {
-      updateDoc(resDocRef, { writingCount: increment(-1) }).catch(() => {});
-    };
-  }, [selectedDate, user, db, appId]);
+    restoreDraft();
+  }, [draftDocRef, user]);
 
   const setUploading = (field, value) => {
     setUploadingMap((prev) => ({ ...prev, [field]: value }));
@@ -240,6 +346,73 @@ const ProposalFormStep = ({
     }
   };
 
+  const handleSaveDraft = async () => {
+    if (!draftDocRef || !user?.uid) {
+      alert("로그인이 필요합니다.");
+      return;
+    }
+
+    if (!selectedDate) {
+      alert("일정을 먼저 선택해 주세요.");
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      const expiresAt = now + DRAFT_TTL_MS;
+
+      await setDoc(
+        draftDocRef,
+        {
+          status: "draft",
+          formData,
+          selectedDate,
+          selectedProgram,
+          partnerType,
+          lastSavedAt: now,
+          expiresAt,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await syncWritingPresence(selectedDate, user.uid, expiresAt);
+
+      setDraftBanner({
+        type: "saved",
+        expiresAt,
+        selectedDate,
+        selectedProgram,
+      });
+
+      alert("임시저장되었습니다. 24시간 후 자동 만료됩니다.");
+    } catch (error) {
+      console.error(error);
+      alert("임시저장 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleDiscardDraft = async () => {
+    const ok = window.confirm("임시저장본을 삭제하고 새로 작성하시겠습니까?");
+    if (!ok) return;
+
+    try {
+      const snap = draftDocRef ? await getDoc(draftDocRef) : null;
+      const draftData = snap?.exists() ? snap.data() : null;
+
+      await deleteDraftCompletely(draftData);
+      setFormData(EMPTY_FORM_DATA);
+      setFieldErrors({});
+      setUploadErrors({});
+      setDraftBanner(null);
+
+      alert("임시저장본이 삭제되었습니다.");
+    } catch (error) {
+      console.error(error);
+      alert("임시저장 삭제 중 오류가 발생했습니다.");
+    }
+  };
+
   const handleSubmit = async () => {
     if (!user || user.isAnonymous) {
       alert("로그인이 필요합니다.");
@@ -295,6 +468,7 @@ const ProposalFormStep = ({
         collection(db, "artifacts", appId, "public", "data", "applications"),
         {
           userId: user.uid,
+          applicantEmail: user.email || "",
           status: "review",
           selectedDate,
           partnerType,
@@ -304,6 +478,31 @@ const ProposalFormStep = ({
           submittedAt: serverTimestamp(),
         }
       );
+
+      try {
+        await sendApplicationEmails({
+          applicantName:
+            formData.name ||
+            formData.realName ||
+            formData.brandName ||
+            formData.stageName ||
+            "Applicant",
+          applicantEmail: user.email,
+          exhibitionTitle: formData.exhibitionTitle,
+          selectedDate,
+          selectedProgram,
+          partnerType,
+          phone: normalizePhone(formData.phone),
+          brandName: formData.brandName,
+          stageName: formData.stageName,
+        });
+      } catch (mailError) {
+        console.error("mail send failed:", mailError);
+      }
+
+      await deleteDraftCompletely({
+        selectedDate,
+      });
 
       onSubmitSuccess();
     } catch (e) {
@@ -325,23 +524,45 @@ const ProposalFormStep = ({
         </button>
 
         <button
-          onClick={() =>
-            setDoc(
-              doc(db, "artifacts", appId, "users", user.uid, "drafts", "current"),
-              {
-                formData,
-                selectedDate,
-                selectedProgram,
-                lastSaved: serverTimestamp(),
-              }
-            ).then(() => alert("Saved."))
-          }
+          onClick={handleSaveDraft}
           disabled={isUploading || isSubmitting}
           className="flex items-center gap-2 bg-zinc-50 px-6 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-white border border-transparent hover:border-gray-100 transition-all shadow-sm shadow-zinc-100 text-left disabled:opacity-40"
         >
           <Save size={16} /> Save Draft
         </button>
       </div>
+
+      {draftBanner && (
+        <div className="mb-8 bg-[#004aad]/5 border border-[#004aad]/10 rounded-[28px] px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="text-left">
+            <div className="flex items-center gap-2 text-[#004aad] text-xs font-black uppercase tracking-[0.2em] mb-2">
+              <RefreshCcw size={14} />
+              {draftBanner.type === "restored"
+                ? "Draft Automatically Restored"
+                : "Draft Saved"}
+            </div>
+            <p className="text-sm font-bold text-zinc-700 break-keep">
+              {draftBanner.type === "restored"
+                ? "이전에 저장한 작성중인 내용을 자동 복원했습니다."
+                : "임시저장되었습니다. 24시간 후 자동 만료됩니다."}
+            </p>
+            <p className="text-xs font-black text-zinc-400 mt-2">
+              {draftBanner.selectedDate}{" "}
+              {draftBanner.selectedProgram
+                ? `· ${draftBanner.selectedProgram.name} · ${draftBanner.selectedProgram.price}만원`
+                : ""}
+            </p>
+          </div>
+
+          <button
+            onClick={handleDiscardDraft}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-red-200 text-red-500 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-red-50 transition-all"
+          >
+            <Trash2 size={14} />
+            Draft 삭제 후 새로 작성
+          </button>
+        </div>
+      )}
 
       <div className="bg-white/80 backdrop-blur-xl border border-gray-100 p-8 md:p-20 rounded-[60px] shadow-2xl space-y-16">
         <input
@@ -653,6 +874,7 @@ const ProposalFormStep = ({
 
         <div className="rounded-[28px] border border-zinc-100 bg-zinc-50 px-5 py-4 text-xs font-bold text-zinc-500 leading-relaxed break-keep">
           이미지 파일은 ImgBB로 업로드되고, 포트폴리오/작품리스트 같은 문서 파일은 Cloudflare R2로 업로드됩니다.
+          임시저장본은 24시간 후 자동 만료됩니다.
         </div>
 
         <div className="pt-20 flex flex-col items-center">

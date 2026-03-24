@@ -12,6 +12,20 @@ import { addDays, isDateInRange } from "../utils/date";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
+const getActiveWritingCount = (reservation) => {
+  if (!reservation) return 0;
+
+  const now = Date.now();
+  const writingUsers = reservation.writingUsers || {};
+
+  const activeCount = Object.values(writingUsers).filter(
+    (expiresAt) => Number(expiresAt) > now
+  ).length;
+
+  if (activeCount > 0) return activeCount;
+  return reservation.writingCount || 0;
+};
+
 const CalendarStep = ({
   reservations = {},
   onSelect,
@@ -148,6 +162,7 @@ const CalendarStep = ({
             const blocked = getBlockedInfo(dateStr);
             const active = isSelected(dateStr);
             const resData = reservations[dateStr];
+            const activeWritingCount = getActiveWritingCount(resData);
 
             let style = "border-zinc-50 text-zinc-800 font-bold";
 
@@ -180,9 +195,9 @@ const CalendarStep = ({
                     </span>
                   )}
 
-                  {isThu && !blocked && !active && resData?.writingCount > 0 && (
+                  {isThu && !blocked && !active && activeWritingCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[7px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 whitespace-nowrap z-20 font-black shadow-sm">
-                      <Edit3 size={7} /> 작성중 {resData.writingCount}
+                      <Edit3 size={7} /> 작성중 {activeWritingCount}
                     </span>
                   )}
                 </button>

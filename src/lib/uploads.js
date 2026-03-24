@@ -73,10 +73,17 @@ const getSignedUpload = async ({ fileName, contentType, folder, userId }) => {
     }),
   });
 
-  const result = await response.json();
+  const text = await response.text();
+  let result = {};
+
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("R2 서명 함수 응답이 올바른 JSON이 아닙니다.");
+  }
 
   if (!response.ok) {
-    throw new Error(result?.error || "업로드 서명 생성에 실패했습니다.");
+    throw new Error(result?.error || `업로드 서명 생성 실패 (${response.status})`);
   }
 
   return result;
@@ -116,4 +123,92 @@ export const uploadDocumentToR2 = async ({ file, folder, userId }) => {
     key: signed.key,
     url: signed.publicUrl,
   };
+};
+
+export const sendApplicationEmails = async ({
+  applicantName,
+  applicantEmail,
+  exhibitionTitle,
+  selectedDate,
+  selectedProgram,
+  partnerType,
+  phone,
+  brandName,
+  stageName,
+}) => {
+  const response = await fetch("/.netlify/functions/send-application-emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      applicantName,
+      applicantEmail,
+      exhibitionTitle,
+      selectedDate,
+      selectedProgram,
+      partnerType,
+      phone,
+      brandName,
+      stageName,
+    }),
+  });
+
+  const text = await response.text();
+  let result = {};
+
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(result?.error || "메일 발송에 실패했습니다.");
+  }
+
+  return result;
+};
+
+export const sendApplicationStatusEmail = async ({
+  type,
+  applicantName,
+  applicantEmail,
+  exhibitionTitle,
+  selectedDate,
+  selectedProgram,
+  partnerType,
+  rejectionReason = "",
+}) => {
+  const response = await fetch("/.netlify/functions/send-application-status-email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      type,
+      applicantName,
+      applicantEmail,
+      exhibitionTitle,
+      selectedDate,
+      selectedProgram,
+      partnerType,
+      rejectionReason,
+    }),
+  });
+
+  const text = await response.text();
+  let result = {};
+
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    result = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(result?.error || "상태 메일 발송에 실패했습니다.");
+  }
+
+  return result;
 };

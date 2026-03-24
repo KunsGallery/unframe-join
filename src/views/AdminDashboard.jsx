@@ -15,6 +15,9 @@ import {
   Pencil,
   Trash2,
   X,
+  Search,
+  Filter,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   doc,
@@ -30,6 +33,7 @@ import AdminLink from "../components/ui/AdminLink";
 import DetailItem from "../components/ui/DetailItem";
 import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
+import { sendApplicationStatusEmail } from "../lib/uploads";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -47,7 +51,14 @@ const getStatusLabel = (status) => {
   if (status === "planned") return "기획";
   if (status === "preparing") return "준비중";
   if (status === "confirmed") return "확정";
+  if (status === "review") return "심사중";
+  if (status === "rejected") return "거절";
   return status || "-";
+};
+
+const getProgramLabel = (program) => {
+  if (!program) return "-";
+  return `${program.name} · ${program.price}만원`;
 };
 
 const AdminDashboard = ({ applications, reservations, db, appId }) => {
@@ -58,6 +69,12 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
   const [manualBlock, setManualBlock] = useState(DEFAULT_MANUAL_BLOCK);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [programFilter, setProgramFilter] = useState("all");
+  const [partnerFilter, setPartnerFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState("date-desc");
+
   const stats = useMemo(
     () => ({
       total: applications.length,
@@ -66,15 +83,6 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     }),
     [applications]
   );
-
-  const groupedApps = useMemo(() => {
-    const groups = {};
-    applications.forEach((app) => {
-      if (!groups[app.selectedDate]) groups[app.selectedDate] = [];
-      groups[app.selectedDate].push(app);
-    });
-    return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [applications]);
 
   const managedSchedules = useMemo(() => {
     return Object.entries(reservations || {})
@@ -188,8 +196,9 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         { merge: true }
       );
 
+      const wasEditing = !!editingScheduleId;
       resetManualBlockForm();
-      alert(editingScheduleId ? "운영자 일정이 수정되었습니다." : "운영자 일정이 등록되었습니다.");
+      alert(wasEditing ? "운영자 일정이 수정되었습니다." : "운영자 일정이 등록되었습니다.");
     } catch (e) {
       console.error(e);
       alert(editingScheduleId ? "수정 실패" : "등록 실패");
@@ -249,12 +258,55 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
           },
           { merge: true }
         );
+
+        if (appDoc.applicantEmail) {
+          try {
+            await sendApplicationStatusEmail({
+              type: "approved",
+              applicantName:
+                appDoc.name ||
+                appDoc.realName ||
+                appDoc.brandName ||
+                appDoc.stageName ||
+                "Applicant",
+              applicantEmail: appDoc.applicantEmail,
+              exhibitionTitle: appDoc.exhibitionTitle,
+              selectedDate: appDoc.selectedDate,
+              selectedProgram: appDoc.selectedProgram,
+              partnerType: appDoc.partnerType,
+            });
+          } catch (mailError) {
+            console.error("approve mail failed:", mailError);
+          }
+        }
       } else if (status === "rejected" || status === "delete") {
         if (status === "rejected") {
           await updateDoc(
             doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
             { status: "rejected", rejectionReason: reason }
           );
+
+          if (appDoc.applicantEmail) {
+            try {
+              await sendApplicationStatusEmail({
+                type: "rejected",
+                applicantName:
+                  appDoc.name ||
+                  appDoc.realName ||
+                  appDoc.brandName ||
+                  appDoc.stageName ||
+                  "Applicant",
+                applicantEmail: appDoc.applicantEmail,
+                exhibitionTitle: appDoc.exhibitionTitle,
+                selectedDate: appDoc.selectedDate,
+                selectedProgram: appDoc.selectedProgram,
+                partnerType: appDoc.partnerType,
+                rejectionReason: reason,
+              });
+            } catch (mailError) {
+              console.error("reject mail failed:", mailError);
+            }
+          }
         } else {
           await deleteDoc(
             doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
@@ -296,6 +348,70 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     }
   };
 
+  const filteredApplications = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
+    let list = [...applications].filter((app) => {
+      const matchesSearch =
+        !term ||
+        [
+          app.exhibitionTitle,
+          app.name,
+          app.realName,
+          app.stageName,
+          app.brandName,
+          app.phone,
+          app.selectedDate,
+          app.applicantEmail,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term));
+
+      const matchesStatus =
+        statusFilter === "all" ? true : app.status === statusFilter;
+
+      const matchesProgram =
+        programFilter === "all" ? true : app.selectedProgram?.id === programFilter;
+
+      const matchesPartner =
+        partnerFilter === "all" ? true : app.partnerType === partnerFilter;
+
+      return matchesSearch && matchesStatus && matchesProgram && matchesPartner;
+    });
+
+    list.sort((a, b) => {
+      if (sortOrder === "date-asc") return a.selectedDate.localeCompare(b.selectedDate);
+      if (sortOrder === "date-desc") return b.selectedDate.localeCompare(a.selectedDate);
+      if (sortOrder === "submitted-desc") {
+        const aTime = a.submittedAt?.seconds || 0;
+        const bTime = b.submittedAt?.seconds || 0;
+        return bTime - aTime;
+      }
+      if (sortOrder === "submitted-asc") {
+        const aTime = a.submittedAt?.seconds || 0;
+        const bTime = b.submittedAt?.seconds || 0;
+        return aTime - bTime;
+      }
+      return 0;
+    });
+
+    return list;
+  }, [applications, searchTerm, statusFilter, programFilter, partnerFilter, sortOrder]);
+
+  const groupedApps = useMemo(() => {
+    const groups = {};
+    filteredApplications.forEach((app) => {
+      if (!groups[app.selectedDate]) groups[app.selectedDate] = [];
+      groups[app.selectedDate].push(app);
+    });
+
+    const entries = Object.entries(groups);
+    if (sortOrder === "date-asc") {
+      return entries.sort((a, b) => a[0].localeCompare(b[0]));
+    }
+    return entries.sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filteredApplications, sortOrder]);
+
   return (
     <section className="animate-in fade-in py-20 text-zinc-900 min-h-screen relative z-10 text-left px-4">
       <div className="mb-20 space-y-12 text-left">
@@ -309,23 +425,9 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-          <StatCard
-            icon={<FileText size={20} />}
-            label="Total Proposals"
-            value={stats.total}
-            color="blue"
-          />
-          <StatCard
-            icon={<Users size={20} />}
-            label="Pending Review"
-            value={stats.pending}
-            color="orange"
-          />
-          <CheckCard
-            icon={<CheckCircle size={20} />}
-            label="Confirmed"
-            value={stats.confirmed}
-          />
+          <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
+          <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
+          <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
         </div>
       </div>
 
@@ -334,9 +436,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
           <div className="flex items-center justify-between gap-3 mb-8">
             <div className="flex items-center gap-3">
               <Plus size={18} className="text-[#004aad]" />
-              <h3 className="text-2xl font-black uppercase tracking-tight">
-                운영자 일정 직접 등록
-              </h3>
+              <h3 className="text-2xl font-black uppercase tracking-tight">운영자 일정 직접 등록</h3>
             </div>
 
             {editingScheduleId && (
@@ -353,9 +453,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
             <input
               type="date"
               value={manualBlock.startDate}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, startDate: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, startDate: e.target.value }))}
               className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             />
 
@@ -363,18 +461,14 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
               type="number"
               min="1"
               value={manualBlock.durationDays}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, durationDays: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, durationDays: e.target.value }))}
               placeholder="기간(일)"
               className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             />
 
             <select
               value={manualBlock.blockStatus}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, blockStatus: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, blockStatus: e.target.value }))}
               className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             >
               <option value="planned">기획</option>
@@ -384,9 +478,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
 
             <select
               value={manualBlock.partnerType}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, partnerType: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, partnerType: e.target.value }))}
               className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             >
               <option value="internal">Internal</option>
@@ -397,9 +489,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
             <input
               type="text"
               value={manualBlock.blockTitle}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, blockTitle: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, blockTitle: e.target.value }))}
               placeholder="일정명 / 전시명"
               className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             />
@@ -407,21 +497,14 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
             <input
               type="text"
               value={manualBlock.blockOwner}
-              onChange={(e) =>
-                setManualBlock((prev) => ({ ...prev, blockOwner: e.target.value }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, blockOwner: e.target.value }))}
               placeholder="작가명 / 운영자명 / UNFRAME"
               className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             />
 
             <select
               value={manualBlock.selectedProgramId}
-              onChange={(e) =>
-                setManualBlock((prev) => ({
-                  ...prev,
-                  selectedProgramId: e.target.value,
-                }))
-              }
+              onChange={(e) => setManualBlock((prev) => ({ ...prev, selectedProgramId: e.target.value }))}
               className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             >
               <option value="">프로그램 없음</option>
@@ -444,18 +527,13 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
           <div className="flex items-center gap-3 mb-8">
             <Calendar size={18} className="text-[#004aad]" />
-            <h3 className="text-2xl font-black uppercase tracking-tight">
-              등록된 일정
-            </h3>
+            <h3 className="text-2xl font-black uppercase tracking-tight">등록된 일정</h3>
           </div>
 
           <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
             {managedSchedules.length > 0 ? (
               managedSchedules.map((schedule) => (
-                <div
-                  key={schedule.id}
-                  className="border border-zinc-100 rounded-[28px] p-5 bg-zinc-50/70"
-                >
+                <div key={schedule.id} className="border border-zinc-100 rounded-[28px] p-5 bg-zinc-50/70">
                   <div className="flex items-start justify-between gap-4 mb-4">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -473,12 +551,8 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                         )}
                       </div>
 
-                      <h4 className="text-lg font-black tracking-tight text-zinc-900 break-keep">
-                        {schedule.title}
-                      </h4>
-                      <p className="text-sm font-bold text-zinc-500 mt-1">
-                        {schedule.owner}
-                      </p>
+                      <h4 className="text-lg font-black tracking-tight text-zinc-900 break-keep">{schedule.title}</h4>
+                      <p className="text-sm font-bold text-zinc-500 mt-1">{schedule.owner}</p>
                     </div>
 
                     {schedule.manualEntry && (
@@ -501,23 +575,13 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
 
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div className="bg-white border border-zinc-100 rounded-2xl px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">
-                        Period
-                      </p>
-                      <p className="text-sm font-black text-zinc-700">
-                        {schedule.startDate} ~ {schedule.endDate}
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">Period</p>
+                      <p className="text-sm font-black text-zinc-700">{schedule.startDate} ~ {schedule.endDate}</p>
                     </div>
 
                     <div className="bg-white border border-zinc-100 rounded-2xl px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">
-                        Program
-                      </p>
-                      <p className="text-sm font-black text-zinc-700">
-                        {schedule.selectedProgram
-                          ? `${schedule.selectedProgram.name} · ${schedule.selectedProgram.price}만원`
-                          : "-"}
-                      </p>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">Program</p>
+                      <p className="text-sm font-black text-zinc-700">{getProgramLabel(schedule.selectedProgram)}</p>
                     </div>
                   </div>
                 </div>
@@ -531,6 +595,94 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         </div>
       </div>
 
+      <div className="mb-14 bg-white rounded-[40px] border border-zinc-100 shadow-xl p-6 md:p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <Filter size={18} className="text-[#004aad]" />
+          <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight">신청서 필터링</h3>
+        </div>
+
+        <div className="grid lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4">
+          <div className="relative">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="전시명, 이름, 활동명, 브랜드명, 연락처, 이메일 검색"
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-11 pr-4 py-4 font-bold outline-none"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
+          >
+            <option value="all">전체 상태</option>
+            <option value="review">심사중</option>
+            <option value="confirmed">확정</option>
+            <option value="rejected">거절</option>
+          </select>
+
+          <select
+            value={programFilter}
+            onChange={(e) => setProgramFilter(e.target.value)}
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
+          >
+            <option value="all">전체 프로그램</option>
+            {PROGRAMS.map((program) => (
+              <option key={program.id} value={program.id}>
+                {program.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={partnerFilter}
+            onChange={(e) => setPartnerFilter(e.target.value)}
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
+          >
+            <option value="all">전체 파트너</option>
+            <option value="artist">Artist</option>
+            <option value="brand">Brand</option>
+          </select>
+
+          <div className="relative">
+            <ArrowUpDown size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl pl-11 pr-4 py-4 font-bold outline-none"
+            >
+              <option value="date-desc">일정 최신순</option>
+              <option value="date-asc">일정 오래된순</option>
+              <option value="submitted-desc">신청 최신순</option>
+              <option value="submitted-asc">신청 오래된순</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <span className="px-4 py-2 rounded-full bg-zinc-900 text-white text-[10px] font-black uppercase tracking-[0.18em]">
+            Filtered {filteredApplications.length}
+          </span>
+
+          {(searchTerm || statusFilter !== "all" || programFilter !== "all" || partnerFilter !== "all") && (
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                setStatusFilter("all");
+                setProgramFilter("all");
+                setPartnerFilter("all");
+              }}
+              className="px-4 py-2 rounded-full border border-zinc-200 text-zinc-500 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-zinc-50 transition-all"
+            >
+              필터 초기화
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-24 text-left">
         {groupedApps.length > 0 ? (
           groupedApps.map(([date, apps]) => (
@@ -538,9 +690,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
               <div className="sticky top-24 z-10 bg-[#fdfbf7]/80 backdrop-blur-sm py-6 border-b border-gray-100 flex items-center justify-between mb-10 text-left">
                 <div className="flex items-center gap-4 text-left">
                   <Calendar size={20} className="text-[#004aad]" />
-                  <h3 className="text-xl md:text-3xl font-black uppercase text-left">
-                    {date}
-                  </h3>
+                  <h3 className="text-xl md:text-3xl font-black uppercase text-left">{date}</h3>
                 </div>
                 <div className="px-5 py-2 bg-white border border-gray-200 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm text-center">
                   {apps.length} Applicants
@@ -578,14 +728,10 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
 
                           <div className="flex items-center gap-6 flex-wrap text-left">
                             <p className="text-sm font-black text-zinc-400 uppercase">
-                              {app.partnerType === "brand"
-                                ? app.brandName
-                                : app.stageName || app.name}
+                              {app.partnerType === "brand" ? app.brandName : app.stageName || app.name}
                             </p>
                             <div className="w-1 h-1 bg-zinc-200 rounded-full" />
-                            <p className="text-sm font-black text-zinc-400">
-                              {app.phone}
-                            </p>
+                            <p className="text-sm font-black text-zinc-400">{app.phone}</p>
                             {app.selectedProgram && (
                               <>
                                 <div className="w-1 h-1 bg-zinc-200 rounded-full" />
@@ -598,34 +744,20 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
 
                           <div className="flex gap-4 flex-wrap text-left">
                             {app.portfolioUrl && (
-                              <AdminLink
-                                href={app.portfolioUrl}
-                                icon={<Paperclip size={14} />}
-                                label="포트폴리오 파일"
-                              />
+                              <AdminLink href={app.portfolioUrl} icon={<Paperclip size={14} />} label="포트폴리오 파일" />
                             )}
                             {app.workListUrl && (
-                              <AdminLink
-                                href={app.workListUrl}
-                                icon={<FileText size={14} />}
-                                label="작품리스트 파일"
-                              />
+                              <AdminLink href={app.workListUrl} icon={<FileText size={14} />} label="작품리스트 파일" />
                             )}
                             {app.highResPhotosUrl && (
-                              <AdminLink
-                                href={app.highResPhotosUrl}
-                                icon={<ImageIcon size={14} />}
-                                label="대표작 고화질 원본"
-                              />
+                              <AdminLink href={app.highResPhotosUrl} icon={<ImageIcon size={14} />} label="대표작 고화질 원본" />
                             )}
                           </div>
                         </div>
 
                         <div className="w-full lg:w-[280px] space-y-3 text-left">
                           <button
-                            onClick={() =>
-                              setExpandedId(expandedId === app.id ? null : app.id)
-                            }
+                            onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
                             className="w-full py-4 bg-zinc-50 border border-zinc-100 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-zinc-100 transition-all text-center"
                           >
                             {expandedId === app.id ? (
@@ -649,9 +781,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                               />
                               <div className="flex gap-2">
                                 <button
-                                  onClick={() =>
-                                    handleAction(app, date, "rejected", rejectReason)
-                                  }
+                                  onClick={() => handleAction(app, date, "rejected", rejectReason)}
                                   className="flex-1 py-3 bg-red-400 text-white rounded-xl text-[10px] font-black uppercase transition-all text-center"
                                 >
                                   Confirm
@@ -706,34 +836,18 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                                   value={
                                     app.partnerType === "brand"
                                       ? app.brandName
-                                      : `${app.realName} (${app.englishName || "-"})`
+                                      : `${app.realName || "-"} (${app.englishName || "-"})`
                                   }
                                 />
                                 <DetailItem
                                   label="활동/예명"
-                                  value={
-                                    app.partnerType === "brand"
-                                      ? "-"
-                                      : app.stageName || app.realName
-                                  }
+                                  value={app.partnerType === "brand" ? "-" : app.stageName || app.realName || "-"}
                                 />
-                                <DetailItem label="연락처" value={app.phone} />
-                                <DetailItem
-                                  label="생년/설립일"
-                                  value={app.birthDate}
-                                />
-                                <DetailItem
-                                  label="주소"
-                                  value={`${app.addressMain} ${app.addressDetail}`}
-                                />
-                                <DetailItem
-                                  label="신청 프로그램"
-                                  value={
-                                    app.selectedProgram
-                                      ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
-                                      : "-"
-                                  }
-                                />
+                                <DetailItem label="이메일" value={app.applicantEmail || "-"} />
+                                <DetailItem label="연락처" value={app.phone || "-"} />
+                                <DetailItem label="생년/설립일" value={app.birthDate || "-"} />
+                                <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
+                                <DetailItem label="신청 프로그램" value={getProgramLabel(app.selectedProgram)} />
                               </div>
                             </div>
 
@@ -743,9 +857,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                               </h5>
                               <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
                                 "
-                                {app.partnerType === "brand"
-                                  ? app.projectPurpose
-                                  : app.artistNote}
+                                {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
                                 "
                               </p>
                             </div>
@@ -757,27 +869,27 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                                 Visual & External Assets
                               </h5>
                               <div className="flex flex-col gap-4 text-left">
-                                <a
-                                  href={
-                                    app.snsLink?.startsWith("http")
-                                      ? app.snsLink
-                                      : `https://${app.snsLink}`
-                                  }
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                >
-                                  <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
-                                </a>
+                                {app.snsLink && (
+                                  <a
+                                    href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                  >
+                                    <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                  </a>
+                                )}
 
-                                <a
-                                  href={app.profilePhotoUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                >
-                                  <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
-                                </a>
+                                {app.profilePhotoUrl && (
+                                  <a
+                                    href={app.profilePhotoUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                  >
+                                    <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
+                                  </a>
+                                )}
 
                                 {app.highResPhotosUrl && (
                                   <a
@@ -814,9 +926,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         ) : (
           <div className="py-60 flex flex-col items-center justify-center text-zinc-300 gap-8 animate-pulse text-center">
             <BarChart3 size={80} strokeWidth={1} />
-            <p className="font-black uppercase tracking-[0.4em] text-sm">
-              Awaiting New Proposals
-            </p>
+            <p className="font-black uppercase tracking-[0.4em] text-sm">No matching proposals</p>
           </div>
         )}
       </div>

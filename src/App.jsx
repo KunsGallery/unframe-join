@@ -162,6 +162,30 @@ const App = () => {
           setSelectedDate(null);
           setSelectedProgram(null);
           setPartnerType("");
+          setFormData({
+            name: "",
+            realName: "",
+            stageName: "",
+            englishName: "",
+            birthDate: "",
+            phone: "",
+            addressMain: "",
+            addressDetail: "",
+            profilePhotoUrl: "",
+            snsLink: "",
+            portfolioUrl: "",
+            exhibitionTitle: "",
+            artistNote: "",
+            workListUrl: "",
+            highResPhotosUrl: "",
+            experimentText: "",
+            brandName: "",
+            brandRole: "",
+            projectPurpose: "",
+            targetAudience: "",
+            budgetRange: "",
+            privacyAgreed: false,
+          });
           setViewMode("user");
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
@@ -237,6 +261,9 @@ const App = () => {
                 appId={appId}
                 user={user}
                 handleLogin={handleLogin}
+                setSelectedDate={setSelectedDate}
+                setSelectedProgram={setSelectedProgram}
+                setPartnerType={setPartnerType}
               />
             )}
           </div>
