@@ -15,7 +15,6 @@ import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import LandingPage from "./views/LandingPage";
 import PartnerSelectStep from "./views/PartnerSelectStep";
-import ProgramSelectStep from "./views/ProgramSelectStep";
 import CalendarStep from "./views/CalendarStep";
 import ProposalFormStep from "./views/ProposalFormStep";
 import AdminDashboard from "./views/AdminDashboard";
@@ -203,43 +202,33 @@ const App = () => {
               <PartnerSelectStep
                 onSelect={(type) => {
                   setPartnerType(type);
-                  handleStepTransition(4);
+                  handleStepTransition(3);
                 }}
                 onBack={() => handleStepTransition(1)}
               />
             )}
 
             {currentStep === 3 && (
-              <ProgramSelectStep
-                onSelect={(program) => {
-                  setSelectedProgram(program);
-                  handleStepTransition(2);
-                }}
-                onBack={() => handleStepTransition(1)}
-              />
-            )}
-
-            {currentStep === 4 && (
               <CalendarStep
                 reservations={reservations}
                 onSelect={(date) => {
                   if (!user || user.isAnonymous) return handleLogin();
                   setSelectedDate(date);
                 }}
-                onConfirm={() => handleStepTransition(5)}
+                onConfirm={() => handleStepTransition(4)}
                 selectedDate={selectedDate}
                 onBack={() => handleStepTransition(2)}
               />
             )}
 
-            {currentStep === 5 && (
+            {currentStep === 4 && (
               <ProposalFormStep
                 selectedDate={selectedDate}
                 partnerType={partnerType}
                 selectedProgram={selectedProgram}
                 formData={formData}
                 setFormData={setFormData}
-                onBack={() => handleStepTransition(4)}
+                onBack={() => handleStepTransition(3)}
                 onSubmitSuccess={() => {
                   window.scrollTo({ top: 0, behavior: "smooth" });
                   setIsSubmitSuccess(true);

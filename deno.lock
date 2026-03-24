@@ -11,7 +11,10 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@aws-sdk/client-s3@^3.1015.0",
+        "npm:@aws-sdk/s3-request-presigner@^3.1015.0",
         "npm:@eslint/js@^9.39.1",
+        "npm:@tailwindcss/vite@^4.2.2",
         "npm:@types/react-dom@^19.2.3",
         "npm:@types/react@^19.2.7",
         "npm:@vitejs/plugin-react@^5.1.1",
@@ -22,6 +25,7 @@
         "npm:firebase@^12.9.0",
         "npm:globals@^16.5.0",
         "npm:lucide-react@0.575",
+        "npm:netlify-cli@^24.4.1",
         "npm:postcss@^8.5.6",
         "npm:react-dom@^19.2.0",
         "npm:react@^19.2.0",
