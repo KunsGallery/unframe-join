@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Globe,
   BarChart3,
+  Plus,
 } from "lucide-react";
 import {
   doc,
@@ -18,16 +19,31 @@ import {
   setDoc,
   deleteDoc,
   runTransaction,
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+  serverTimestamp,
+} from "firebase/firestore";
 import StatCard from "../components/ui/StatCard";
 import CheckCard from "../components/ui/CheckCard";
 import AdminLink from "../components/ui/AdminLink";
 import DetailItem from "../components/ui/DetailItem";
+import { PROGRAMS } from "../constants/programs";
+import { addDays } from "../utils/date";
 
-const AdminDashboard = ({ applications, db, appId }) => {
+const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
+
+const AdminDashboard = ({ applications, reservations, db, appId }) => {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+
+  const [manualBlock, setManualBlock] = useState({
+    startDate: "",
+    durationDays: 7,
+    blockStatus: "planned",
+    blockTitle: "",
+    blockOwner: "",
+    partnerType: "internal",
+    selectedProgramId: "",
+  });
 
   const stats = useMemo(
     () => ({
@@ -47,6 +63,83 @@ const AdminDashboard = ({ applications, db, appId }) => {
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
   }, [applications]);
 
+  const existingRanges = useMemo(() => {
+    return Object.entries(reservations || {})
+      .filter(([_, data]) => BLOCKING_STATUSES.includes(data.status))
+      .map(([start, data]) => ({
+        start,
+        end: data.endDate || addDays(start, 6),
+      }));
+  }, [reservations]);
+
+  const hasOverlap = (startDate, endDate) => {
+    return existingRanges.some(
+      (range) => !(endDate < range.start || startDate > range.end)
+    );
+  };
+
+  const handleCreateManualBlock = async () => {
+    if (!manualBlock.startDate || !manualBlock.blockTitle) {
+      alert("시작일과 이름을 입력해 주세요.");
+      return;
+    }
+
+    const durationDays = Number(manualBlock.durationDays || 7);
+    const endDate = addDays(manualBlock.startDate, durationDays - 1);
+
+    if (hasOverlap(manualBlock.startDate, endDate)) {
+      alert("해당 기간은 이미 다른 일정과 겹칩니다.");
+      return;
+    }
+
+    const selectedProgram =
+      PROGRAMS.find((p) => p.id === manualBlock.selectedProgramId) || null;
+
+    try {
+      await setDoc(
+        doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "reservations",
+          manualBlock.startDate
+        ),
+        {
+          status: manualBlock.blockStatus,
+          endDate,
+          manualEntry: true,
+          blockTitle: manualBlock.blockTitle,
+          blockOwner: manualBlock.blockOwner || "UNFRAME",
+          confirmedTitle: manualBlock.blockTitle,
+          confirmedArtist: manualBlock.blockOwner || "UNFRAME",
+          partnerType: manualBlock.partnerType,
+          selectedProgram,
+          applicantCount: 0,
+          writingCount: 0,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setManualBlock({
+        startDate: "",
+        durationDays: 7,
+        blockStatus: "planned",
+        blockTitle: "",
+        blockOwner: "",
+        partnerType: "internal",
+        selectedProgramId: "",
+      });
+
+      alert("운영자 일정이 등록되었습니다.");
+    } catch (e) {
+      console.error(e);
+      alert("등록 실패");
+    }
+  };
+
   const handleAction = async (appDoc, date, status, reason = "") => {
     try {
       if (status === "confirmed") {
@@ -62,6 +155,8 @@ const AdminDashboard = ({ applications, db, appId }) => {
             confirmedArtist: appDoc.stageName || appDoc.name,
             confirmedTitle: appDoc.exhibitionTitle,
             partnerType: appDoc.partnerType,
+            selectedProgram: appDoc.selectedProgram || null,
+            updatedAt: serverTimestamp(),
           },
           { merge: true }
         );
@@ -96,6 +191,7 @@ const AdminDashboard = ({ applications, db, appId }) => {
               confirmedArtist: null,
               confirmedTitle: null,
               partnerType: null,
+              selectedProgram: null,
               applicantCount: newCount,
             });
           }
@@ -106,6 +202,7 @@ const AdminDashboard = ({ applications, db, appId }) => {
       setRejectReason("");
       alert("Updated successfully.");
     } catch (e) {
+      console.error(e);
       alert("Action failed.");
     }
   };
@@ -140,6 +237,108 @@ const AdminDashboard = ({ applications, db, appId }) => {
             label="Confirmed"
             value={stats.confirmed}
           />
+        </div>
+      </div>
+
+      <div className="mb-20 bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
+        <div className="flex items-center gap-3 mb-8">
+          <Plus size={18} className="text-[#004aad]" />
+          <h3 className="text-2xl font-black uppercase tracking-tight">
+            운영자 일정 직접 등록
+          </h3>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <input
+            type="date"
+            value={manualBlock.startDate}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, startDate: e.target.value }))
+            }
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          />
+
+          <input
+            type="number"
+            min="1"
+            value={manualBlock.durationDays}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, durationDays: e.target.value }))
+            }
+            placeholder="기간(일)"
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          />
+
+          <select
+            value={manualBlock.blockStatus}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, blockStatus: e.target.value }))
+            }
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          >
+            <option value="planned">기획</option>
+            <option value="preparing">준비중</option>
+            <option value="confirmed">확정</option>
+          </select>
+
+          <input
+            type="text"
+            value={manualBlock.blockTitle}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, blockTitle: e.target.value }))
+            }
+            placeholder="일정명 / 전시명"
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          />
+
+          <input
+            type="text"
+            value={manualBlock.blockOwner}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, blockOwner: e.target.value }))
+            }
+            placeholder="작가명 / 운영자명 / UNFRAME"
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          />
+
+          <select
+            value={manualBlock.partnerType}
+            onChange={(e) =>
+              setManualBlock((prev) => ({ ...prev, partnerType: e.target.value }))
+            }
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+          >
+            <option value="internal">Internal</option>
+            <option value="artist">Artist</option>
+            <option value="brand">Brand</option>
+          </select>
+
+          <div className="md:col-span-2 lg:col-span-2">
+            <select
+              value={manualBlock.selectedProgramId}
+              onChange={(e) =>
+                setManualBlock((prev) => ({
+                  ...prev,
+                  selectedProgramId: e.target.value,
+                }))
+              }
+              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            >
+              <option value="">프로그램 없음</option>
+              {PROGRAMS.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {program.name} · {program.price}만원
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={handleCreateManualBlock}
+            className="bg-[#004aad] text-white rounded-2xl px-6 py-4 font-black uppercase tracking-[0.2em] hover:scale-[1.02] transition-all"
+          >
+            일정 등록
+          </button>
         </div>
       </div>
 
@@ -188,7 +387,7 @@ const AdminDashboard = ({ applications, db, appId }) => {
                             {app.exhibitionTitle || "Untitled Project"}
                           </h4>
 
-                          <div className="flex items-center gap-6 text-left">
+                          <div className="flex items-center gap-6 flex-wrap text-left">
                             <p className="text-sm font-black text-zinc-400 uppercase">
                               {app.partnerType === "brand"
                                 ? app.brandName
@@ -198,6 +397,14 @@ const AdminDashboard = ({ applications, db, appId }) => {
                             <p className="text-sm font-black text-zinc-400">
                               {app.phone}
                             </p>
+                            {app.selectedProgram && (
+                              <>
+                                <div className="w-1 h-1 bg-zinc-200 rounded-full" />
+                                <span className="px-3 py-1.5 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-widest">
+                                  {app.selectedProgram.name} · {app.selectedProgram.price}만원
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           <div className="flex gap-4 flex-wrap text-left">
@@ -329,6 +536,14 @@ const AdminDashboard = ({ applications, db, appId }) => {
                                 <DetailItem
                                   label="주소"
                                   value={`${app.addressMain} ${app.addressDetail}`}
+                                />
+                                <DetailItem
+                                  label="신청 프로그램"
+                                  value={
+                                    app.selectedProgram
+                                      ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+                                      : "-"
+                                  }
                                 />
                               </div>
                             </div>

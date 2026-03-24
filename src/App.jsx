@@ -1,55 +1,31 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import {
-  getAuth,
   signInWithPopup,
   signInAnonymously,
-  GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+} from "firebase/auth";
 import {
-  getFirestore,
   collection,
   onSnapshot,
   query,
   where,
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+} from "firebase/firestore";
 
 import { ADMIN_EMAILS } from "./constants/admin";
+import { auth, db, googleProvider, appId } from "./lib/firebase";
 import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ParticleBackground from "./components/ui/ParticleBackground";
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
 import LandingPage from "./views/LandingPage";
 import PartnerSelectStep from "./views/PartnerSelectStep";
+import ProgramSelectStep from "./views/ProgramSelectStep";
 import CalendarStep from "./views/CalendarStep";
 import ProposalFormStep from "./views/ProposalFormStep";
 import AdminDashboard from "./views/AdminDashboard";
 import MyPage from "./views/MyPage";
 import SuccessView from "./views/SuccessView";
-
-const getEnv = (key) => {
-  try {
-    return import.meta.env[key] || "";
-  } catch (e) {
-    return "";
-  }
-};
-
-const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY"),
-  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN"),
-  projectId: getEnv("VITE_FIREBASE_PROJECT_ID"),
-  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET"),
-  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID"),
-  appId: getEnv("VITE_FIREBASE_APP_ID"),
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = "unframe-join";
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -62,7 +38,9 @@ const App = () => {
   const [isSubmitSuccess, setIsSubmitSuccess] = useState(false);
 
   const [partnerType, setPartnerType] = useState("");
+  const [selectedProgram, setSelectedProgram] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
+
   const [formData, setFormData] = useState({
     name: "",
     realName: "",
@@ -151,7 +129,7 @@ const App = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleLogin = () => signInWithPopup(auth, new GoogleAuthProvider());
+  const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
 
   if (loading) return <LoadingOverlay />;
@@ -174,6 +152,8 @@ const App = () => {
           setCurrentStep(1);
           setIsSubmitSuccess(false);
           setSelectedDate(null);
+          setSelectedProgram(null);
+          setPartnerType("");
           setViewMode("user");
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
@@ -188,7 +168,12 @@ const App = () => {
             }}
           />
         ) : viewMode === "admin" ? (
-          <AdminDashboard applications={applications} db={db} appId={appId} />
+          <AdminDashboard
+            applications={applications}
+            reservations={reservations}
+            db={db}
+            appId={appId}
+          />
         ) : viewMode === "my-page" ? (
           <MyPage
             applications={myApplications}
@@ -211,25 +196,36 @@ const App = () => {
             )}
 
             {currentStep === 3 && (
+              <ProgramSelectStep
+                onSelect={(program) => {
+                  setSelectedProgram(program);
+                  handleStepTransition(4);
+                }}
+                onBack={() => handleStepTransition(2)}
+              />
+            )}
+
+            {currentStep === 4 && (
               <CalendarStep
                 reservations={reservations}
                 onSelect={(date) => {
                   if (!user || user.isAnonymous) return handleLogin();
                   setSelectedDate(date);
                 }}
-                onConfirm={() => handleStepTransition(4)}
+                onConfirm={() => handleStepTransition(5)}
                 selectedDate={selectedDate}
-                onBack={() => handleStepTransition(2)}
+                onBack={() => handleStepTransition(3)}
               />
             )}
 
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <ProposalFormStep
                 selectedDate={selectedDate}
                 partnerType={partnerType}
+                selectedProgram={selectedProgram}
                 formData={formData}
                 setFormData={setFormData}
-                onBack={() => handleStepTransition(3)}
+                onBack={() => handleStepTransition(4)}
                 onSubmitSuccess={() => {
                   window.scrollTo({ top: 0, behavior: "smooth" });
                   setIsSubmitSuccess(true);

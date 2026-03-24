@@ -1,7 +1,16 @@
 import React, { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Clock, ParkingCircle, Calendar, Edit3 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ParkingCircle,
+  Calendar,
+  Edit3,
+} from "lucide-react";
 import NoticeItem from "../components/ui/NoticeItem";
 import { addDays, isDateInRange } from "../utils/date";
+
+const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
 const CalendarStep = ({
   reservations = {},
@@ -28,23 +37,43 @@ const CalendarStep = ({
     [currentDate]
   );
 
-  const confirmedRanges = useMemo(() => {
+  const blockedRanges = useMemo(() => {
     return Object.entries(reservations)
-      .filter(([_, data]) => data.status === "confirmed")
+      .filter(([_, data]) => BLOCKING_STATUSES.includes(data.status))
       .map(([dateStr, data]) => ({
         start: dateStr,
-        end: addDays(dateStr, 6),
+        end: data.endDate || addDays(dateStr, 6),
         type: data.partnerType || "artist",
-        title: data.confirmedTitle || "예약된 전시",
-        artist: data.confirmedArtist || "비공개 작가",
+        title: data.confirmedTitle || data.blockTitle || "예약된 일정",
+        artist: data.confirmedArtist || data.blockOwner || "비공개",
+        status: data.status,
+        selectedProgram: data.selectedProgram || null,
       }));
   }, [reservations]);
 
-  const getConfirmedInfo = (dateStr) =>
-    confirmedRanges.find((range) => isDateInRange(dateStr, range.start, range.end));
+  const getBlockedInfo = (dateStr) =>
+    blockedRanges.find((range) => isDateInRange(dateStr, range.start, range.end));
 
   const isSelected = (dateStr) =>
     selectedDate && isDateInRange(dateStr, selectedDate, addDays(selectedDate, 6));
+
+  const getBlockedStyle = (blocked) => {
+    if (blocked.status === "planned") {
+      return "bg-amber-100 text-amber-700 border-amber-200 cursor-help";
+    }
+    if (blocked.status === "preparing") {
+      return "bg-zinc-200 text-zinc-700 border-zinc-300 cursor-help";
+    }
+    return blocked.type === "brand"
+      ? "bg-[#ff7700]/10 text-[#ff7700] border-[#ff7700]/20 cursor-help"
+      : "bg-[#004aad]/10 text-[#004aad] border-[#004aad]/20 cursor-help";
+  };
+
+  const getStatusLabel = (status) => {
+    if (status === "planned") return "기획";
+    if (status === "preparing") return "준비중";
+    return "확정";
+  };
 
   return (
     <section className="animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto py-20 min-h-screen text-center px-4">
@@ -116,17 +145,14 @@ const CalendarStep = ({
 
             const isThu = dateObj.getDay() === 4;
             const isSun = dateObj.getDay() === 0;
-            const confirmed = getConfirmedInfo(dateStr);
+            const blocked = getBlockedInfo(dateStr);
             const active = isSelected(dateStr);
             const resData = reservations[dateStr];
 
             let style = "border-zinc-50 text-zinc-800 font-bold";
 
-            if (confirmed) {
-              style =
-                confirmed.type === "brand"
-                  ? "bg-[#ff7700]/10 text-[#ff7700] border-[#ff7700]/20 cursor-help"
-                  : "bg-[#004aad]/10 text-[#004aad] border-[#004aad]/20 cursor-help";
+            if (blocked) {
+              style = getBlockedStyle(blocked);
             } else if (active) {
               style =
                 "bg-[#004aad] text-white border-transparent scale-105 z-10 shadow-lg ring-4 ring-[#004aad]/10";
@@ -140,7 +166,7 @@ const CalendarStep = ({
             return (
               <div key={day} className="relative group aspect-square">
                 <button
-                  disabled={!isThu || !!confirmed}
+                  disabled={!isThu || !!blocked}
                   onClick={() => onSelect(dateStr)}
                   className={`w-full h-full rounded-xl flex flex-col items-center justify-center transition-all border text-sm md:text-base relative ${style}`}
                 >
@@ -148,30 +174,35 @@ const CalendarStep = ({
                     {day}
                   </span>
 
-                  {isThu && !confirmed && !active && resData?.applicantCount > 0 && (
+                  {isThu && !blocked && !active && resData?.applicantCount > 0 && (
                     <span className="absolute bottom-1 px-1.5 bg-[#004aad] text-white text-[7px] rounded-md font-black shadow-sm">
                       심사중 {resData.applicantCount}
                     </span>
                   )}
 
-                  {isThu && !confirmed && !active && resData?.writingCount > 0 && (
+                  {isThu && !blocked && !active && resData?.writingCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[7px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 whitespace-nowrap z-20 font-black shadow-sm">
                       <Edit3 size={7} /> 작성중 {resData.writingCount}
                     </span>
                   )}
                 </button>
 
-                {confirmed && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 bg-zinc-900 text-white p-4 rounded-2xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none text-left">
+                {blocked && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 bg-zinc-900 text-white p-4 rounded-2xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none text-left">
                     <p className="text-[8px] font-black uppercase text-[#004aad] mb-1 text-left">
-                      {confirmed.type}
+                      {getStatusLabel(blocked.status)}
                     </p>
                     <h4 className="text-xs font-black leading-tight mb-2 break-keep text-left">
-                      {confirmed.title}
+                      {blocked.title}
                     </h4>
                     <p className="text-[10px] text-zinc-400 font-medium text-left">
-                      Artist: {confirmed.artist}
+                      Owner: {blocked.artist}
                     </p>
+                    {blocked.selectedProgram && (
+                      <p className="text-[10px] text-zinc-500 font-medium text-left mt-1">
+                        Program: {blocked.selectedProgram.name} · {blocked.selectedProgram.price}만원
+                      </p>
+                    )}
                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-zinc-900" />
                   </div>
                 )}

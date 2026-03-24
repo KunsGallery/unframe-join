@@ -17,7 +17,7 @@ import {
   runTransaction,
   addDoc,
   collection,
-} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+} from "firebase/firestore";
 import InputBlock from "../components/ui/InputBlock";
 import FileBtn from "../components/ui/FileBtn";
 import { addDays } from "../utils/date";
@@ -36,6 +36,7 @@ const CLOUDINARY_PRESET = getEnv("VITE_CLOUDINARY_UPLOAD_PRESET");
 const ProposalFormStep = ({
   selectedDate,
   partnerType,
+  selectedProgram,
   formData,
   setFormData,
   onBack,
@@ -141,6 +142,11 @@ const ProposalFormStep = ({
       return;
     }
 
+    if (!selectedProgram) {
+      alert("프로그램을 먼저 선택해 주세요.");
+      return;
+    }
+
     try {
       const resDocRef = doc(
         db,
@@ -177,6 +183,7 @@ const ProposalFormStep = ({
           status: "review",
           selectedDate,
           partnerType,
+          selectedProgram,
           ...formData,
           submittedAt: serverTimestamp(),
         }
@@ -206,6 +213,7 @@ const ProposalFormStep = ({
               {
                 formData,
                 selectedDate,
+                selectedProgram,
                 lastSaved: serverTimestamp(),
               }
             ).then(() => alert("Saved."))
@@ -252,6 +260,17 @@ const ProposalFormStep = ({
           <p className="text-zinc-400 text-xs mt-2 font-black tracking-widest uppercase">
             일정: {selectedDate} ~ {addDays(selectedDate, 6)}
           </p>
+
+          {selectedProgram && (
+            <div className="mt-6 inline-flex flex-col gap-2 bg-[#004aad]/5 border border-[#004aad]/10 rounded-2xl px-5 py-4">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#004aad]">
+                Selected Program
+              </span>
+              <span className="text-lg font-black text-zinc-900">
+                {selectedProgram.name} · {selectedProgram.price}만원
+              </span>
+            </div>
+          )}
         </header>
 
         {isBrand ? (
