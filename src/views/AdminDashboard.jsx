@@ -12,6 +12,9 @@ import {
   Globe,
   BarChart3,
   Plus,
+  Pencil,
+  Trash2,
+  X,
 } from "lucide-react";
 import {
   doc,
@@ -30,20 +33,30 @@ import { addDays } from "../utils/date";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
+const DEFAULT_MANUAL_BLOCK = {
+  startDate: "",
+  durationDays: 7,
+  blockStatus: "planned",
+  blockTitle: "",
+  blockOwner: "",
+  partnerType: "internal",
+  selectedProgramId: "",
+};
+
+const getStatusLabel = (status) => {
+  if (status === "planned") return "기획";
+  if (status === "preparing") return "준비중";
+  if (status === "confirmed") return "확정";
+  return status || "-";
+};
+
 const AdminDashboard = ({ applications, reservations, db, appId }) => {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedId, setExpandedId] = useState(null);
 
-  const [manualBlock, setManualBlock] = useState({
-    startDate: "",
-    durationDays: 7,
-    blockStatus: "planned",
-    blockTitle: "",
-    blockOwner: "",
-    partnerType: "internal",
-    selectedProgramId: "",
-  });
+  const [manualBlock, setManualBlock] = useState(DEFAULT_MANUAL_BLOCK);
+  const [editingScheduleId, setEditingScheduleId] = useState(null);
 
   const stats = useMemo(
     () => ({
@@ -63,31 +76,67 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     return Object.entries(groups).sort((a, b) => b[0].localeCompare(a[0]));
   }, [applications]);
 
-  const existingRanges = useMemo(() => {
+  const managedSchedules = useMemo(() => {
     return Object.entries(reservations || {})
       .filter(([_, data]) => BLOCKING_STATUSES.includes(data.status))
-      .map(([start, data]) => ({
-        start,
-        end: data.endDate || addDays(start, 6),
-      }));
+      .map(([startDate, data]) => ({
+        id: startDate,
+        startDate,
+        endDate: data.endDate || addDays(startDate, 6),
+        status: data.status,
+        title: data.confirmedTitle || data.blockTitle || "예약된 일정",
+        owner: data.confirmedArtist || data.blockOwner || "비공개",
+        partnerType: data.partnerType || "internal",
+        selectedProgram: data.selectedProgram || null,
+        manualEntry: !!data.manualEntry,
+      }))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
   }, [reservations]);
 
-  const hasOverlap = (startDate, endDate) => {
-    return existingRanges.some(
-      (range) => !(endDate < range.start || startDate > range.end)
-    );
+  const hasOverlap = (startDate, endDate, ignoreId = null) => {
+    return managedSchedules
+      .filter((schedule) => schedule.id !== ignoreId)
+      .some((schedule) => !(endDate < schedule.startDate || startDate > schedule.endDate));
   };
 
-  const handleCreateManualBlock = async () => {
+  const resetManualBlockForm = () => {
+    setManualBlock(DEFAULT_MANUAL_BLOCK);
+    setEditingScheduleId(null);
+  };
+
+  const handleEditSchedule = (schedule) => {
+    const matchedProgram = schedule.selectedProgram
+      ? PROGRAMS.find((p) => p.id === schedule.selectedProgram.id)
+      : null;
+
+    const start = new Date(schedule.startDate);
+    const end = new Date(schedule.endDate);
+    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    setManualBlock({
+      startDate: schedule.startDate,
+      durationDays: diffDays,
+      blockStatus: schedule.status,
+      blockTitle: schedule.title,
+      blockOwner: schedule.owner,
+      partnerType: schedule.partnerType || "internal",
+      selectedProgramId: matchedProgram?.id || "",
+    });
+
+    setEditingScheduleId(schedule.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleCreateOrUpdateManualBlock = async () => {
     if (!manualBlock.startDate || !manualBlock.blockTitle) {
       alert("시작일과 이름을 입력해 주세요.");
       return;
     }
 
-    const durationDays = Number(manualBlock.durationDays || 7);
+    const durationDays = Math.max(1, Number(manualBlock.durationDays || 7));
     const endDate = addDays(manualBlock.startDate, durationDays - 1);
 
-    if (hasOverlap(manualBlock.startDate, endDate)) {
+    if (hasOverlap(manualBlock.startDate, endDate, editingScheduleId)) {
       alert("해당 기간은 이미 다른 일정과 겹칩니다.");
       return;
     }
@@ -95,7 +144,36 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     const selectedProgram =
       PROGRAMS.find((p) => p.id === manualBlock.selectedProgramId) || null;
 
+    const payload = {
+      status: manualBlock.blockStatus,
+      endDate,
+      manualEntry: true,
+      blockTitle: manualBlock.blockTitle,
+      blockOwner: manualBlock.blockOwner || "UNFRAME",
+      confirmedTitle: manualBlock.blockTitle,
+      confirmedArtist: manualBlock.blockOwner || "UNFRAME",
+      partnerType: manualBlock.partnerType,
+      selectedProgram,
+      applicantCount: 0,
+      writingCount: 0,
+      updatedAt: serverTimestamp(),
+    };
+
     try {
+      if (editingScheduleId && editingScheduleId !== manualBlock.startDate) {
+        await deleteDoc(
+          doc(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "reservations",
+            editingScheduleId
+          )
+        );
+      }
+
       await setDoc(
         doc(
           db,
@@ -106,37 +184,48 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
           "reservations",
           manualBlock.startDate
         ),
-        {
-          status: manualBlock.blockStatus,
-          endDate,
-          manualEntry: true,
-          blockTitle: manualBlock.blockTitle,
-          blockOwner: manualBlock.blockOwner || "UNFRAME",
-          confirmedTitle: manualBlock.blockTitle,
-          confirmedArtist: manualBlock.blockOwner || "UNFRAME",
-          partnerType: manualBlock.partnerType,
-          selectedProgram,
-          applicantCount: 0,
-          writingCount: 0,
-          updatedAt: serverTimestamp(),
-        },
+        payload,
         { merge: true }
       );
 
-      setManualBlock({
-        startDate: "",
-        durationDays: 7,
-        blockStatus: "planned",
-        blockTitle: "",
-        blockOwner: "",
-        partnerType: "internal",
-        selectedProgramId: "",
-      });
-
-      alert("운영자 일정이 등록되었습니다.");
+      resetManualBlockForm();
+      alert(editingScheduleId ? "운영자 일정이 수정되었습니다." : "운영자 일정이 등록되었습니다.");
     } catch (e) {
       console.error(e);
-      alert("등록 실패");
+      alert(editingScheduleId ? "수정 실패" : "등록 실패");
+    }
+  };
+
+  const handleDeleteSchedule = async (schedule) => {
+    if (!schedule.manualEntry) {
+      alert("신청 승인으로 생성된 일정은 여기서 삭제할 수 없습니다.");
+      return;
+    }
+
+    const ok = window.confirm(`"${schedule.title}" 일정을 삭제하시겠습니까?`);
+    if (!ok) return;
+
+    try {
+      await deleteDoc(
+        doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "reservations",
+          schedule.id
+        )
+      );
+
+      if (editingScheduleId === schedule.id) {
+        resetManualBlockForm();
+      }
+
+      alert("운영자 일정이 삭제되었습니다.");
+    } catch (e) {
+      console.error(e);
+      alert("삭제 실패");
     }
   };
 
@@ -240,80 +329,91 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
         </div>
       </div>
 
-      <div className="mb-20 bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
-        <div className="flex items-center gap-3 mb-8">
-          <Plus size={18} className="text-[#004aad]" />
-          <h3 className="text-2xl font-black uppercase tracking-tight">
-            운영자 일정 직접 등록
-          </h3>
-        </div>
+      <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
+        <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
+          <div className="flex items-center justify-between gap-3 mb-8">
+            <div className="flex items-center gap-3">
+              <Plus size={18} className="text-[#004aad]" />
+              <h3 className="text-2xl font-black uppercase tracking-tight">
+                운영자 일정 직접 등록
+              </h3>
+            </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-          <input
-            type="date"
-            value={manualBlock.startDate}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, startDate: e.target.value }))
-            }
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          />
+            {editingScheduleId && (
+              <button
+                onClick={resetManualBlockForm}
+                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 hover:text-zinc-900 transition-colors"
+              >
+                <X size={14} /> 편집 취소
+              </button>
+            )}
+          </div>
 
-          <input
-            type="number"
-            min="1"
-            value={manualBlock.durationDays}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, durationDays: e.target.value }))
-            }
-            placeholder="기간(일)"
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          />
+          <div className="grid md:grid-cols-2 gap-5">
+            <input
+              type="date"
+              value={manualBlock.startDate}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, startDate: e.target.value }))
+              }
+              className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            />
 
-          <select
-            value={manualBlock.blockStatus}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, blockStatus: e.target.value }))
-            }
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          >
-            <option value="planned">기획</option>
-            <option value="preparing">준비중</option>
-            <option value="confirmed">확정</option>
-          </select>
+            <input
+              type="number"
+              min="1"
+              value={manualBlock.durationDays}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, durationDays: e.target.value }))
+              }
+              placeholder="기간(일)"
+              className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            />
 
-          <input
-            type="text"
-            value={manualBlock.blockTitle}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, blockTitle: e.target.value }))
-            }
-            placeholder="일정명 / 전시명"
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          />
+            <select
+              value={manualBlock.blockStatus}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, blockStatus: e.target.value }))
+              }
+              className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            >
+              <option value="planned">기획</option>
+              <option value="preparing">준비중</option>
+              <option value="confirmed">확정</option>
+            </select>
 
-          <input
-            type="text"
-            value={manualBlock.blockOwner}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, blockOwner: e.target.value }))
-            }
-            placeholder="작가명 / 운영자명 / UNFRAME"
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          />
+            <select
+              value={manualBlock.partnerType}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, partnerType: e.target.value }))
+              }
+              className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            >
+              <option value="internal">Internal</option>
+              <option value="artist">Artist</option>
+              <option value="brand">Brand</option>
+            </select>
 
-          <select
-            value={manualBlock.partnerType}
-            onChange={(e) =>
-              setManualBlock((prev) => ({ ...prev, partnerType: e.target.value }))
-            }
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
-          >
-            <option value="internal">Internal</option>
-            <option value="artist">Artist</option>
-            <option value="brand">Brand</option>
-          </select>
+            <input
+              type="text"
+              value={manualBlock.blockTitle}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, blockTitle: e.target.value }))
+              }
+              placeholder="일정명 / 전시명"
+              className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            />
 
-          <div className="md:col-span-2 lg:col-span-2">
+            <input
+              type="text"
+              value={manualBlock.blockOwner}
+              onChange={(e) =>
+                setManualBlock((prev) => ({ ...prev, blockOwner: e.target.value }))
+              }
+              placeholder="작가명 / 운영자명 / UNFRAME"
+              className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+            />
+
             <select
               value={manualBlock.selectedProgramId}
               onChange={(e) =>
@@ -322,7 +422,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                   selectedProgramId: e.target.value,
                 }))
               }
-              className="w-full bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
+              className="md:col-span-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 font-bold outline-none"
             >
               <option value="">프로그램 없음</option>
               {PROGRAMS.map((program) => (
@@ -331,14 +431,103 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                 </option>
               ))}
             </select>
+
+            <button
+              onClick={handleCreateOrUpdateManualBlock}
+              className="md:col-span-2 bg-[#004aad] text-white rounded-2xl px-6 py-4 font-black uppercase tracking-[0.2em] hover:scale-[1.01] transition-all"
+            >
+              {editingScheduleId ? "일정 수정하기" : "일정 등록하기"}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
+          <div className="flex items-center gap-3 mb-8">
+            <Calendar size={18} className="text-[#004aad]" />
+            <h3 className="text-2xl font-black uppercase tracking-tight">
+              등록된 일정
+            </h3>
           </div>
 
-          <button
-            onClick={handleCreateManualBlock}
-            className="bg-[#004aad] text-white rounded-2xl px-6 py-4 font-black uppercase tracking-[0.2em] hover:scale-[1.02] transition-all"
-          >
-            일정 등록
-          </button>
+          <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
+            {managedSchedules.length > 0 ? (
+              managedSchedules.map((schedule) => (
+                <div
+                  key={schedule.id}
+                  className="border border-zinc-100 rounded-[28px] p-5 bg-zinc-50/70"
+                >
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <span className="px-3 py-1 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-[0.18em]">
+                          {getStatusLabel(schedule.status)}
+                        </span>
+                        {schedule.manualEntry ? (
+                          <span className="px-3 py-1 rounded-full bg-zinc-900 text-white text-[10px] font-black uppercase tracking-[0.18em]">
+                            Manual
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 text-[10px] font-black uppercase tracking-[0.18em]">
+                            Approved Application
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="text-lg font-black tracking-tight text-zinc-900 break-keep">
+                        {schedule.title}
+                      </h4>
+                      <p className="text-sm font-bold text-zinc-500 mt-1">
+                        {schedule.owner}
+                      </p>
+                    </div>
+
+                    {schedule.manualEntry && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEditSchedule(schedule)}
+                          className="w-10 h-10 rounded-full bg-white border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 transition-all"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSchedule(schedule)}
+                          className="w-10 h-10 rounded-full bg-white border border-red-200 text-red-500 flex items-center justify-center hover:bg-red-50 transition-all"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="bg-white border border-zinc-100 rounded-2xl px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">
+                        Period
+                      </p>
+                      <p className="text-sm font-black text-zinc-700">
+                        {schedule.startDate} ~ {schedule.endDate}
+                      </p>
+                    </div>
+
+                    <div className="bg-white border border-zinc-100 rounded-2xl px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-1">
+                        Program
+                      </p>
+                      <p className="text-sm font-black text-zinc-700">
+                        {schedule.selectedProgram
+                          ? `${schedule.selectedProgram.name} · ${schedule.selectedProgram.price}만원`
+                          : "-"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="h-[260px] flex items-center justify-center text-zinc-300 font-black uppercase tracking-[0.25em] text-sm">
+                No schedules yet
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

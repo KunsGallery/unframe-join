@@ -141,7 +141,7 @@ const LandingPage = ({ onSelectProgram }) => {
             })}
           </div>
 
-          <div className="flex flex-col xl:flex-row h-[640px] xl:h-[620px]">
+          <div className="flex flex-col xl:flex-row h-[640px] xl:h-[620px] bg-zinc-950">
             {PROGRAMS.map((program, index) => {
               const isActive = hoveredProgramId === program.id;
               const isCollapsed = !isActive;
@@ -150,18 +150,22 @@ const LandingPage = ({ onSelectProgram }) => {
                 <div
                   key={program.id}
                   onMouseEnter={() => setHoveredProgramId(program.id)}
-                  className={`relative transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] border-b xl:border-b-0 xl:border-r last:border-r-0 border-zinc-100 overflow-hidden ${
-                    isActive ? "xl:flex-[2.4]" : "xl:flex-[0.53]"
+                  className={`relative transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] border-b xl:border-b-0 xl:border-r last:border-r-0 border-white/10 overflow-hidden ${
+                    isActive ? "xl:flex-[2.45]" : "xl:flex-[0.52]"
                   }`}
                 >
                   <div
                     className={`absolute inset-0 transition-all duration-500 ${
-                      isActive ? "bg-white" : "bg-[#f8f8f5]"
+                      isActive ? "bg-white" : "bg-zinc-900"
                     }`}
                   />
 
                   {isCollapsed && (
-                    <div className="absolute inset-0 bg-zinc-950/6 transition-all duration-500" />
+                    <div className="absolute inset-0 bg-black/35 transition-all duration-500" />
+                  )}
+
+                  {!isActive && (
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/20 pointer-events-none" />
                   )}
 
                   <div className="relative z-10 h-full">
@@ -177,6 +181,10 @@ const LandingPage = ({ onSelectProgram }) => {
                             <h3 className="text-3xl md:text-4xl font-black tracking-tighter leading-none text-zinc-900">
                               {program.name}
                             </h3>
+
+                            <p className="mt-3 text-[11px] md:text-xs font-black uppercase tracking-[0.16em] text-[#004aad]">
+                              {program.subtitle}
+                            </p>
                           </div>
 
                           <div className="text-right shrink-0">
@@ -229,19 +237,19 @@ const LandingPage = ({ onSelectProgram }) => {
                       </div>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-between py-7 px-3">
-                        <div className="text-[9px] font-black tracking-[0.28em] uppercase text-zinc-300">
+                        <div className="text-[9px] font-black tracking-[0.28em] uppercase text-white/25">
                           {String(index + 1).padStart(2, "0")}
                         </div>
 
                         <div className="flex-1 flex items-center justify-center">
                           <div className="[writing-mode:vertical-rl] rotate-180 text-center">
-                            <span className="text-[13px] md:text-[15px] font-black uppercase tracking-[0.22em] text-zinc-700">
+                            <span className="text-[13px] md:text-[15px] font-black uppercase tracking-[0.22em] text-white/78">
                               {program.name}
                             </span>
                           </div>
                         </div>
 
-                        <div className="text-[9px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                        <div className="text-[9px] font-black uppercase tracking-[0.22em] text-white/25">
                           {program.price}
                         </div>
                       </div>
