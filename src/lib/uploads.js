@@ -135,6 +135,7 @@ export const sendApplicationEmails = async ({
   phone,
   brandName,
   stageName,
+  myPageUrl = "",
 }) => {
   const response = await fetch("/.netlify/functions/send-application-emails", {
     method: "POST",
@@ -151,6 +152,7 @@ export const sendApplicationEmails = async ({
       phone,
       brandName,
       stageName,
+      myPageUrl,
     }),
   });
 
@@ -172,7 +174,6 @@ export const sendApplicationEmails = async ({
 
 export const sendApplicationStatusEmail = async ({
   type,
-  status,
   applicantName,
   applicantEmail,
   exhibitionTitle,
@@ -180,10 +181,10 @@ export const sendApplicationStatusEmail = async ({
   selectedProgram,
   partnerType,
   rejectionReason = "",
+  requestMessage = "",
+  applicationDetailUrl = "",
 }) => {
-  const mailType = type || status;
-
-  if (!mailType || !["approved", "rejected"].includes(mailType)) {
+  if (!type || !["approved", "rejected", "additional_requested"].includes(type)) {
     throw new Error("Valid status is required");
   }
 
@@ -193,7 +194,7 @@ export const sendApplicationStatusEmail = async ({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      type: mailType,
+      type,
       applicantName,
       applicantEmail,
       exhibitionTitle,
@@ -201,6 +202,8 @@ export const sendApplicationStatusEmail = async ({
       selectedProgram,
       partnerType,
       rejectionReason,
+      requestMessage,
+      applicationDetailUrl,
     }),
   });
 

@@ -464,11 +464,11 @@ const ProposalFormStep = ({
         );
       });
 
-      await addDoc(
+      const appDocRef = await addDoc(
         collection(db, "artifacts", appId, "public", "data", "applications"),
         {
           userId: user.uid,
-          applicantEmail: user.email || "",
+          applicantEmail: user.email,
           status: "review",
           selectedDate,
           partnerType,
@@ -495,6 +495,7 @@ const ProposalFormStep = ({
           phone: normalizePhone(formData.phone),
           brandName: formData.brandName,
           stageName: formData.stageName,
+          myPageUrl: `${window.location.origin}/?view=my-page`,
         });
       } catch (mailError) {
         console.error("mail send failed:", mailError);

@@ -21,10 +21,66 @@ import AdminDashboard from "./views/AdminDashboard";
 import MyPage from "./views/MyPage";
 import SuccessView from "./views/SuccessView";
 
+const EMPTY_FORM_DATA = {
+  name: "",
+  realName: "",
+  stageName: "",
+  englishName: "",
+  birthDate: "",
+  phone: "",
+  addressMain: "",
+  addressDetail: "",
+  profilePhotoUrl: "",
+  snsLink: "",
+  portfolioUrl: "",
+  exhibitionTitle: "",
+  artistNote: "",
+  workListUrl: "",
+  highResPhotosUrl: "",
+  experimentText: "",
+  brandName: "",
+  brandRole: "",
+  projectPurpose: "",
+  targetAudience: "",
+  budgetRange: "",
+  privacyAgreed: false,
+};
+
+const getUrlState = () => {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    view: params.get("view") || "user",
+    app: params.get("app") || "",
+  };
+};
+
+const setUrlState = ({ view = "user", app = "" }) => {
+  const params = new URLSearchParams(window.location.search);
+
+  if (view && view !== "user") {
+    params.set("view", view);
+  } else {
+    params.delete("view");
+  }
+
+  if (app) {
+    params.set("app", app);
+  } else {
+    params.delete("app");
+  }
+
+  const query = params.toString();
+  const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+  window.history.pushState({}, "", nextUrl);
+};
+
 const App = () => {
+  const initialUrlState = getUrlState();
+
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [viewMode, setViewMode] = useState("user");
+  const [viewMode, setViewMode] = useState(initialUrlState.view);
+  const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
   const [currentStep, setCurrentStep] = useState(1);
   const [reservations, setReservations] = useState({});
   const [applications, setApplications] = useState([]);
@@ -35,30 +91,7 @@ const App = () => {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    realName: "",
-    stageName: "",
-    englishName: "",
-    birthDate: "",
-    phone: "",
-    addressMain: "",
-    addressDetail: "",
-    profilePhotoUrl: "",
-    snsLink: "",
-    portfolioUrl: "",
-    exhibitionTitle: "",
-    artistNote: "",
-    workListUrl: "",
-    highResPhotosUrl: "",
-    experimentText: "",
-    brandName: "",
-    brandRole: "",
-    projectPurpose: "",
-    targetAudience: "",
-    budgetRange: "",
-    privacyAgreed: false,
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM_DATA);
 
   const myApplications = useMemo(() => {
     if (!user || user.isAnonymous) return [];
@@ -81,6 +114,17 @@ const App = () => {
     });
 
     return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const next = getUrlState();
+      setViewMode(next.view);
+      setFocusedApplicationId(next.app);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
@@ -132,6 +176,22 @@ const App = () => {
     };
   }, [user, isAdmin, viewMode]);
 
+  useEffect(() => {
+    if (viewMode === "user") {
+      setUrlState({ view: "user", app: "" });
+      return;
+    }
+
+    if (viewMode === "my-page") {
+      setUrlState({ view: "my-page", app: focusedApplicationId });
+      return;
+    }
+
+    if (viewMode === "admin") {
+      setUrlState({ view: "admin", app: "" });
+    }
+  }, [viewMode, focusedApplicationId]);
+
   const handleStepTransition = (step) => {
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -139,6 +199,19 @@ const App = () => {
 
   const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
+
+  const resetAll = () => {
+    setCurrentStep(1);
+    setIsSubmitSuccess(false);
+    setSelectedDate(null);
+    setSelectedProgram(null);
+    setPartnerType("");
+    setFormData(EMPTY_FORM_DATA);
+    setFocusedApplicationId("");
+    setViewMode("user");
+    setUrlState({ view: "user", app: "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   if (loading) return <LoadingOverlay />;
 
@@ -152,43 +225,14 @@ const App = () => {
         viewMode={viewMode}
         setViewMode={(v) => {
           setViewMode(v);
+          if (v !== "my-page") {
+            setFocusedApplicationId("");
+          }
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         handleLogin={handleLogin}
         handleSignOut={handleSignOut}
-        reset={() => {
-          setCurrentStep(1);
-          setIsSubmitSuccess(false);
-          setSelectedDate(null);
-          setSelectedProgram(null);
-          setPartnerType("");
-          setFormData({
-            name: "",
-            realName: "",
-            stageName: "",
-            englishName: "",
-            birthDate: "",
-            phone: "",
-            addressMain: "",
-            addressDetail: "",
-            profilePhotoUrl: "",
-            snsLink: "",
-            portfolioUrl: "",
-            exhibitionTitle: "",
-            artistNote: "",
-            workListUrl: "",
-            highResPhotosUrl: "",
-            experimentText: "",
-            brandName: "",
-            brandRole: "",
-            projectPurpose: "",
-            targetAudience: "",
-            budgetRange: "",
-            privacyAgreed: false,
-          });
-          setViewMode("user");
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }}
+        reset={resetAll}
       />
 
       <main className="max-w-7xl mx-auto px-6 pt-32 pb-32 relative z-10 text-left">
@@ -209,7 +253,14 @@ const App = () => {
         ) : viewMode === "my-page" ? (
           <MyPage
             applications={myApplications}
-            handleReturn={() => setViewMode("user")}
+            handleReturn={() => {
+              setFocusedApplicationId("");
+              setViewMode("user");
+            }}
+            db={db}
+            appId={appId}
+            user={user}
+            focusedApplicationId={focusedApplicationId}
           />
         ) : (
           <div className="transition-all duration-700">

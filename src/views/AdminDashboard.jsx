@@ -239,30 +239,93 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
   };
 
   const handleAction = async (appDoc, date, status, reason = "") => {
-    try {
-      if (status === "confirmed") {
+  try {
+    if (status === "confirmed") {
+      await updateDoc(
+        doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
+        { status: "confirmed" }
+      );
+
+      await setDoc(
+        doc(db, "artifacts", appId, "public", "data", "reservations", date),
+        {
+          status: "confirmed",
+          confirmedArtist: appDoc.stageName || appDoc.name,
+          confirmedTitle: appDoc.exhibitionTitle,
+          partnerType: appDoc.partnerType,
+          selectedProgram: appDoc.selectedProgram || null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (appDoc.applicantEmail) {
+        try {
+          await sendApplicationStatusEmail({
+            type: "approved",
+            applicantName:
+              appDoc.name ||
+              appDoc.realName ||
+              appDoc.brandName ||
+              appDoc.stageName ||
+              "Applicant",
+            applicantEmail: appDoc.applicantEmail,
+            exhibitionTitle: appDoc.exhibitionTitle,
+            selectedDate: appDoc.selectedDate,
+            selectedProgram: appDoc.selectedProgram,
+            partnerType: appDoc.partnerType,
+            applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
+          });
+        } catch (mailError) {
+          console.error("approve mail failed:", mailError);
+        }
+      }
+    } else if (status === "additional_requested") {
+      await updateDoc(
+        doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
+        {
+          status: "additional_requested",
+          requestMessage: reason || "",
+          requestUpdatedAt: serverTimestamp(),
+        }
+      );
+
+      if (appDoc.applicantEmail) {
+        try {
+          await sendApplicationStatusEmail({
+            type: "additional_requested",
+            applicantName:
+              appDoc.name ||
+              appDoc.realName ||
+              appDoc.brandName ||
+              appDoc.stageName ||
+              "Applicant",
+            applicantEmail: appDoc.applicantEmail,
+            exhibitionTitle: appDoc.exhibitionTitle,
+            selectedDate: appDoc.selectedDate,
+            selectedProgram: appDoc.selectedProgram,
+            partnerType: appDoc.partnerType,
+            requestMessage: reason || "",
+            applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
+          });
+        } catch (mailError) {
+          console.error("request more mail failed:", mailError);
+        }
+      }
+    } else if (status === "rejected" || status === "delete") {
+      if (status === "rejected") {
         await updateDoc(
           doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-          { status: "confirmed" }
-        );
-
-        await setDoc(
-          doc(db, "artifacts", appId, "public", "data", "reservations", date),
           {
-            status: "confirmed",
-            confirmedArtist: appDoc.stageName || appDoc.name,
-            confirmedTitle: appDoc.exhibitionTitle,
-            partnerType: appDoc.partnerType,
-            selectedProgram: appDoc.selectedProgram || null,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
+            status: "rejected",
+            rejectionReason: reason || "",
+          }
         );
 
         if (appDoc.applicantEmail) {
           try {
             await sendApplicationStatusEmail({
-              type: "approved",
+              type: "rejected",
               applicantName:
                 appDoc.name ||
                 appDoc.realName ||
@@ -274,77 +337,51 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
               selectedDate: appDoc.selectedDate,
               selectedProgram: appDoc.selectedProgram,
               partnerType: appDoc.partnerType,
+              rejectionReason: reason || "",
+              applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
             });
           } catch (mailError) {
-            console.error("approve mail failed:", mailError);
+            console.error("reject mail failed:", mailError);
           }
         }
-      } else if (status === "rejected" || status === "delete") {
-        if (status === "rejected") {
-          await updateDoc(
-            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-            { status: "rejected", rejectionReason: reason }
-          );
-
-          if (appDoc.applicantEmail) {
-            try {
-              await sendApplicationStatusEmail({
-                type: "rejected",
-                applicantName:
-                  appDoc.name ||
-                  appDoc.realName ||
-                  appDoc.brandName ||
-                  appDoc.stageName ||
-                  "Applicant",
-                applicantEmail: appDoc.applicantEmail,
-                exhibitionTitle: appDoc.exhibitionTitle,
-                selectedDate: appDoc.selectedDate,
-                selectedProgram: appDoc.selectedProgram,
-                partnerType: appDoc.partnerType,
-                rejectionReason: reason,
-              });
-            } catch (mailError) {
-              console.error("reject mail failed:", mailError);
-            }
-          }
-        } else {
-          await deleteDoc(
-            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
-          );
-        }
-
-        const resRef = doc(
-          db,
-          "artifacts",
-          appId,
-          "public",
-          "data",
-          "reservations",
-          date
+      } else {
+        await deleteDoc(
+          doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
         );
-
-        await runTransaction(db, async (t) => {
-          const snap = await t.get(resRef);
-          if (snap.exists()) {
-            const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
-            t.update(resRef, {
-              status: newCount > 0 ? "review" : null,
-              confirmedArtist: null,
-              confirmedTitle: null,
-              partnerType: null,
-              selectedProgram: null,
-              applicantCount: newCount,
-            });
-          }
-        });
       }
 
-      setRejectId(null);
-      setRejectReason("");
-      alert("Updated successfully.");
-    } catch (e) {
-      console.error(e);
-      alert("Action failed.");
+      const resRef = doc(
+        db,
+        "artifacts",
+        appId,
+        "public",
+        "data",
+        "reservations",
+        date
+      );
+
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(resRef);
+        if (snap.exists()) {
+          const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
+          t.update(resRef, {
+            status: newCount > 0 ? "review" : null,
+            confirmedArtist: null,
+            confirmedTitle: null,
+            partnerType: null,
+            selectedProgram: null,
+            applicantCount: newCount,
+          });
+        }
+      });
+    }
+
+    setRejectId(null);
+    setRejectReason("");
+    alert("Updated successfully.");
+  } catch (e) {
+    console.error(e);
+    alert("Action failed.");
     }
   };
 
@@ -622,6 +659,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
             <option value="review">심사중</option>
             <option value="confirmed">확정</option>
             <option value="rejected">거절</option>
+            <option value="additional_requested">추가자료 요청</option>
           </select>
 
           <select
@@ -809,6 +847,17 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                                 className="w-full py-5 border border-red-100 text-red-400 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 transition-all text-center"
                               >
                                 Reject
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const message = window.prompt("추가로 요청할 자료 내용을 입력해 주세요.");
+                                  if (!message) return;
+
+                                  handleAction(app, date, "additional_requested", message);
+                                }}
+                                className="w-full py-5 border border-amber-200 text-amber-700 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-amber-50 transition-all text-center"
+                              >
+                                Request More
                               </button>
                               <button
                                 onClick={() => handleAction(app, date, "delete")}
