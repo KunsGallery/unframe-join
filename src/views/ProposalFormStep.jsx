@@ -519,7 +519,7 @@ const ProposalFormStep = ({
       <div className="flex justify-between items-center mb-16 text-left">
         <button
           onClick={onBack}
-          className="text-zinc-400 hover:text-black flex items-center text-xs font-black uppercase tracking-widest gap-2 transition-all hover:-translate-x-1 transition-colors text-left"
+          className="text-zinc-400 hover:text-black flex items-center text-xs font-black uppercase tracking-widest gap-2 transition-all hover:-translate-x-1 text-left"
         >
           <ChevronLeft size={16} /> Calendar
         </button>

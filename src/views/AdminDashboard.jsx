@@ -18,6 +18,8 @@ import {
   Search,
   Filter,
   ArrowUpDown,
+  Mail,
+  NotebookPen,
 } from "lucide-react";
 import {
   doc,
@@ -53,6 +55,7 @@ const getStatusLabel = (status) => {
   if (status === "confirmed") return "확정";
   if (status === "review") return "심사중";
   if (status === "rejected") return "거절";
+  if (status === "additional_requested") return "추가자료 요청";
   return status || "-";
 };
 
@@ -74,6 +77,10 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
   const [programFilter, setProgramFilter] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("date-desc");
+
+  const [reviewDrafts, setReviewDrafts] = useState({});
+  const [guideDrafts, setGuideDrafts] = useState({});
+  const [requestDrafts, setRequestDrafts] = useState({});
 
   const stats = useMemo(
     () => ({
@@ -238,94 +245,125 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     }
   };
 
-  const handleAction = async (appDoc, date, status, reason = "") => {
-  try {
-    if (status === "confirmed") {
-      await updateDoc(
-        doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-        { status: "confirmed" }
-      );
+  const getReviewDraft = (app) =>
+    reviewDrafts[app.id] || {
+      reviewSummary: app.reviewSummary || "",
+      improvementSuggestions: app.improvementSuggestions || "",
+    };
 
-      await setDoc(
-        doc(db, "artifacts", appId, "public", "data", "reservations", date),
+  const setReviewDraft = (appIdValue, key, value) => {
+    setReviewDrafts((prev) => ({
+      ...prev,
+      [appIdValue]: {
+        ...(prev[appIdValue] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const getGuideDraft = (app) =>
+    guideDrafts[app.id] || {
+      customGuideTitle: app.customGuideTitle || "",
+      customGuideIntro: app.customGuideIntro || "",
+      guideNotes: app.guideNotes || "",
+    };
+
+  const setGuideDraft = (appIdValue, key, value) => {
+    setGuideDrafts((prev) => ({
+      ...prev,
+      [appIdValue]: {
+        ...(prev[appIdValue] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const getRequestDraft = (app) =>
+    requestDrafts[app.id] || {
+      requestMessage: app.requestMessage || "",
+    };
+
+  const setRequestDraft = (appIdValue, key, value) => {
+    setRequestDrafts((prev) => ({
+      ...prev,
+      [appIdValue]: {
+        ...(prev[appIdValue] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleSaveReviewDraft = async (app) => {
+    const draft = getReviewDraft(app);
+
+    try {
+      await updateDoc(
+        doc(db, "artifacts", appId, "public", "data", "applications", app.id),
         {
-          status: "confirmed",
-          confirmedArtist: appDoc.stageName || appDoc.name,
-          confirmedTitle: appDoc.exhibitionTitle,
-          partnerType: appDoc.partnerType,
-          selectedProgram: appDoc.selectedProgram || null,
+          reviewSummary: draft.reviewSummary || "",
+          improvementSuggestions: draft.improvementSuggestions || "",
           updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      if (appDoc.applicantEmail) {
-        try {
-          await sendApplicationStatusEmail({
-            type: "approved",
-            applicantName:
-              appDoc.name ||
-              appDoc.realName ||
-              appDoc.brandName ||
-              appDoc.stageName ||
-              "Applicant",
-            applicantEmail: appDoc.applicantEmail,
-            exhibitionTitle: appDoc.exhibitionTitle,
-            selectedDate: appDoc.selectedDate,
-            selectedProgram: appDoc.selectedProgram,
-            partnerType: appDoc.partnerType,
-            applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
-          });
-        } catch (mailError) {
-          console.error("approve mail failed:", mailError);
         }
-      }
-    } else if (status === "additional_requested") {
+      );
+      alert("검토 결과 메모가 저장되었습니다.");
+    } catch (e) {
+      console.error(e);
+      alert("검토 결과 저장 실패");
+    }
+  };
+
+  const handleSaveGuideDraft = async (app) => {
+    const draft = getGuideDraft(app);
+
+    try {
       await updateDoc(
-        doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
+        doc(db, "artifacts", appId, "public", "data", "applications", app.id),
         {
-          status: "additional_requested",
-          requestMessage: reason || "",
-          requestUpdatedAt: serverTimestamp(),
+          customGuideTitle: draft.customGuideTitle || "",
+          customGuideIntro: draft.customGuideIntro || "",
+          guideNotes: draft.guideNotes || "",
+          updatedAt: serverTimestamp(),
         }
       );
+      alert("가이드 내용이 저장되었습니다.");
+    } catch (e) {
+      console.error(e);
+      alert("가이드 저장 실패");
+    }
+  };
 
-      if (appDoc.applicantEmail) {
-        try {
-          await sendApplicationStatusEmail({
-            type: "additional_requested",
-            applicantName:
-              appDoc.name ||
-              appDoc.realName ||
-              appDoc.brandName ||
-              appDoc.stageName ||
-              "Applicant",
-            applicantEmail: appDoc.applicantEmail,
-            exhibitionTitle: appDoc.exhibitionTitle,
-            selectedDate: appDoc.selectedDate,
-            selectedProgram: appDoc.selectedProgram,
-            partnerType: appDoc.partnerType,
-            requestMessage: reason || "",
-            applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
-          });
-        } catch (mailError) {
-          console.error("request more mail failed:", mailError);
-        }
-      }
-    } else if (status === "rejected" || status === "delete") {
-      if (status === "rejected") {
+  const handleAction = async (appDoc, date, status, reason = "") => {
+    try {
+      if (status === "confirmed") {
+        const guideDraft = getGuideDraft(appDoc);
+
         await updateDoc(
           doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
           {
-            status: "rejected",
-            rejectionReason: reason || "",
+            status: "confirmed",
+            customGuideTitle: guideDraft.customGuideTitle || "",
+            customGuideIntro: guideDraft.customGuideIntro || "",
+            guideNotes: guideDraft.guideNotes || "",
           }
+        );
+
+        await setDoc(
+          doc(db, "artifacts", appId, "public", "data", "reservations", date),
+          {
+            status: "confirmed",
+            confirmedArtist: appDoc.stageName || appDoc.name,
+            confirmedTitle: appDoc.exhibitionTitle,
+            partnerType: appDoc.partnerType,
+            selectedProgram: appDoc.selectedProgram || null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
         );
 
         if (appDoc.applicantEmail) {
           try {
             await sendApplicationStatusEmail({
-              type: "rejected",
+              type: "approved",
               applicantName:
                 appDoc.name ||
                 appDoc.realName ||
@@ -337,51 +375,118 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
               selectedDate: appDoc.selectedDate,
               selectedProgram: appDoc.selectedProgram,
               partnerType: appDoc.partnerType,
-              rejectionReason: reason || "",
               applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
             });
           } catch (mailError) {
-            console.error("reject mail failed:", mailError);
+            console.error("approve mail failed:", mailError);
           }
         }
-      } else {
-        await deleteDoc(
-          doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
+      } else if (status === "additional_requested") {
+        await updateDoc(
+          doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
+          {
+            status: "additional_requested",
+            requestMessage: reason || "",
+            requestUpdatedAt: serverTimestamp(),
+          }
         );
+
+        if (appDoc.applicantEmail) {
+          try {
+            await sendApplicationStatusEmail({
+              type: "additional_requested",
+              applicantName:
+                appDoc.name ||
+                appDoc.realName ||
+                appDoc.brandName ||
+                appDoc.stageName ||
+                "Applicant",
+              applicantEmail: appDoc.applicantEmail,
+              exhibitionTitle: appDoc.exhibitionTitle,
+              selectedDate: appDoc.selectedDate,
+              selectedProgram: appDoc.selectedProgram,
+              partnerType: appDoc.partnerType,
+              requestMessage: reason || "",
+              applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
+            });
+          } catch (mailError) {
+            console.error("request more mail failed:", mailError);
+          }
+        }
+      } else if (status === "rejected" || status === "delete") {
+        if (status === "rejected") {
+          const reviewDraft = getReviewDraft(appDoc);
+
+          await updateDoc(
+            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
+            {
+              status: "rejected",
+              rejectionReason: reason || "",
+              reviewSummary: reviewDraft.reviewSummary || "",
+              improvementSuggestions: reviewDraft.improvementSuggestions || "",
+            }
+          );
+
+          if (appDoc.applicantEmail) {
+            try {
+              await sendApplicationStatusEmail({
+                type: "rejected",
+                applicantName:
+                  appDoc.name ||
+                  appDoc.realName ||
+                  appDoc.brandName ||
+                  appDoc.stageName ||
+                  "Applicant",
+                applicantEmail: appDoc.applicantEmail,
+                exhibitionTitle: appDoc.exhibitionTitle,
+                selectedDate: appDoc.selectedDate,
+                selectedProgram: appDoc.selectedProgram,
+                partnerType: appDoc.partnerType,
+                rejectionReason: reason || "",
+                applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
+              });
+            } catch (mailError) {
+              console.error("reject mail failed:", mailError);
+            }
+          }
+        } else {
+          await deleteDoc(
+            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
+          );
+        }
+
+        const resRef = doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "reservations",
+          date
+        );
+
+        await runTransaction(db, async (t) => {
+          const snap = await t.get(resRef);
+          if (snap.exists()) {
+            const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
+            t.update(resRef, {
+              status: newCount > 0 ? "review" : null,
+              confirmedArtist: null,
+              confirmedTitle: null,
+              partnerType: null,
+              selectedProgram: null,
+              applicantCount: newCount,
+            });
+          }
+        });
       }
 
-      const resRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "reservations",
-        date
-      );
-
-      await runTransaction(db, async (t) => {
-        const snap = await t.get(resRef);
-        if (snap.exists()) {
-          const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
-          t.update(resRef, {
-            status: newCount > 0 ? "review" : null,
-            confirmedArtist: null,
-            confirmedTitle: null,
-            partnerType: null,
-            selectedProgram: null,
-            applicantCount: newCount,
-          });
-        }
-      });
-    }
-
-    setRejectId(null);
-    setRejectReason("");
-    alert("Updated successfully.");
-  } catch (e) {
-    console.error(e);
-    alert("Action failed.");
+      setRejectId(null);
+      setRejectReason("");
+      alert("Updated successfully.");
+    } catch (e) {
+      console.error(e);
+      alert("Action failed.");
     }
   };
 
@@ -736,239 +841,379 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
               </div>
 
               <div className="grid gap-12 text-left">
-                {apps.map((app) => (
-                  <div
-                    key={app.id}
-                    className={`bg-white rounded-[40px] border overflow-hidden transition-all ${
-                      app.status === "confirmed"
-                        ? "border-green-400 shadow-xl shadow-green-100/10"
-                        : "border-gray-50 shadow-2xl shadow-gray-200/50"
-                    }`}
-                  >
-                    <div className="p-8 md:p-12 text-left">
-                      <div className="flex flex-col lg:flex-row justify-between items-start gap-12 text-left">
-                        <div className="flex-1 space-y-6 text-left">
-                          <div
-                            className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${
-                              app.status === "review"
-                                ? "bg-[#004aad]"
-                                : app.status === "confirmed"
-                                ? "bg-green-500"
-                                : "bg-red-400"
-                            }`}
-                          >
-                            {app.status}
+                {apps.map((app) => {
+                  const reviewDraft = getReviewDraft(app);
+                  const guideDraft = getGuideDraft(app);
+                  const requestDraft = getRequestDraft(app);
+
+                  return (
+                    <div
+                      key={app.id}
+                      className={`bg-white rounded-[40px] border overflow-hidden transition-all ${
+                        app.status === "confirmed"
+                          ? "border-green-400 shadow-xl shadow-green-100/10"
+                          : "border-gray-50 shadow-2xl shadow-gray-200/50"
+                      }`}
+                    >
+                      <div className="p-8 md:p-12 text-left">
+                        <div className="flex flex-col lg:flex-row justify-between items-start gap-12 text-left">
+                          <div className="flex-1 space-y-6 text-left">
+                            <div
+                              className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${
+                                app.status === "review"
+                                  ? "bg-[#004aad]"
+                                  : app.status === "confirmed"
+                                  ? "bg-green-500"
+                                  : app.status === "additional_requested"
+                                  ? "bg-amber-500"
+                                  : "bg-red-400"
+                              }`}
+                            >
+                              {app.status}
+                            </div>
+
+                            <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight break-words text-left">
+                              {app.exhibitionTitle || "Untitled Project"}
+                            </h4>
+
+                            <div className="flex items-center gap-6 flex-wrap text-left">
+                              <p className="text-sm font-black text-zinc-400 uppercase">
+                                {app.partnerType === "brand" ? app.brandName : app.stageName || app.name}
+                              </p>
+                              <div className="w-1 h-1 bg-zinc-200 rounded-full" />
+                              <p className="text-sm font-black text-zinc-400">{app.phone}</p>
+                              {app.selectedProgram && (
+                                <>
+                                  <div className="w-1 h-1 bg-zinc-200 rounded-full" />
+                                  <span className="px-3 py-1.5 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-widest">
+                                    {app.selectedProgram.name} · {app.selectedProgram.price}만원
+                                  </span>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="flex gap-4 flex-wrap text-left">
+                              {app.portfolioUrl && (
+                                <AdminLink href={app.portfolioUrl} icon={<Paperclip size={14} />} label="포트폴리오 파일" />
+                              )}
+                              {app.workListUrl && (
+                                <AdminLink href={app.workListUrl} icon={<FileText size={14} />} label="작품리스트 파일" />
+                              )}
+                              {app.highResPhotosUrl && (
+                                <AdminLink href={app.highResPhotosUrl} icon={<ImageIcon size={14} />} label="대표작 고화질 원본" />
+                              )}
+                            </div>
                           </div>
 
-                          <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight break-words text-left">
-                            {app.exhibitionTitle || "Untitled Project"}
-                          </h4>
+                          <div className="w-full lg:w-[280px] space-y-3 text-left">
+                            <button
+                              onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
+                              className="w-full py-4 bg-zinc-50 border border-zinc-100 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-zinc-100 transition-all text-center"
+                            >
+                              {expandedId === app.id ? (
+                                <>
+                                  <ChevronUp size={14} /> 상세내용 닫기
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown size={14} /> 신청서 상세 보기
+                                </>
+                              )}
+                            </button>
 
-                          <div className="flex items-center gap-6 flex-wrap text-left">
-                            <p className="text-sm font-black text-zinc-400 uppercase">
-                              {app.partnerType === "brand" ? app.brandName : app.stageName || app.name}
-                            </p>
-                            <div className="w-1 h-1 bg-zinc-200 rounded-full" />
-                            <p className="text-sm font-black text-zinc-400">{app.phone}</p>
-                            {app.selectedProgram && (
-                              <>
-                                <div className="w-1 h-1 bg-zinc-200 rounded-full" />
-                                <span className="px-3 py-1.5 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-widest">
-                                  {app.selectedProgram.name} · {app.selectedProgram.price}만원
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          <div className="flex gap-4 flex-wrap text-left">
-                            {app.portfolioUrl && (
-                              <AdminLink href={app.portfolioUrl} icon={<Paperclip size={14} />} label="포트폴리오 파일" />
-                            )}
-                            {app.workListUrl && (
-                              <AdminLink href={app.workListUrl} icon={<FileText size={14} />} label="작품리스트 파일" />
-                            )}
-                            {app.highResPhotosUrl && (
-                              <AdminLink href={app.highResPhotosUrl} icon={<ImageIcon size={14} />} label="대표작 고화질 원본" />
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="w-full lg:w-[280px] space-y-3 text-left">
-                          <button
-                            onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
-                            className="w-full py-4 bg-zinc-50 border border-zinc-100 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-zinc-100 transition-all text-center"
-                          >
-                            {expandedId === app.id ? (
-                              <>
-                                <ChevronUp size={14} /> 상세내용 닫기
-                              </>
+                            {rejectId === app.id ? (
+                              <div className="space-y-3 animate-in fade-in zoom-in-95 text-left">
+                                <textarea
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                  placeholder="거절 안내 메모 입력..."
+                                  className="w-full bg-zinc-50 p-4 rounded-xl text-xs outline-none h-24 font-bold border border-red-100 text-left transition-all"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleAction(app, date, "rejected", rejectReason)}
+                                    className="flex-1 py-3 bg-red-400 text-white rounded-xl text-[10px] font-black uppercase transition-all text-center"
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button
+                                    onClick={() => setRejectId(null)}
+                                    className="py-3 px-4 bg-zinc-100 rounded-xl text-[10px] font-black uppercase transition-all text-center"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
                             ) : (
-                              <>
-                                <ChevronDown size={14} /> 신청서 상세 보기
-                              </>
-                            )}
-                          </button>
-
-                          {rejectId === app.id ? (
-                            <div className="space-y-3 animate-in fade-in zoom-in-95 text-left">
-                              <textarea
-                                value={rejectReason}
-                                onChange={(e) => setRejectReason(e.target.value)}
-                                placeholder="사유 입력..."
-                                className="w-full bg-zinc-50 p-4 rounded-xl text-xs outline-none h-24 font-bold border border-red-100 text-left transition-all"
-                              />
-                              <div className="flex gap-2">
+                              <div className="flex flex-col gap-3 text-left">
                                 <button
-                                  onClick={() => handleAction(app, date, "rejected", rejectReason)}
-                                  className="flex-1 py-3 bg-red-400 text-white rounded-xl text-[10px] font-black uppercase transition-all text-center"
+                                  disabled={app.status === "confirmed"}
+                                  onClick={() => handleAction(app, date, "confirmed")}
+                                  className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-[#004aad] shadow-xl disabled:bg-zinc-100 transition-all text-center"
                                 >
-                                  Confirm
+                                  Approve
                                 </button>
+
                                 <button
-                                  onClick={() => setRejectId(null)}
-                                  className="py-3 px-4 bg-zinc-100 rounded-xl text-[10px] font-black uppercase transition-all text-center"
+                                  onClick={() => {
+                                    const message = (requestDraft.requestMessage || "").trim();
+                                    if (!message) {
+                                      alert("추가로 요청할 자료 내용을 먼저 입력해 주세요.");
+                                      return;
+                                    }
+                                    handleAction(app, date, "additional_requested", message);
+                                  }}
+                                  className="w-full py-5 border border-amber-200 text-amber-700 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-amber-50 transition-all text-center"
                                 >
-                                  Cancel
+                                  Request More
+                                </button>
+
+                                <button
+                                  disabled={app.status === "rejected"}
+                                  onClick={() => setRejectId(app.id)}
+                                  className="w-full py-5 border border-red-100 text-red-400 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 transition-all text-center"
+                                >
+                                  Reject
+                                </button>
+
+                                <button
+                                  onClick={() => handleAction(app, date, "delete")}
+                                  className="text-[9px] font-black uppercase text-zinc-300 hover:text-red-500 py-2 text-center transition-colors"
+                                >
+                                  Permanent Delete
                                 </button>
                               </div>
-                            </div>
-                          ) : (
-                            <div className="flex flex-col gap-3 text-left">
-                              <button
-                                disabled={app.status === "confirmed"}
-                                onClick={() => handleAction(app, date, "confirmed")}
-                                className="w-full py-5 bg-black text-white rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-[#004aad] shadow-xl disabled:bg-zinc-100 transition-all text-center"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                disabled={app.status === "rejected"}
-                                onClick={() => setRejectId(app.id)}
-                                className="w-full py-5 border border-red-100 text-red-400 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 transition-all text-center"
-                              >
-                                Reject
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const message = window.prompt("추가로 요청할 자료 내용을 입력해 주세요.");
-                                  if (!message) return;
-
-                                  handleAction(app, date, "additional_requested", message);
-                                }}
-                                className="w-full py-5 border border-amber-200 text-amber-700 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-amber-50 transition-all text-center"
-                              >
-                                Request More
-                              </button>
-                              <button
-                                onClick={() => handleAction(app, date, "delete")}
-                                className="text-[9px] font-black uppercase text-zinc-300 hover:text-red-500 py-2 text-center transition-colors"
-                              >
-                                Permanent Delete
-                              </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {expandedId === app.id && (
-                      <div className="bg-zinc-50 border-t border-gray-100 p-8 md:p-16 animate-in slide-in-from-top-4 duration-500 text-left">
-                        <div className="grid md:grid-cols-2 gap-20 text-left">
-                          <div className="space-y-12 text-left">
-                            <div>
-                              <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                User Profile Information
-                              </h5>
-                              <div className="grid gap-4 text-left">
-                                <DetailItem
-                                  label="전체 성함"
-                                  value={
-                                    app.partnerType === "brand"
-                                      ? app.brandName
-                                      : `${app.realName || "-"} (${app.englishName || "-"})`
-                                  }
-                                />
-                                <DetailItem
-                                  label="활동/예명"
-                                  value={app.partnerType === "brand" ? "-" : app.stageName || app.realName || "-"}
-                                />
-                                <DetailItem label="이메일" value={app.applicantEmail || "-"} />
-                                <DetailItem label="연락처" value={app.phone || "-"} />
-                                <DetailItem label="생년/설립일" value={app.birthDate || "-"} />
-                                <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
-                                <DetailItem label="신청 프로그램" value={getProgramLabel(app.selectedProgram)} />
-                              </div>
-                            </div>
-
-                            <div>
-                              <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                Proposal Note
-                              </h5>
-                              <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
-                                "
-                                {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
-                                "
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-12 text-left">
-                            <div>
-                              <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                Visual & External Assets
-                              </h5>
-                              <div className="flex flex-col gap-4 text-left">
-                                {app.snsLink && (
-                                  <a
-                                    href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                  >
-                                    <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
-                                  </a>
-                                )}
-
-                                {app.profilePhotoUrl && (
-                                  <a
-                                    href={app.profilePhotoUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                  >
-                                    <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
-                                  </a>
-                                )}
-
-                                {app.highResPhotosUrl && (
-                                  <a
-                                    href={app.highResPhotosUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                  >
-                                    <ImageIcon size={18} /> 대표작 고화질 이미지 원본 보기
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-
-                            {app.experimentText && (
+                      {expandedId === app.id && (
+                        <div className="bg-zinc-50 border-t border-gray-100 p-8 md:p-16 animate-in slide-in-from-top-4 duration-500 text-left space-y-10">
+                          <div className="grid md:grid-cols-2 gap-20 text-left">
+                            <div className="space-y-12 text-left">
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  Experimental Trial
+                                  User Profile Information
                                 </h5>
-                                <p className="text-sm font-bold text-zinc-600 italic leading-relaxed whitespace-pre-wrap text-left">
-                                  "{app.experimentText}"
+                                <div className="grid gap-4 text-left">
+                                  <DetailItem
+                                    label="전체 성함"
+                                    value={
+                                      app.partnerType === "brand"
+                                        ? app.brandName
+                                        : `${app.realName || "-"} (${app.englishName || "-"})`
+                                    }
+                                  />
+                                  <DetailItem
+                                    label="활동/예명"
+                                    value={app.partnerType === "brand" ? "-" : app.stageName || app.realName || "-"}
+                                  />
+                                  <DetailItem label="이메일" value={app.applicantEmail || "-"} />
+                                  <DetailItem label="연락처" value={app.phone || "-"} />
+                                  <DetailItem label="생년/설립일" value={app.birthDate || "-"} />
+                                  <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
+                                  <DetailItem label="신청 프로그램" value={getProgramLabel(app.selectedProgram)} />
+                                </div>
+                              </div>
+
+                              <div>
+                                <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
+                                  Proposal Note
+                                </h5>
+                                <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
+                                  {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
                                 </p>
                               </div>
-                            )}
+                            </div>
+
+                            <div className="space-y-12 text-left">
+                              <div>
+                                <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
+                                  Visual & External Assets
+                                </h5>
+                                <div className="flex flex-col gap-4 text-left">
+                                  {app.snsLink && (
+                                    <a
+                                      href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                    >
+                                      <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                    </a>
+                                  )}
+
+                                  {app.profilePhotoUrl && (
+                                    <a
+                                      href={app.profilePhotoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                    >
+                                      <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
+                                    </a>
+                                  )}
+
+                                  {app.highResPhotosUrl && (
+                                    <a
+                                      href={app.highResPhotosUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                    >
+                                      <ImageIcon size={18} /> 대표작 고화질 이미지 원본 보기
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+
+                              {app.experimentText && (
+                                <div>
+                                  <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
+                                    Experimental Trial
+                                  </h5>
+                                  <p className="text-sm font-bold text-zinc-600 italic leading-relaxed whitespace-pre-wrap text-left">
+                                    {app.experimentText}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid lg:grid-cols-3 gap-8">
+                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                              <div className="flex items-center gap-2 mb-4">
+                                <NotebookPen size={16} />
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                                  공개용 검토 결과 입력
+                                </p>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                    검토 결과
+                                  </p>
+                                  <textarea
+                                    value={reviewDraft.reviewSummary}
+                                    onChange={(e) => setReviewDraft(app.id, "reviewSummary", e.target.value)}
+                                    placeholder="신청자에게 공개될 검토 결과 요약"
+                                    className="w-full h-28 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                    보완 제안
+                                  </p>
+                                  <textarea
+                                    value={reviewDraft.improvementSuggestions}
+                                    onChange={(e) =>
+                                      setReviewDraft(app.id, "improvementSuggestions", e.target.value)
+                                    }
+                                    placeholder="다음 지원 시 참고할 보완 제안"
+                                    className="w-full h-28 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                  />
+                                </div>
+
+                                <button
+                                  onClick={() => handleSaveReviewDraft(app)}
+                                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-zinc-900 text-white text-[10px] font-black uppercase tracking-[0.2em] hover:scale-[1.01] transition-all"
+                                >
+                                  검토 결과 저장
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                              <div className="flex items-center gap-2 mb-4">
+                                <Mail size={16} />
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                                  승인용 가이드 입력
+                                </p>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                    가이드 제목
+                                  </p>
+                                  <input
+                                    value={guideDraft.customGuideTitle}
+                                    onChange={(e) => setGuideDraft(app.id, "customGuideTitle", e.target.value)}
+                                    placeholder="예: 진행 가이드 / 브랜드 협업 가이드"
+                                    className="w-full rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                    가이드 소개
+                                  </p>
+                                  <textarea
+                                    value={guideDraft.customGuideIntro}
+                                    onChange={(e) => setGuideDraft(app.id, "customGuideIntro", e.target.value)}
+                                    placeholder="승인 상세 페이지 상단에 보일 소개 문구"
+                                    className="w-full h-24 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                    추가 가이드 메모
+                                  </p>
+                                  <textarea
+                                    value={guideDraft.guideNotes}
+                                    onChange={(e) => setGuideDraft(app.id, "guideNotes", e.target.value)}
+                                    placeholder="설치, 운영, 제출물 관련 개별 메모"
+                                    className="w-full h-32 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                  />
+                                </div>
+
+                                <button
+                                  onClick={() => handleSaveGuideDraft(app)}
+                                  className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-zinc-900 text-white text-[10px] font-black uppercase tracking-[0.2em] hover:scale-[1.01] transition-all"
+                                >
+                                  가이드 저장
+                                </button>
+                                </div>
+                                </div>
+
+                                <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <Mail size={16} />
+                                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                                      추가자료 요청 입력
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-4">
+                                    <div>
+                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
+                                        요청 내용
+                                      </p>
+                                      <textarea
+                                        value={requestDraft.requestMessage}
+                                        onChange={(e) => setRequestDraft(app.id, "requestMessage", e.target.value)}
+                                        placeholder="신청자에게 요청할 추가 자료와 보완 방향을 입력하세요"
+                                        className="w-full h-40 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                      />
+                                    </div>
+
+                                    <div className="rounded-[18px] border border-amber-200 bg-amber-50 p-4">
+                                      <p className="text-xs font-bold text-amber-900 leading-relaxed break-keep">
+                                        이 내용은 신청 상세 페이지와 추가자료 요청 메일에 함께 노출됩니다.
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))
