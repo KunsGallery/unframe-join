@@ -672,7 +672,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
             <h3 className="text-2xl font-black uppercase tracking-tight">등록된 일정</h3>
           </div>
 
-          <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
+          <div className="space-y-4 max-h-130 overflow-y-auto pr-1">
             {managedSchedules.length > 0 ? (
               managedSchedules.map((schedule) => (
                 <div key={schedule.id} className="border border-zinc-100 rounded-[28px] p-5 bg-zinc-50/70">
@@ -729,7 +729,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                 </div>
               ))
             ) : (
-              <div className="h-[260px] flex items-center justify-center text-zinc-300 font-black uppercase tracking-[0.25em] text-sm">
+              <div className="h-65 flex items-center justify-center text-zinc-300 font-black uppercase tracking-[0.25em] text-sm">
                 No schedules yet
               </div>
             )}
@@ -872,7 +872,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                               {app.status}
                             </div>
 
-                            <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight break-words text-left">
+                            <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight wrap-break-word text-left">
                               {app.exhibitionTitle || "Untitled Project"}
                             </h4>
 
@@ -905,7 +905,7 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                             </div>
                           </div>
 
-                          <div className="w-full lg:w-[280px] space-y-3 text-left">
+                          <div className="w-full lg:w-70 space-y-3 text-left">
                             <button
                               onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
                               className="w-full py-4 bg-zinc-50 border border-zinc-100 rounded-2xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-zinc-100 transition-all text-center"

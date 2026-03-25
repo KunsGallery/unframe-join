@@ -717,7 +717,7 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                                   setResponseField(app.id, "additionalResponse", e.target.value)
                                 }
                                 placeholder="요청받은 자료에 대한 설명이나 보완 내용을 작성해 주세요."
-                                className="w-full h-32 rounded-[16px] border border-zinc-100 bg-white p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
+                                className="w-full h-32 rounded-2xl border border-zinc-100 bg-white p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
                               />
                             </div>
 
