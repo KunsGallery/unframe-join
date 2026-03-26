@@ -36,6 +36,7 @@ import DetailItem from "../components/ui/DetailItem";
 import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
 import { sendApplicationStatusEmail } from "../lib/uploads";
+import EmailTestPanel from "./EmailTestPanel";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -62,6 +63,175 @@ const getStatusLabel = (status) => {
 const getProgramLabel = (program) => {
   if (!program) return "-";
   return `${program.name} · ${program.price}만원`;
+};
+
+const formatSentAt = (value) => {
+  if (!value) return "";
+  try {
+    const date =
+      typeof value?.toDate === "function" ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return "";
+  }
+};
+
+const DeliveryStatusItem = ({ label, value, tone = "default" }) => {
+  const active = !!value;
+
+  const toneClass =
+    tone === "blue"
+      ? active
+        ? "bg-[#004aad]/10 text-[#004aad] border-[#004aad]/20"
+        : "bg-zinc-50 text-zinc-400 border-zinc-200"
+      : tone === "amber"
+      ? active
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-zinc-50 text-zinc-400 border-zinc-200"
+      : tone === "red"
+      ? active
+        ? "bg-red-50 text-red-600 border-red-200"
+        : "bg-zinc-50 text-zinc-400 border-zinc-200"
+      : active
+      ? "bg-green-50 text-green-700 border-green-200"
+      : "bg-zinc-50 text-zinc-400 border-zinc-200";
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] mb-1">
+        {label}
+      </p>
+      <p className="text-xs font-black">
+        {active ? `발송됨 · ${formatSentAt(value)}` : "미발송"}
+      </p>
+    </div>
+  );
+};
+
+const AdminField = ({
+  label,
+  required = false,
+  hint = "",
+  example = "",
+  value,
+  onChange,
+  placeholder = "",
+  textarea = false,
+  rows = 4,
+}) => {
+  const sharedClassName =
+    "w-full rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none focus:border-[#004aad]/30 focus:bg-white transition-all";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400">
+          {label}
+        </p>
+        {required && (
+          <span className="px-2 py-1 rounded-full bg-red-50 text-red-500 text-[9px] font-black uppercase tracking-[0.15em]">
+            Required
+          </span>
+        )}
+      </div>
+
+      {hint ? (
+        <p className="text-xs font-bold text-zinc-500 leading-relaxed break-keep">
+          {hint}
+        </p>
+      ) : null}
+
+      {example ? (
+        <div className="rounded-2xl border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-1">
+            예시
+          </p>
+          <p className="text-xs font-bold text-zinc-600 whitespace-pre-wrap break-keep">
+            {example}
+          </p>
+        </div>
+      ) : null}
+
+      {textarea ? (
+        <textarea
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          rows={rows}
+          className={sharedClassName}
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className={sharedClassName.replace("resize-none", "")}
+        />
+      )}
+    </div>
+  );
+};
+
+const ApplicantPreviewCard = ({ eyebrow, title, description, note }) => (
+  <div className="rounded-[22px] border border-[#004aad]/15 bg-[#004aad]/5 p-5">
+    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad] mb-2">
+      신청자에게 이렇게 보입니다
+    </p>
+    <div className="rounded-[18px] border border-white/80 bg-white p-4">
+      {eyebrow ? (
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-2">
+          {eyebrow}
+        </p>
+      ) : null}
+
+      <h6 className="text-base font-black text-zinc-900 mb-2 break-keep">
+        {title || "-"}
+      </h6>
+
+      {description ? (
+        <p className="text-sm font-bold text-zinc-600 whitespace-pre-wrap break-keep leading-relaxed">
+          {description}
+        </p>
+      ) : null}
+
+      {note ? (
+        <div className="mt-4 rounded-2xl border border-zinc-100 bg-zinc-50 p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-2">
+            추가 노출 메모
+          </p>
+          <p className="text-sm font-bold text-zinc-700 whitespace-pre-wrap break-keep leading-relaxed">
+            {note}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  </div>
+);
+
+const AdminNotice = ({ title, body, tone = "blue" }) => {
+  const toneClass =
+    tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-900"
+      : tone === "red"
+      ? "border-red-200 bg-red-50 text-red-900"
+      : "border-[#004aad]/15 bg-[#004aad]/5 text-zinc-700";
+
+  return (
+    <div className={`rounded-[18px] border p-4 ${toneClass}`}>
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] mb-2">
+        {title}
+      </p>
+      <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap break-keep">
+        {body}
+      </p>
+    </div>
+  );
 };
 
 const AdminDashboard = ({ applications, reservations, db, appId }) => {
@@ -332,161 +502,300 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
     }
   };
 
-  const handleAction = async (appDoc, date, status, reason = "") => {
+  const handleSaveRequestDraft = async (app) => {
+    const draft = getRequestDraft(app);
+
     try {
-      if (status === "confirmed") {
-        const guideDraft = getGuideDraft(appDoc);
-
-        await updateDoc(
-          doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-          {
-            status: "confirmed",
-            customGuideTitle: guideDraft.customGuideTitle || "",
-            customGuideIntro: guideDraft.customGuideIntro || "",
-            guideNotes: guideDraft.guideNotes || "",
-          }
-        );
-
-        await setDoc(
-          doc(db, "artifacts", appId, "public", "data", "reservations", date),
-          {
-            status: "confirmed",
-            confirmedArtist: appDoc.stageName || appDoc.name,
-            confirmedTitle: appDoc.exhibitionTitle,
-            partnerType: appDoc.partnerType,
-            selectedProgram: appDoc.selectedProgram || null,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        if (appDoc.applicantEmail) {
-          try {
-            await sendApplicationStatusEmail({
-              type: "approved",
-              applicantName:
-                appDoc.name ||
-                appDoc.realName ||
-                appDoc.brandName ||
-                appDoc.stageName ||
-                "Applicant",
-              applicantEmail: appDoc.applicantEmail,
-              exhibitionTitle: appDoc.exhibitionTitle,
-              selectedDate: appDoc.selectedDate,
-              selectedProgram: appDoc.selectedProgram,
-              partnerType: appDoc.partnerType,
-              applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
-            });
-          } catch (mailError) {
-            console.error("approve mail failed:", mailError);
-          }
+      await updateDoc(
+        doc(db, "artifacts", appId, "public", "data", "applications", app.id),
+        {
+          requestMessage: draft.requestMessage || "",
+          requestUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         }
-      } else if (status === "additional_requested") {
-        await updateDoc(
-          doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-          {
-            status: "additional_requested",
-            requestMessage: reason || "",
-            requestUpdatedAt: serverTimestamp(),
-          }
-        );
-
-        if (appDoc.applicantEmail) {
-          try {
-            await sendApplicationStatusEmail({
-              type: "additional_requested",
-              applicantName:
-                appDoc.name ||
-                appDoc.realName ||
-                appDoc.brandName ||
-                appDoc.stageName ||
-                "Applicant",
-              applicantEmail: appDoc.applicantEmail,
-              exhibitionTitle: appDoc.exhibitionTitle,
-              selectedDate: appDoc.selectedDate,
-              selectedProgram: appDoc.selectedProgram,
-              partnerType: appDoc.partnerType,
-              requestMessage: reason || "",
-              applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
-            });
-          } catch (mailError) {
-            console.error("request more mail failed:", mailError);
-          }
-        }
-      } else if (status === "rejected" || status === "delete") {
-        if (status === "rejected") {
-          const reviewDraft = getReviewDraft(appDoc);
-
-          await updateDoc(
-            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id),
-            {
-              status: "rejected",
-              rejectionReason: reason || "",
-              reviewSummary: reviewDraft.reviewSummary || "",
-              improvementSuggestions: reviewDraft.improvementSuggestions || "",
-            }
-          );
-
-          if (appDoc.applicantEmail) {
-            try {
-              await sendApplicationStatusEmail({
-                type: "rejected",
-                applicantName:
-                  appDoc.name ||
-                  appDoc.realName ||
-                  appDoc.brandName ||
-                  appDoc.stageName ||
-                  "Applicant",
-                applicantEmail: appDoc.applicantEmail,
-                exhibitionTitle: appDoc.exhibitionTitle,
-                selectedDate: appDoc.selectedDate,
-                selectedProgram: appDoc.selectedProgram,
-                partnerType: appDoc.partnerType,
-                rejectionReason: reason || "",
-                applicationDetailUrl: `${window.location.origin}/?view=my-page&app=${appDoc.id}`,
-              });
-            } catch (mailError) {
-              console.error("reject mail failed:", mailError);
-            }
-          }
-        } else {
-          await deleteDoc(
-            doc(db, "artifacts", appId, "public", "data", "applications", appDoc.id)
-          );
-        }
-
-        const resRef = doc(
-          db,
-          "artifacts",
-          appId,
-          "public",
-          "data",
-          "reservations",
-          date
-        );
-
-        await runTransaction(db, async (t) => {
-          const snap = await t.get(resRef);
-          if (snap.exists()) {
-            const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
-            t.update(resRef, {
-              status: newCount > 0 ? "review" : null,
-              confirmedArtist: null,
-              confirmedTitle: null,
-              partnerType: null,
-              selectedProgram: null,
-              applicantCount: newCount,
-            });
-          }
-        });
-      }
-
-      setRejectId(null);
-      setRejectReason("");
-      alert("Updated successfully.");
+      );
+      alert("추가자료 요청 문안이 저장되었습니다.");
     } catch (e) {
       console.error(e);
-      alert("Action failed.");
+      alert("추가자료 요청 문안 저장 실패");
+    }
+  };
+
+  const buildApplicationDetailUrl = (applicationId) => {
+    if (!applicationId || typeof window === "undefined") return "";
+    const origin = window.location.origin;
+    return `${origin}/?view=my-page&applicationId=${encodeURIComponent(
+      applicationId
+    )}&app=${encodeURIComponent(applicationId)}`;
+  };
+
+  const getApplicantName = (appDoc) =>
+  appDoc.name ||
+  appDoc.realName ||
+  appDoc.brandName ||
+  appDoc.stageName ||
+  "Applicant";
+
+const handleAction = async (appDoc, date, status, reason = "") => {
+  try {
+    const applicationDetailUrl = buildApplicationDetailUrl(appDoc.id);
+    const appRef = doc(
+      db,
+      "artifacts",
+      appId,
+      "public",
+      "data",
+      "applications",
+      appDoc.id
+    );
+
+    if (status === "confirmed") {
+      const guideDraft = getGuideDraft(appDoc);
+
+      const mailAlreadySent = !!appDoc.approvedMailSentAt;
+      const kakaoAlreadySent = !!appDoc.approvedKakaoSentAt;
+
+      await updateDoc(appRef, {
+        status: "confirmed",
+        customGuideTitle: guideDraft.customGuideTitle || "",
+        customGuideIntro: guideDraft.customGuideIntro || "",
+        guideNotes: guideDraft.guideNotes || "",
+        approvedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await setDoc(
+        doc(db, "artifacts", appId, "public", "data", "reservations", date),
+        {
+          status: "confirmed",
+          confirmedArtist: appDoc.stageName || appDoc.name,
+          confirmedTitle: appDoc.exhibitionTitle,
+          partnerType: appDoc.partnerType,
+          selectedProgram: appDoc.selectedProgram || null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      if (appDoc.applicantEmail && !mailAlreadySent) {
+        try {
+          await sendApplicationStatusEmail({
+            type: "approved",
+            applicantName: getApplicantName(appDoc),
+            applicantEmail: appDoc.applicantEmail,
+            exhibitionTitle: appDoc.exhibitionTitle,
+            selectedDate: appDoc.selectedDate || date || "",
+            selectedProgram: appDoc.selectedProgram || null,
+            partnerType: appDoc.partnerType,
+            applicationDetailUrl,
+          });
+
+          await updateDoc(appRef, {
+            approvedMailSentAt: serverTimestamp(),
+          });
+        } catch (mailError) {
+          console.error("approve mail failed:", mailError);
+        }
+      }
+
+      if (appDoc.phone && !kakaoAlreadySent) {
+        try {
+          const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "approved",
+              to: appDoc.phone,
+              applicantName: getApplicantName(appDoc),
+              exhibitionTitle: appDoc.exhibitionTitle,
+              selectedDate: appDoc.selectedDate || date || "",
+              selectedProgram: appDoc.selectedProgram || null,
+              applicationId: appDoc.id,
+              applicationDetailUrl,
+            }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data?.error || "approve kakao failed");
+          }
+
+          await updateDoc(appRef, {
+            approvedKakaoSentAt: serverTimestamp(),
+          });
+        } catch (kakaoError) {
+          console.error("approve kakao failed:", kakaoError);
+        }
+      }
+    } else if (status === "additional_requested") {
+      const requestDraft = getRequestDraft(appDoc);
+      const requestMessage = (requestDraft.requestMessage || reason || "").trim();
+
+      const mailAlreadySent = !!appDoc.additionalRequestedMailSentAt;
+      const kakaoAlreadySent = !!appDoc.additionalRequestedKakaoSentAt;
+
+      await updateDoc(appRef, {
+        status: "additional_requested",
+        requestMessage,
+        requestUpdatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      if (appDoc.applicantEmail && !mailAlreadySent) {
+        try {
+          await sendApplicationStatusEmail({
+            type: "additional_requested",
+            applicantName: getApplicantName(appDoc),
+            applicantEmail: appDoc.applicantEmail,
+            exhibitionTitle: appDoc.exhibitionTitle,
+            selectedDate: appDoc.selectedDate || date || "",
+            selectedProgram: appDoc.selectedProgram || null,
+            partnerType: appDoc.partnerType,
+            requestMessage,
+            applicationDetailUrl,
+          });
+
+          await updateDoc(appRef, {
+            additionalRequestedMailSentAt: serverTimestamp(),
+          });
+        } catch (mailError) {
+          console.error("request more mail failed:", mailError);
+        }
+      }
+
+      if (appDoc.phone && !kakaoAlreadySent) {
+        try {
+          const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "additional_requested",
+              to: appDoc.phone,
+              applicantName: getApplicantName(appDoc),
+              exhibitionTitle: appDoc.exhibitionTitle,
+              requestMessage,
+              applicationId: appDoc.id,
+              applicationDetailUrl,
+            }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data?.error || "additional_requested kakao failed");
+          }
+
+          await updateDoc(appRef, {
+            additionalRequestedKakaoSentAt: serverTimestamp(),
+          });
+        } catch (kakaoError) {
+          console.error("additional_requested kakao failed:", kakaoError);
+        }
+      }
+    } else if (status === "rejected" || status === "delete") {
+      if (status === "rejected") {
+        const reviewDraft = getReviewDraft(appDoc);
+
+        const mailAlreadySent = !!appDoc.rejectedMailSentAt;
+        const kakaoAlreadySent = !!appDoc.rejectedKakaoSentAt;
+
+        await updateDoc(appRef, {
+          status: "rejected",
+          rejectionReason: reason || "",
+          reviewSummary: reviewDraft.reviewSummary || "",
+          improvementSuggestions: reviewDraft.improvementSuggestions || "",
+          rejectedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        if (appDoc.applicantEmail && !mailAlreadySent) {
+          try {
+            await sendApplicationStatusEmail({
+              type: "rejected",
+              applicantName: getApplicantName(appDoc),
+              applicantEmail: appDoc.applicantEmail,
+              exhibitionTitle: appDoc.exhibitionTitle,
+              selectedDate: appDoc.selectedDate || date || "",
+              selectedProgram: appDoc.selectedProgram || null,
+              partnerType: appDoc.partnerType,
+              rejectionReason: reason || "",
+              reviewSummary: reviewDraft.reviewSummary || "",
+              improvementSuggestions:
+                reviewDraft.improvementSuggestions || "",
+              applicationDetailUrl,
+            });
+
+            await updateDoc(appRef, {
+              rejectedMailSentAt: serverTimestamp(),
+            });
+          } catch (mailError) {
+            console.error("reject mail failed:", mailError);
+          }
+        }
+
+        if (appDoc.phone && !kakaoAlreadySent) {
+          try {
+            const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                type: "rejected",
+                to: appDoc.phone,
+                applicantName: getApplicantName(appDoc),
+                exhibitionTitle: appDoc.exhibitionTitle,
+                selectedDate: appDoc.selectedDate || date || "",
+                applicationId: appDoc.id,
+                applicationDetailUrl,
+              }),
+            });
+
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              throw new Error(data?.error || "reject kakao failed");
+            }
+
+            await updateDoc(appRef, {
+              rejectedKakaoSentAt: serverTimestamp(),
+            });
+          } catch (kakaoError) {
+            console.error("reject kakao failed:", kakaoError);
+          }
+        }
+      } else {
+        await deleteDoc(appRef);
+      }
+
+      const resRef = doc(
+        db,
+        "artifacts",
+        appId,
+        "public",
+        "data",
+        "reservations",
+        date
+      );
+
+      await runTransaction(db, async (t) => {
+        const snap = await t.get(resRef);
+        if (snap.exists()) {
+          const newCount = Math.max(0, (snap.data().applicantCount || 1) - 1);
+          t.update(resRef, {
+            status: newCount > 0 ? "review" : null,
+            confirmedArtist: null,
+            confirmedTitle: null,
+            partnerType: null,
+            selectedProgram: null,
+            applicantCount: newCount,
+          });
+        }
+      });
+    }
+
+    setRejectId(null);
+    setRejectReason("");
+    alert("Updated successfully.");
+  } catch (e) {
+    console.error(e);
+    alert("Action failed.");
     }
   };
 
@@ -571,6 +880,10 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
           <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
           <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
         </div>
+      </div>
+
+      <div className="mb-20">
+        <EmailTestPanel />
       </div>
 
       <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
@@ -1081,41 +1394,100 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                             </div>
                           </div>
 
+                          <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                            <div className="flex items-center gap-2 mb-5">
+                              <Mail size={16} />
+                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                                발송 상태
+                              </p>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                              <DeliveryStatusItem
+                                label="승인 메일"
+                                value={app.approvedMailSentAt}
+                                tone="blue"
+                              />
+                              <DeliveryStatusItem
+                                label="승인 알림톡"
+                                value={app.approvedKakaoSentAt}
+                                tone="blue"
+                              />
+                              <DeliveryStatusItem
+                                label="미선정 메일"
+                                value={app.rejectedMailSentAt}
+                                tone="red"
+                              />
+                              <DeliveryStatusItem
+                                label="미선정 알림톡"
+                                value={app.rejectedKakaoSentAt}
+                                tone="red"
+                              />
+                              <DeliveryStatusItem
+                                label="추가요청 메일"
+                                value={app.additionalRequestedMailSentAt}
+                                tone="amber"
+                              />
+                              <DeliveryStatusItem
+                                label="추가요청 알림톡"
+                                value={app.additionalRequestedKakaoSentAt}
+                                tone="amber"
+                              />
+                            </div>
+                          </div>
+
                           <div className="grid lg:grid-cols-3 gap-8">
                             <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-                              <div className="flex items-center gap-2 mb-4">
+                              <div className="flex items-center gap-2 mb-5">
                                 <NotebookPen size={16} />
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
                                   공개용 검토 결과 입력
                                 </p>
                               </div>
 
-                              <div className="space-y-4">
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                    검토 결과
-                                  </p>
-                                  <textarea
-                                    value={reviewDraft.reviewSummary}
-                                    onChange={(e) => setReviewDraft(app.id, "reviewSummary", e.target.value)}
-                                    placeholder="신청자에게 공개될 검토 결과 요약"
-                                    className="w-full h-28 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                                  />
-                                </div>
+                              <div className="space-y-5">
+                                <AdminNotice
+                                  title="사용 위치"
+                                  body="이 내용은 미선정 상태의 신청 상세 페이지에 노출됩니다. 단순 거절 문구보다, 검토 결과와 다음 보완 방향이 느껴지도록 쓰는 편이 좋습니다."
+                                />
 
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                    보완 제안
-                                  </p>
-                                  <textarea
-                                    value={reviewDraft.improvementSuggestions}
-                                    onChange={(e) =>
-                                      setReviewDraft(app.id, "improvementSuggestions", e.target.value)
-                                    }
-                                    placeholder="다음 지원 시 참고할 보완 제안"
-                                    className="w-full h-28 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                                  />
-                                </div>
+                                <AdminField
+                                  label="검토 결과"
+                                  required
+                                  hint="이번 회차에서 왜 함께하지 않게 되었는지, 그러나 지나치게 직접적이거나 차갑지 않게 작성합니다."
+                                  example={`이번 회차에서는 제출 자료의 방향성과 전시 구성의 전달 밀도를 중심으로 검토했습니다.
+현재 단계에서는 프로젝트의 핵심 메시지가 다소 넓게 퍼져 있어, 인상적인 강점이 한 번에 응집되어 보이기 어려웠습니다.`}
+                                  value={reviewDraft.reviewSummary}
+                                  onChange={(e) => setReviewDraft(app.id, "reviewSummary", e.target.value)}
+                                  placeholder="신청자에게 공개될 검토 결과 요약"
+                                  textarea
+                                  rows={6}
+                                />
+
+                                <AdminField
+                                  label="보완 제안"
+                                  hint="다음 지원 때 무엇을 보완하면 더 좋아질지, 실제 도움이 되는 말로 적습니다."
+                                  example={`대표 이미지의 선명도와 작품 설명의 구조를 조금 더 정리해 주시면, 프로젝트의 강점이 더 분명하게 전달될 수 있습니다.
+전시 구성안이나 공간 활용 방식도 한두 문단 정도 더 구체화해 주시면 좋습니다.`}
+                                  value={reviewDraft.improvementSuggestions}
+                                  onChange={(e) => setReviewDraft(app.id, "improvementSuggestions", e.target.value)}
+                                  placeholder="다음 지원 시 참고할 보완 제안"
+                                  textarea
+                                  rows={6}
+                                />
+
+                                <ApplicantPreviewCard
+                                  eyebrow="Review Result"
+                                  title="검토 결과"
+                                  description={
+                                    reviewDraft.reviewSummary ||
+                                    "이번 회차 검토 결과와 다음 지원 시 참고하실 수 있는 보완 포인트를 안내드립니다."
+                                  }
+                                  note={
+                                    reviewDraft.improvementSuggestions ||
+                                    "보완 제안이 여기에 함께 노출됩니다."
+                                  }
+                                />
 
                                 <button
                                   onClick={() => handleSaveReviewDraft(app)}
@@ -1127,49 +1499,62 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                             </div>
 
                             <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-                              <div className="flex items-center gap-2 mb-4">
+                              <div className="flex items-center gap-2 mb-5">
                                 <Mail size={16} />
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
                                   승인용 가이드 입력
                                 </p>
                               </div>
 
-                              <div className="space-y-4">
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                    가이드 제목
-                                  </p>
-                                  <input
-                                    value={guideDraft.customGuideTitle}
-                                    onChange={(e) => setGuideDraft(app.id, "customGuideTitle", e.target.value)}
-                                    placeholder="예: 진행 가이드 / 브랜드 협업 가이드"
-                                    className="w-full rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none"
-                                  />
-                                </div>
+                              <div className="space-y-5">
+                                <AdminNotice
+                                  title="사용 위치"
+                                  body="이 내용은 승인된 신청자의 상세 페이지 최상단에 노출됩니다. '축하 메시지'보다는 '이제 무엇을 보면 되는지'가 바로 읽히는 구조가 좋습니다."
+                                />
 
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                    가이드 소개
-                                  </p>
-                                  <textarea
-                                    value={guideDraft.customGuideIntro}
-                                    onChange={(e) => setGuideDraft(app.id, "customGuideIntro", e.target.value)}
-                                    placeholder="승인 상세 페이지 상단에 보일 소개 문구"
-                                    className="w-full h-24 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                                  />
-                                </div>
+                                <AdminField
+                                  label="가이드 제목"
+                                  required
+                                  hint="승인 페이지의 메인 제목입니다. 너무 추상적이지 않게, 신청자가 바로 이해할 수 있게 씁니다."
+                                  example="예: 진행 가이드 / 전시 진행 안내 / 브랜드 협업 진행 가이드"
+                                  value={guideDraft.customGuideTitle}
+                                  onChange={(e) => setGuideDraft(app.id, "customGuideTitle", e.target.value)}
+                                  placeholder="예: 진행 가이드"
+                                />
 
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                    추가 가이드 메모
-                                  </p>
-                                  <textarea
-                                    value={guideDraft.guideNotes}
-                                    onChange={(e) => setGuideDraft(app.id, "guideNotes", e.target.value)}
-                                    placeholder="설치, 운영, 제출물 관련 개별 메모"
-                                    className="w-full h-32 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                                  />
-                                </div>
+                                <AdminField
+                                  label="가이드 소개"
+                                  hint="승인 이후 신청자가 이 페이지에서 무엇을 확인하게 되는지 짧게 설명합니다."
+                                  example={`승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 확인하실 수 있습니다.
+세부 일정 및 준비 사항은 순차적으로 안내드릴 예정입니다.`}
+                                  value={guideDraft.customGuideIntro}
+                                  onChange={(e) => setGuideDraft(app.id, "customGuideIntro", e.target.value)}
+                                  placeholder="승인 상세 페이지 상단에 보일 소개 문구"
+                                  textarea
+                                  rows={5}
+                                />
+
+                                <AdminField
+                                  label="개별 안내 메모"
+                                  hint="이 신청 건에만 따로 전하고 싶은 설치, 제출, 운영 관련 메모를 적습니다."
+                                  example={`설치 참고 이미지는 추후 메일로 추가 요청드릴 수 있습니다.
+오프닝 관련 운영 여부는 프로젝트 성격에 맞춰 별도 안내드릴 예정입니다.`}
+                                  value={guideDraft.guideNotes}
+                                  onChange={(e) => setGuideDraft(app.id, "guideNotes", e.target.value)}
+                                  placeholder="설치, 운영, 제출물 관련 개별 메모"
+                                  textarea
+                                  rows={6}
+                                />
+
+                                <ApplicantPreviewCard
+                                  eyebrow="Approved Guide"
+                                  title={guideDraft.customGuideTitle || "진행 가이드"}
+                                  description={
+                                    guideDraft.customGuideIntro ||
+                                    "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 바로 확인하실 수 있습니다."
+                                  }
+                                  note={guideDraft.guideNotes}
+                                />
 
                                 <button
                                   onClick={() => handleSaveGuideDraft(app)}
@@ -1177,37 +1562,75 @@ const AdminDashboard = ({ applications, reservations, db, appId }) => {
                                 >
                                   가이드 저장
                                 </button>
-                                </div>
-                                </div>
+                              </div>
+                            </div>
 
-                                <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-                                  <div className="flex items-center gap-2 mb-4">
-                                    <Mail size={16} />
-                                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
-                                      추가자료 요청 입력
-                                    </p>
-                                  </div>
+                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                              <div className="flex items-center gap-2 mb-5">
+                                <Mail size={16} />
+                                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
+                                  추가자료 요청 입력
+                                </p>
+                              </div>
 
-                                  <div className="space-y-4">
-                                    <div>
-                                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                        요청 내용
-                                      </p>
-                                      <textarea
-                                        value={requestDraft.requestMessage}
-                                        onChange={(e) => setRequestDraft(app.id, "requestMessage", e.target.value)}
-                                        placeholder="신청자에게 요청할 추가 자료와 보완 방향을 입력하세요"
-                                        className="w-full h-40 rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                                      />
-                                    </div>
+                              <div className="space-y-5">
+                                <AdminNotice
+                                  title="사용 위치"
+                                  body="이 문안은 신청 상세 페이지와 추가자료 요청 메일에 함께 노출됩니다. '무엇이 부족한지'보다 '무엇을 어떻게 보내주면 되는지'가 분명해야 합니다."
+                                  tone="amber"
+                                />
 
-                                    <div className="rounded-[18px] border border-amber-200 bg-amber-50 p-4">
-                                      <p className="text-xs font-bold text-amber-900 leading-relaxed break-keep">
-                                        이 내용은 신청 상세 페이지와 추가자료 요청 메일에 함께 노출됩니다.
-                                      </p>
-                                    </div>
-                                  </div>
+                                <AdminField
+                                  label="추가자료 요청 내용"
+                                  required
+                                  hint="신청자에게 다시 받아야 할 자료, 보완 방향, 회신 시 참고할 점을 한 번에 안내합니다."
+                                  example={`아래 항목을 추가로 확인하고자 합니다.
+
+1) 최신 포트폴리오 PDF 또는 ZIP
+2) 대표작 이미지 원본 3~5점
+3) 이번 전시/프로젝트의 핵심 구성 의도를 3~5문장 정도로 정리한 설명
+
+가능하신 범위에서 보완 후, 신청 상세 페이지에서 재업로드 부탁드립니다.`}
+                                  value={requestDraft.requestMessage}
+                                  onChange={(e) => setRequestDraft(app.id, "requestMessage", e.target.value)}
+                                  placeholder="신청자에게 요청할 추가 자료와 보완 방향을 입력하세요"
+                                  textarea
+                                  rows={8}
+                                />
+
+                                <ApplicantPreviewCard
+                                  eyebrow="Additional Request"
+                                  title="보완 요청"
+                                  description={
+                                    requestDraft.requestMessage ||
+                                    "추가 확인이 필요한 자료와 요청사항이 이 영역에 노출됩니다."
+                                  }
+                                />
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <button
+                                    onClick={() => handleSaveRequestDraft(app)}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl border border-zinc-200 bg-white text-zinc-700 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-zinc-50 transition-all"
+                                  >
+                                    요청 문안 저장
+                                  </button>
+
+                                  <button
+                                    onClick={() => {
+                                      const message = (requestDraft.requestMessage || "").trim();
+                                      if (!message) {
+                                        alert("추가자료 요청 문안을 먼저 입력해 주세요.");
+                                        return;
+                                      }
+                                      handleAction(app, date, "additional_requested", message);
+                                    }}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-amber-500 text-white text-[10px] font-black uppercase tracking-[0.2em] hover:brightness-95 transition-all"
+                                  >
+                                    추가자료 요청 발송
+                                  </button>
                                 </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}

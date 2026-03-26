@@ -58,11 +58,11 @@ const getStatusMeta = (status) => {
 const getStatusPageCopy = (app) => {
   if (app.status === "confirmed") {
     return {
-      eyebrow: "Approved Guide",
+      eyebrow: "Approved",
       title: app.customGuideTitle || "진행 가이드",
       description:
         app.customGuideIntro ||
-        "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 바로 확인하실 수 있습니다.",
+        "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 확인하실 수 있습니다. 세부 일정과 준비 사항은 순차적으로 안내드립니다.",
     };
   }
 
@@ -86,9 +86,9 @@ const getStatusPageCopy = (app) => {
 
   return {
     eyebrow: "In Review",
-    title: "검토 중인 신청",
+    title: "현재 검토 중입니다",
     description:
-      "현재 신청 내용은 내부 검토 중입니다. 결과는 이메일 및 안내 메시지를 통해 순차적으로 전달됩니다.",
+      "제출해 주신 자료를 순차적으로 확인하고 있습니다. 결과 또는 추가 요청이 있을 경우, 이 페이지와 이메일을 통해 안내드립니다.",
   };
 };
 
@@ -206,7 +206,7 @@ const SectionCard = ({ title, description, items }) => (
       {title}
     </p>
     {description && (
-      <p className="text-sm font-bold text-zinc-600 leading-relaxed mb-5 break-keep">
+      <p className="text-sm font-bold text-zinc-600 leading-relaxed mb-5 break-keep whitespace-pre-wrap">
         {description}
       </p>
     )}
@@ -224,6 +224,35 @@ const SectionCard = ({ title, description, items }) => (
     )}
   </div>
 );
+
+const DetailInfoCard = ({ eyebrow, title, children, tone = "default" }) => {
+  const toneClass =
+    tone === "blue"
+      ? "border-[#004aad]/15 bg-[#004aad]/5"
+      : tone === "amber"
+      ? "border-amber-200 bg-amber-50"
+      : tone === "red"
+      ? "border-red-200 bg-red-50"
+      : "border-zinc-100 bg-white";
+
+  return (
+    <div className={`rounded-3xl border p-5 md:p-6 ${toneClass}`}>
+      {eyebrow ? (
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400 mb-2">
+          {eyebrow}
+        </p>
+      ) : null}
+      {title ? (
+        <h4 className="text-lg md:text-xl font-black text-zinc-900 mb-3 break-keep">
+          {title}
+        </h4>
+      ) : null}
+      <div className="text-sm md:text-[15px] font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap break-keep">
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const UploadLine = ({ label, value, loading, error, success, onClick }) => (
   <div className="rounded-[20px] border border-zinc-100 bg-white p-4">
@@ -251,6 +280,24 @@ const UploadLine = ({ label, value, loading, error, success, onClick }) => (
     {success && <p className="mt-3 text-xs font-black text-emerald-600">{success}</p>}
   </div>
 );
+
+const formatDateTime = (value) => {
+  if (!value) return "";
+  try {
+    const date =
+      typeof value?.toDate === "function" ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return "";
+  }
+};
 
 const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedApplicationId }) => {
   const [expandedId, setExpandedId] = useState(null);
@@ -388,6 +435,24 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
         }
       );
 
+      for (const phone of ["01037848885", "01020494878"]) {
+        try {
+          await fetch("/.netlify/functions/send-kakao-alimtalk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "additional_submitted_admin",
+              to: phone,
+              applicantName:
+                app.name || app.realName || app.brandName || app.stageName || "신청자",
+              exhibitionTitle: app.exhibitionTitle || "-",
+            }),
+          });
+        } catch (kakaoError) {
+          console.error("additional_submitted_admin kakao failed:", kakaoError);
+        }
+      }
+
       alert("추가자료가 재제출되었습니다.");
       setResponseMap((prev) => ({
         ...prev,
@@ -450,7 +515,9 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                 <div className="p-8 md:p-10">
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
                     <div className="space-y-5">
-                      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-black ${meta.className}`}>
+                      <div
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-black ${meta.className}`}
+                      >
                         {meta.icon}
                         {meta.label}
                       </div>
@@ -551,29 +618,49 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                     </div>
 
                     {app.status === "review" && (
-                      <div className="grid md:grid-cols-2 gap-5">
-                        <SectionCard
-                          title="검토 진행 안내"
-                          description="현재 신청 내용은 내부 검토 중이며, 결과는 이메일 및 안내 메시지를 통해 전달됩니다."
-                          items={[
-                            "검토 단계에서는 신청 내용이 내부 기준에 따라 순차적으로 확인됩니다.",
-                            "필요 시 추가자료 요청 또는 일정 관련 보완 안내가 진행될 수 있습니다.",
-                            "제출 자료는 상세 영역에서 다시 확인하실 수 있습니다.",
-                          ]}
-                        />
-                        <SectionCard
-                          title="프로젝트 개요"
-                          description={
-                            app.partnerType === "brand"
-                              ? app.projectPurpose || "-"
-                              : app.artistNote || "-"
-                          }
-                        />
+                      <div className="space-y-5">
+                        <DetailInfoCard
+                          eyebrow="In Review"
+                          title="현재 검토 중입니다"
+                          tone="blue"
+                        >
+                          제출해 주신 자료를 순차적으로 확인하고 있습니다.
+                          결과 또는 추가 요청이 있을 경우, 이 페이지와 이메일을 통해 안내드립니다.
+                        </DetailInfoCard>
+
+                        <div className="grid md:grid-cols-2 gap-5">
+                          <SectionCard
+                            title="검토 진행 안내"
+                            description="현재 신청 내용은 내부 검토 중이며, 결과는 이메일 및 안내 메시지를 통해 전달됩니다."
+                            items={[
+                              "검토 단계에서는 신청 내용이 내부 기준에 따라 순차적으로 확인됩니다.",
+                              "필요 시 추가자료 요청 또는 일정 관련 보완 안내가 진행될 수 있습니다.",
+                              "제출 자료는 상세 영역에서 다시 확인하실 수 있습니다.",
+                            ]}
+                          />
+                          <SectionCard
+                            title="프로젝트 개요"
+                            description={
+                              app.partnerType === "brand"
+                                ? app.projectPurpose || "-"
+                                : app.artistNote || "-"
+                            }
+                          />
+                        </div>
                       </div>
                     )}
 
                     {app.status === "confirmed" && (
                       <div className="space-y-5">
+                        <DetailInfoCard
+                          eyebrow="Approved"
+                          title={app.customGuideTitle || "진행 가이드"}
+                          tone="blue"
+                        >
+                          {app.customGuideIntro ||
+                            "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 확인하실 수 있습니다. 세부 일정과 준비 사항은 순차적으로 안내드립니다."}
+                        </DetailInfoCard>
+
                         <div className="grid md:grid-cols-2 gap-5">
                           {guideSections.slice(0, 2).map((section) => (
                             <SectionCard
@@ -594,46 +681,56 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                           />
                         ))}
 
-                        {app.guideNotes && (
-                          <SectionCard
+                        {app.guideNotes ? (
+                          <DetailInfoCard
+                            eyebrow="Director Note"
                             title="개별 안내 메모"
-                            description={app.guideNotes}
-                          />
-                        )}
+                            tone="default"
+                          >
+                            {app.guideNotes}
+                          </DetailInfoCard>
+                        ) : null}
                       </div>
                     )}
 
                     {app.status === "rejected" && (
-                      <div className="grid md:grid-cols-2 gap-5">
-                        <SectionCard
+                      <div className="space-y-5">
+                        <DetailInfoCard
+                          eyebrow="Review Result"
                           title="검토 결과"
-                          description={reviewBlocks.summary}
-                          items={[
-                            "이번 회차에서는 프로젝트 방향성과 전달 밀도, 제출 자료의 완성도를 중심으로 검토했습니다.",
-                          ]}
-                        />
-                        <SectionCard
-                          title="보완 제안"
-                          description={reviewBlocks.improvement}
-                          items={[
-                            "대표 이미지의 선명도와 자료 구성 밀도를 더 높이면 강점이 더 분명하게 전달될 수 있습니다.",
-                            "프로젝트 설명과 전시 구성을 조금 더 구체화하면 다음 검토에서 도움이 됩니다.",
-                          ]}
-                        />
+                          tone="red"
+                        >
+                          {reviewBlocks.summary}
+                        </DetailInfoCard>
+
+                        {app.improvementSuggestions ? (
+                          <DetailInfoCard
+                            eyebrow="Suggestion"
+                            title="보완 제안"
+                            tone="default"
+                          >
+                            {reviewBlocks.improvement}
+                          </DetailInfoCard>
+                        ) : null}
                       </div>
                     )}
 
                     {app.status === "additional_requested" && (
                       <div className="space-y-5">
-                        <SectionCard
-                          title="보완 요청 내용"
-                          description={app.requestMessage || "운영자가 추가자료를 요청했습니다."}
-                          items={[
-                            "아래 업로드 영역에서 필요한 자료를 교체 업로드하실 수 있습니다.",
-                            "회신 내용에는 보완한 점이나 참고가 필요한 내용을 함께 적어주세요.",
-                            "재제출이 완료되면 상태는 다시 심사중으로 변경됩니다.",
-                          ]}
-                        />
+                        <DetailInfoCard
+                          eyebrow="Additional Request"
+                          title="보완 요청"
+                          tone="amber"
+                        >
+                          {app.requestMessage ||
+                            "추가 확인이 필요한 자료와 요청사항이 등록되면 이곳에 표시됩니다."}
+                        </DetailInfoCard>
+
+                        {app.requestUpdatedAt ? (
+                          <div className="text-xs font-bold text-zinc-400">
+                            최근 요청일 · {formatDateTime(app.requestUpdatedAt)}
+                          </div>
+                        ) : null}
 
                         <div className="rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 p-6 md:p-7">
                           <div className="flex items-center gap-2 text-[#004aad] mb-4">
@@ -667,7 +764,9 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                               value={getDraftValue(app, "highResPhotosUrl")}
                               loading={appUploads.highResPhotosUrl}
                               error={appErrors.highResPhotosUrl}
-                              success={responseMap[app.id]?.highResPhotosUrl ? "새 파일 업로드 완료" : ""}
+                              success={
+                                responseMap[app.id]?.highResPhotosUrl ? "새 파일 업로드 완료" : ""
+                              }
                               onClick={() => highResRefs.current[app.id]?.click()}
                             />
 
@@ -711,6 +810,11 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
                                 회신 내용
                               </p>
+
+                              <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep mb-3">
+                                어떤 자료를 보완했는지, 또는 함께 확인해 주셨으면 하는 내용을 간단히 적어 주세요.
+                              </p>
+
                               <textarea
                                 value={responseMap[app.id]?.additionalResponse || ""}
                                 onChange={(e) =>
@@ -720,6 +824,17 @@ const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedAppli
                                 className="w-full h-32 rounded-2xl border border-zinc-100 bg-white p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
                               />
                             </div>
+
+                            {app.additionalSubmittedAt ? (
+                              <div className="rounded-[18px] border border-zinc-100 bg-white p-4">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-2">
+                                  Last Submission
+                                </p>
+                                <p className="text-sm font-bold text-zinc-700">
+                                  {formatDateTime(app.additionalSubmittedAt)}
+                                </p>
+                              </div>
+                            ) : null}
 
                             <button
                               onClick={() => handleResubmit(app)}

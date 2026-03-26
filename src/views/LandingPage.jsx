@@ -9,6 +9,8 @@ import {
   Truck,
   FileText,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import SupportCard from "../components/ui/SupportCard";
 import PreparationItem from "../components/ui/PreparationItem";
@@ -18,6 +20,7 @@ const DEFAULT_PROGRAM_ID = PROGRAMS[2]?.id || PROGRAMS[0].id;
 
 const LandingPage = ({ onSelectProgram }) => {
   const [hoveredProgramId, setHoveredProgramId] = useState(DEFAULT_PROGRAM_ID);
+  const [mobileOpenId, setMobileOpenId] = useState(DEFAULT_PROGRAM_ID);
 
   return (
     <div className="animate-in fade-in duration-1000 space-y-60 px-4">
@@ -112,8 +115,117 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
         </div>
 
+        {/* Mobile */}
+        <div className="md:hidden space-y-4">
+          {PROGRAMS.map((program, index) => {
+            const isOpen = mobileOpenId === program.id;
+
+            return (
+              <div
+                key={program.id}
+                className={`rounded-[30px] border overflow-hidden transition-all ${
+                  isOpen
+                    ? "border-[#004aad]/20 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.08)]"
+                    : "border-zinc-200 bg-white"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMobileOpenId((prev) => (prev === program.id ? null : program.id))
+                  }
+                  className="w-full text-left px-5 py-5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-3">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#004aad]/8 text-[#004aad] text-[9px] font-black uppercase tracking-[0.18em]">
+                          <Sparkles size={10} />
+                          {program.badge}
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-300">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                      </div>
+
+                      <h3 className="text-2xl font-black tracking-tight text-zinc-900 leading-none">
+                        {program.name}
+                      </h3>
+
+                      <p className="mt-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
+                        {program.subtitle}
+                      </p>
+
+                      <p className="mt-4 text-sm font-medium text-zinc-500 leading-relaxed break-keep">
+                        {program.description}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <div className="text-[9px] font-black uppercase tracking-[0.24em] text-zinc-300 mb-1">
+                        Fee
+                      </div>
+                      <div className="flex items-end gap-1 justify-end">
+                        <span className="text-3xl font-black tracking-tighter text-zinc-900">
+                          {program.price}
+                        </span>
+                        <span className="text-[10px] font-bold text-zinc-400 mb-1">
+                          만원
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex justify-end text-zinc-400">
+                        {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="px-5 pb-5">
+                    <div className="border-t border-zinc-100 pt-5">
+                      <div className="space-y-3 mb-5">
+                        {program.details.map((item, detailIndex) => (
+                          <div
+                            key={item}
+                            className="flex items-start gap-3 bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-3"
+                          >
+                            <span className="text-[9px] font-black uppercase tracking-[0.24em] text-zinc-300 pt-1 shrink-0">
+                              {String(detailIndex + 1).padStart(2, "0")}
+                            </span>
+                            <span className="text-[13px] font-bold text-zinc-700 leading-relaxed break-keep">
+                              {item}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => onSelectProgram(program)}
+                        className="w-full inline-flex items-center justify-center gap-3 bg-[#004aad] text-white px-5 py-4 rounded-full font-black uppercase tracking-[0.2em] text-[10px] shadow-lg shadow-[#004aad]/20"
+                      >
+                        이 프로그램으로 선택하기 <ArrowRight size={15} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="pt-4 flex justify-center">
+            <div className="inline-flex items-center gap-3 bg-zinc-900 text-white px-5 py-3 rounded-full shadow-xl">
+              <Sparkles size={16} />
+              <span className="text-[10px] font-black uppercase tracking-[0.18em]">
+                프로그램 선택 후 신청이 시작됩니다
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop */}
         <div
-          className="relative rounded-[44px] border border-zinc-200 bg-white overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.06)]"
+          className="hidden md:block relative rounded-[44px] border border-zinc-200 bg-white overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.06)]"
           onMouseLeave={() => setHoveredProgramId(DEFAULT_PROGRAM_ID)}
         >
           <div className="grid grid-cols-4 border-b border-zinc-100 bg-zinc-50/70">
@@ -141,7 +253,7 @@ const LandingPage = ({ onSelectProgram }) => {
             })}
           </div>
 
-          <div className="flex flex-col xl:flex-row h-[640px] xl:h-[620px] bg-zinc-950">
+          <div className="flex flex-col xl:flex-row h-160 xl:h-155 bg-zinc-950">
             {PROGRAMS.map((program, index) => {
               const isActive = hoveredProgramId === program.id;
               const isCollapsed = !isActive;
@@ -165,7 +277,7 @@ const LandingPage = ({ onSelectProgram }) => {
                   )}
 
                   {!isActive && (
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/20 pointer-events-none" />
+                    <div className="absolute inset-0 bg-linear-to-b from-white/3 via-transparent to-black/20 pointer-events-none" />
                   )}
 
                   <div className="relative z-10 h-full">
@@ -233,7 +345,7 @@ const LandingPage = ({ onSelectProgram }) => {
                           </div>
                         </div>
 
-                        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-[#004aad]/35 to-transparent" />
+                        <div className="absolute bottom-0 left-0 w-full h-px bg-linear-to-r from-transparent via-[#004aad]/35 to-transparent" />
                       </div>
                     ) : (
                       <div className="h-full flex flex-col items-center justify-between py-7 px-3">
@@ -261,7 +373,7 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
         </div>
 
-        <div className="mt-12 md:mt-14 flex justify-center">
+        <div className="hidden md:flex mt-12 md:mt-14 justify-center">
           <div className="inline-flex items-center gap-3 bg-zinc-900 text-white px-6 md:px-8 py-4 rounded-full shadow-xl">
             <Sparkles size={18} />
             <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.22em]">
