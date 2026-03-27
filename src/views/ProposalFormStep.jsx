@@ -15,7 +15,6 @@ import {
 import {
   doc,
   setDoc,
-  updateDoc,
   serverTimestamp,
   runTransaction,
   addDoc,
@@ -105,7 +104,9 @@ const validateFormData = ({ formData, partnerType, selectedProgram }) => {
   }
 
   if (!formData.profilePhotoUrl) {
-    errors.profilePhotoUrl = isBrand ? "브랜드 로고를 업로드해 주세요." : "프로필 사진을 업로드해 주세요.";
+    errors.profilePhotoUrl = isBrand
+      ? "브랜드 로고를 업로드해 주세요."
+      : "프로필 사진을 업로드해 주세요.";
   }
   if (!formData.portfolioUrl) {
     errors.portfolioUrl = "포트폴리오 파일을 업로드해 주세요.";
@@ -123,7 +124,7 @@ const validateFormData = ({ formData, partnerType, selectedProgram }) => {
 const UploadStatus = ({ error, successText }) => {
   if (error) {
     return (
-      <div className="mt-3 flex items-center gap-2 text-red-500 text-xs font-black break-keep">
+      <div className="mt-2 flex items-center gap-2 text-red-500 text-[11px] font-black break-keep">
         <AlertCircle size={14} />
         <span>{error}</span>
       </div>
@@ -132,7 +133,7 @@ const UploadStatus = ({ error, successText }) => {
 
   if (successText) {
     return (
-      <div className="mt-3 flex items-center gap-2 text-emerald-600 text-xs font-black break-keep">
+      <div className="mt-2 flex items-center gap-2 text-emerald-600 text-[11px] font-black break-keep">
         <CheckCircle2 size={14} />
         <span>{successText}</span>
       </div>
@@ -141,6 +142,13 @@ const UploadStatus = ({ error, successText }) => {
 
   return null;
 };
+
+const STEP_ITEMS = [
+  { key: "program", no: "01", label: "PROGRAM" },
+  { key: "info", no: "02", label: "INFO" },
+  { key: "upload", no: "03", label: "UPLOAD" },
+  { key: "submit", no: "04", label: "SUBMIT" },
+];
 
 const ProposalFormStep = ({
   selectedDate,
@@ -163,6 +171,11 @@ const ProposalFormStep = ({
   const [uploadErrors, setUploadErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftBanner, setDraftBanner] = useState(null);
+  const [activeStepKey, setActiveStepKey] = useState("info");
+
+  const infoSectionRef = useRef(null);
+  const uploadSectionRef = useRef(null);
+  const submitSectionRef = useRef(null);
 
   const fileInputRefs = {
     profile: useRef(),
@@ -180,6 +193,52 @@ const ProposalFormStep = ({
   const draftDocRef = user?.uid
     ? doc(db, "artifacts", appId, "users", user.uid, "drafts", "current")
     : null;
+
+  useEffect(() => {
+    const getStepByScroll = () => {
+      const sections = [
+        { key: "info", ref: infoSectionRef },
+        { key: "upload", ref: uploadSectionRef },
+        { key: "submit", ref: submitSectionRef },
+      ];
+
+      const anchorY = 170;
+      let current = "info";
+      let smallestDistance = Number.POSITIVE_INFINITY;
+
+      sections.forEach(({ key, ref }) => {
+        const el = ref.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const distance = Math.abs(rect.top - anchorY);
+
+        if (rect.top <= anchorY + 40 && distance < smallestDistance) {
+          smallestDistance = distance;
+          current = key;
+        }
+      });
+
+      // 맨 아래 근처면 SUBMIT 우선
+      const submitEl = submitSectionRef.current;
+      if (submitEl) {
+        const rect = submitEl.getBoundingClientRect();
+        if (rect.top <= window.innerHeight * 0.72) {
+          current = "submit";
+        }
+      }
+
+      setActiveStepKey(current);
+    };
+
+    getStepByScroll();
+    window.addEventListener("scroll", getStepByScroll, { passive: true });
+    window.addEventListener("resize", getStepByScroll);
+
+    return () => {
+      window.removeEventListener("scroll", getStepByScroll);
+      window.removeEventListener("resize", getStepByScroll);
+    };
+  }, []);
 
   const syncWritingPresence = async (date, uid, expiresAtMs = null) => {
     if (!date || !uid) return;
@@ -278,7 +337,7 @@ const ProposalFormStep = ({
     };
 
     restoreDraft();
-  }, [draftDocRef, user]);
+  }, [draftDocRef, user, setFormData, setSelectedDate, setSelectedProgram, setPartnerType]);
 
   const setUploading = (field, value) => {
     setUploadingMap((prev) => ({ ...prev, [field]: value }));
@@ -479,6 +538,10 @@ const ProposalFormStep = ({
         }
       );
 
+      const applicationDetailUrl = `${window.location.origin}/?view=my-page&applicationId=${encodeURIComponent(
+        appDocRef.id
+      )}&app=${encodeURIComponent(appDocRef.id)}`;
+
       try {
         await sendApplicationEmails({
           applicantName:
@@ -495,10 +558,36 @@ const ProposalFormStep = ({
           phone: normalizePhone(formData.phone),
           brandName: formData.brandName,
           stageName: formData.stageName,
-          myPageUrl: `${window.location.origin}/?view=my-page`,
+          applicationDetailUrl,
+          submittedAt: new Date().toISOString(),
+          applicationId: appDocRef.id,
         });
       } catch (mailError) {
         console.error("mail send failed:", mailError);
+      }
+
+      try {
+        await fetch("/.netlify/functions/send-kakao-alimtalk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "application_received",
+            to: normalizePhone(formData.phone),
+            applicantName:
+              formData.name ||
+              formData.realName ||
+              formData.brandName ||
+              formData.stageName ||
+              "Applicant",
+            exhibitionTitle: formData.exhibitionTitle,
+            selectedDate,
+            selectedProgram,
+            applicationId: appDocRef.id,
+            applicationDetailUrl,
+          }),
+        });
+      } catch (kakaoError) {
+        console.error("application_received kakao failed:", kakaoError);
       }
 
       await deleteDraftCompletely({
@@ -515,11 +604,14 @@ const ProposalFormStep = ({
   };
 
   return (
-    <section className="max-w-4xl mx-auto animate-in fade-in py-10 min-h-screen relative z-10 text-zinc-900 text-left px-4">
-      <div className="flex justify-between items-center mb-16 text-left">
+    <section
+      id="application-form-section"
+      className="max-w-4xl mx-auto animate-in fade-in py-8 md:py-10 min-h-screen relative z-10 text-zinc-900 text-left px-4"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8 md:mb-10">
         <button
           onClick={onBack}
-          className="text-zinc-400 hover:text-black flex items-center text-xs font-black uppercase tracking-widest gap-2 transition-all hover:-translate-x-1 text-left"
+          className="w-full sm:w-auto justify-center sm:justify-start text-zinc-400 hover:text-black flex items-center text-[11px] font-black uppercase tracking-[0.18em] gap-2 transition-all hover:-translate-x-1 rounded-2xl border border-zinc-100 bg-white px-4 py-3"
         >
           <ChevronLeft size={16} /> Calendar
         </button>
@@ -527,14 +619,120 @@ const ProposalFormStep = ({
         <button
           onClick={handleSaveDraft}
           disabled={isUploading || isSubmitting}
-          className="flex items-center gap-2 bg-zinc-50 px-6 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-white border border-transparent hover:border-gray-100 transition-all shadow-sm shadow-zinc-100 text-left disabled:opacity-40"
+          className="w-full sm:w-auto justify-center flex items-center gap-2 bg-zinc-50 px-5 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-white border border-zinc-100 transition-all shadow-sm shadow-zinc-100 disabled:opacity-40"
         >
           <Save size={16} /> Save Draft
         </button>
       </div>
 
+      <div className="sticky top-3 z-30 mb-8 md:mb-10">
+        <div className="rounded-[24px] border border-zinc-100 bg-white/92 backdrop-blur-md px-4 py-4 md:px-5 md:py-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            {STEP_ITEMS.map((step, index) => {
+              const isDone =
+                step.key === "program" ||
+                (step.key === "info" &&
+                  (activeStepKey === "upload" || activeStepKey === "submit")) ||
+                (step.key === "upload" && activeStepKey === "submit");
+
+              const isActive = step.key === activeStepKey;
+
+              return (
+                <React.Fragment key={step.key}>
+                  <div
+                    className={`min-w-[88px] md:min-w-[110px] flex-1 rounded-2xl border px-3 py-3 text-center transition-all ${
+                      isActive
+                        ? "border-[#004aad]/20 bg-[#004aad]/8"
+                        : isDone
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-zinc-200 bg-zinc-50"
+                    }`}
+                  >
+                    <div
+                      className={`text-[9px] font-black uppercase tracking-[0.22em] mb-1 ${
+                        isActive
+                          ? "text-[#004aad]"
+                          : isDone
+                          ? "text-emerald-600"
+                          : "text-zinc-300"
+                      }`}
+                    >
+                      {step.no}
+                    </div>
+                    <div
+                      className={`text-[11px] md:text-xs font-black uppercase tracking-[0.16em] ${
+                        isActive
+                          ? "text-[#004aad]"
+                          : isDone
+                          ? "text-emerald-700"
+                          : "text-zinc-500"
+                      }`}
+                    >
+                      {step.label}
+                    </div>
+                  </div>
+
+                  {index !== STEP_ITEMS.length - 1 && (
+                    <div className="hidden sm:block h-px flex-1 min-w-[16px] bg-zinc-200" />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-8 md:mb-10 grid gap-4 md:grid-cols-[0.78fr_1.22fr]">
+        <div className="rounded-[24px] md:rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 px-5 py-5 md:px-6 md:py-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad] mb-2">
+            Estimated Time
+          </p>
+          <p className="text-2xl md:text-3xl font-black tracking-tight text-zinc-900">
+            약 3분
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-500 leading-relaxed break-keep">
+            기본 정보 입력과 자료 업로드까지 포함한 평균 소요 시간입니다.
+          </p>
+        </div>
+
+        <div className="rounded-[24px] md:rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400 mb-3">
+            Before You Start
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                Portfolio
+              </p>
+              <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                포트폴리오 PDF 또는 ZIP
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                Work List
+              </p>
+              <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                작품리스트 또는 기획 구성안
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                Image
+              </p>
+              <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                대표 이미지 또는 로고 원본
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {draftBanner && (
-        <div className="mb-8 bg-[#004aad]/5 border border-[#004aad]/10 rounded-[28px] px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="mb-8 bg-[#004aad]/5 border border-[#004aad]/10 rounded-[24px] md:rounded-[28px] px-5 py-5 md:px-6 md:py-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="text-left">
             <div className="flex items-center gap-2 text-[#004aad] text-xs font-black uppercase tracking-[0.2em] mb-2">
               <RefreshCcw size={14} />
@@ -542,12 +740,12 @@ const ProposalFormStep = ({
                 ? "Draft Automatically Restored"
                 : "Draft Saved"}
             </div>
-            <p className="text-sm font-bold text-zinc-700 break-keep">
+            <p className="text-sm font-bold text-zinc-700 break-keep leading-relaxed">
               {draftBanner.type === "restored"
                 ? "이전에 저장한 작성중인 내용을 자동 복원했습니다."
                 : "임시저장되었습니다. 24시간 후 자동 만료됩니다."}
             </p>
-            <p className="text-xs font-black text-zinc-400 mt-2">
+            <p className="text-xs font-black text-zinc-400 mt-2 leading-relaxed">
               {draftBanner.selectedDate}{" "}
               {draftBanner.selectedProgram
                 ? `· ${draftBanner.selectedProgram.name} · ${draftBanner.selectedProgram.price}만원`
@@ -557,7 +755,7 @@ const ProposalFormStep = ({
 
           <button
             onClick={handleDiscardDraft}
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-red-200 text-red-500 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-red-50 transition-all"
+            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-red-200 text-red-500 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-red-50 transition-all"
           >
             <Trash2 size={14} />
             Draft 삭제 후 새로 작성
@@ -565,7 +763,7 @@ const ProposalFormStep = ({
         </div>
       )}
 
-      <div className="bg-white/80 backdrop-blur-xl border border-gray-100 p-8 md:p-20 rounded-[60px] shadow-2xl space-y-16">
+      <div className="bg-white/80 backdrop-blur-xl border border-gray-100 p-5 sm:p-6 md:p-12 xl:p-16 rounded-[34px] md:rounded-[48px] xl:rounded-[60px] shadow-2xl space-y-12 md:space-y-16">
         <input
           type="file"
           ref={fileInputRefs.profile}
@@ -595,21 +793,28 @@ const ProposalFormStep = ({
           onChange={(e) => handleDocumentUpload(e, "portfolioUrl", "portfolio")}
         />
 
-        <header className="border-b border-zinc-100 pb-10 text-left">
-          <h2 className="text-3xl font-black uppercase tracking-tighter text-[#004aad] flex items-center gap-3">
-            {isBrand ? <Building2 size={32} /> : <Palette size={32} />}
-            {isBrand ? "브랜드 및 기획자 제안 양식" : "아티스트 전시 지원 양식"}
-          </h2>
-          <p className="text-zinc-400 text-xs mt-2 font-black tracking-widest uppercase">
-            일정: {selectedDate} ~ {addDays(selectedDate, 6)}
-          </p>
+        <header className="border-b border-zinc-100 pb-8 md:pb-10 text-left">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 text-[#004aad] shrink-0">
+              {isBrand ? <Building2 size={28} /> : <Palette size={28} />}
+            </div>
+
+            <div className="min-w-0">
+              <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tighter text-[#004aad] leading-none break-keep">
+                {isBrand ? "브랜드 및 기획자 제안 양식" : "아티스트 전시 지원 양식"}
+              </h2>
+              <p className="text-zinc-400 text-[10px] sm:text-xs mt-3 font-black tracking-[0.18em] sm:tracking-widest uppercase leading-relaxed">
+                일정: {selectedDate} ~ {addDays(selectedDate, 6)}
+              </p>
+            </div>
+          </div>
 
           {selectedProgram && (
-            <div className="mt-6 inline-flex flex-col gap-2 bg-[#004aad]/5 border border-[#004aad]/10 rounded-2xl px-5 py-4">
+            <div className="mt-6 w-full sm:inline-flex sm:w-auto flex-col gap-2 bg-[#004aad]/5 border border-[#004aad]/10 rounded-2xl px-5 py-4">
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#004aad]">
                 Selected Program
               </span>
-              <span className="text-lg font-black text-zinc-900">
+              <span className="text-base sm:text-lg font-black text-zinc-900 break-keep">
                 {selectedProgram.name} · {selectedProgram.price}만원
               </span>
             </div>
@@ -622,273 +827,327 @@ const ProposalFormStep = ({
           )}
         </header>
 
-        {isBrand ? (
-          <div className="grid md:grid-cols-2 gap-12 animate-in fade-in text-left">
-            <div>
-              <InputBlock
-                label="브랜드명 / 소속"
-                required
-                value={formData.brandName}
-                onChange={(e) =>
-                  setFormData({ ...formData, brandName: e.target.value })
-                }
-              />
-              {fieldErrors.brandName && (
-                <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.brandName}</p>
-              )}
-            </div>
-
-            <div>
-              <InputBlock
-                label="담당자 성함"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-              {fieldErrors.name && (
-                <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.name}</p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-12 animate-in fade-in text-left">
-            <div className="grid md:grid-cols-2 gap-12 text-left">
+        <div ref={infoSectionRef} className="space-y-12 md:space-y-16">
+          {isBrand ? (
+            <div className="grid md:grid-cols-2 gap-10 md:gap-12 animate-in fade-in text-left">
               <div>
                 <InputBlock
-                  label="아티스트 본명"
+                  label="브랜드명 / 소속"
                   required
-                  value={formData.realName}
+                  value={formData.brandName}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      realName: e.target.value,
-                      name: e.target.value,
-                    })
+                    setFormData({ ...formData, brandName: e.target.value })
                   }
                 />
-                {fieldErrors.realName && (
-                  <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.realName}</p>
+                {fieldErrors.brandName && (
+                  <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.brandName}</p>
                 )}
               </div>
 
               <div>
                 <InputBlock
-                  label="활동명 / 예명"
-                  placeholder="미입력 시 본명 사용"
-                  value={formData.stageName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, stageName: e.target.value })
-                  }
+                  label="담당자 성함"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
+                {fieldErrors.name && (
+                  <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.name}</p>
+                )}
               </div>
             </div>
-
-            <InputBlock
-              label="영문 이름"
-              placeholder="예: Hong Gil Dong"
-              value={formData.englishName}
-              onChange={(e) =>
-                setFormData({ ...formData, englishName: e.target.value })
-              }
-            />
-          </div>
-        )}
-
-        <div className="grid md:grid-cols-2 gap-12 text-left">
-          <div>
-            <InputBlock
-              label="연락처"
-              placeholder="010-0000-0000"
-              required
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            />
-            {fieldErrors.phone && (
-              <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.phone}</p>
-            )}
-          </div>
-
-          <div>
-            <InputBlock
-              label={isBrand ? "설립일" : "생년월일"}
-              placeholder="YYYYMMDD"
-              required
-              value={formData.birthDate}
-              onChange={(e) =>
-                setFormData({ ...formData, birthDate: e.target.value })
-              }
-            />
-            {fieldErrors.birthDate && (
-              <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.birthDate}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-6 text-left">
-          <label className="text-[11px] font-black uppercase text-[#004aad] tracking-widest text-left">
-            주소 *
-          </label>
-          <input
-            className="w-full bg-zinc-50/50 border border-gray-100 p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors text-left"
-            placeholder="기본 주소"
-            value={formData.addressMain}
-            onChange={(e) =>
-              setFormData({ ...formData, addressMain: e.target.value })
-            }
-          />
-          <input
-            className="w-full bg-zinc-50/50 border border-gray-100 p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors text-left"
-            placeholder="상세 주소"
-            value={formData.addressDetail}
-            onChange={(e) =>
-              setFormData({ ...formData, addressDetail: e.target.value })
-            }
-          />
-          {fieldErrors.addressMain && (
-            <p className="text-red-500 text-xs font-black">{fieldErrors.addressMain}</p>
-          )}
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-12 border-t border-gray-50 pt-16 text-left">
-          <div>
-            <button
-              onClick={() => fileInputRefs.profile.current.click()}
-              className="aspect-square w-full bg-zinc-50 border border-dashed border-zinc-200 rounded-[48px] flex flex-col items-center justify-center gap-2 hover:bg-white transition-all overflow-hidden relative group shadow-inner"
-            >
-              {formData.profilePhotoUrl ? (
-                <img
-                  src={formData.profilePhotoUrl}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  alt="Profile"
-                />
-              ) : null}
-
-              {uploadingMap.profilePhotoUrl ? (
-                <Loader2 className="animate-spin text-[#004aad]" />
-              ) : (
-                <div className="z-10 bg-white/80 p-5 rounded-full shadow-xl transition-transform group-hover:scale-110">
-                  <Upload size={24} className="text-[#004aad]" />
+          ) : (
+            <div className="space-y-10 md:space-y-12 animate-in fade-in text-left">
+              <div className="grid md:grid-cols-2 gap-10 md:gap-12 text-left">
+                <div>
+                  <InputBlock
+                    label="아티스트 본명"
+                    required
+                    value={formData.realName}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        realName: e.target.value,
+                        name: e.target.value,
+                      })
+                    }
+                  />
+                  {fieldErrors.realName && (
+                    <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.realName}</p>
+                  )}
                 </div>
-              )}
 
-              <div className="z-10 text-[9px] font-black text-zinc-400 mt-2 text-center uppercase">
-                {isBrand ? "BRAND LOGO" : "PROFILE PHOTO"}
+                <div>
+                  <InputBlock
+                    label="활동명 / 예명"
+                    placeholder="미입력 시 본명 사용"
+                    value={formData.stageName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, stageName: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-            </button>
 
-            <UploadStatus
-              error={uploadErrors.profilePhotoUrl || fieldErrors.profilePhotoUrl}
-              successText={formData.profilePhotoUrl ? "이미지 업로드 완료" : ""}
-            />
-          </div>
+              <InputBlock
+                label="영문 이름"
+                placeholder="예: Hong Gil Dong"
+                value={formData.englishName}
+                onChange={(e) =>
+                  setFormData({ ...formData, englishName: e.target.value })
+                }
+              />
+            </div>
+          )}
 
-          <div className="space-y-12 text-zinc-900 text-left">
-            <InputBlock
-              label="SNS / Website"
-              placeholder="@instagram / https://"
-              value={formData.snsLink}
-              onChange={(e) => setFormData({ ...formData, snsLink: e.target.value })}
-            />
+          <div className="grid md:grid-cols-2 gap-10 md:gap-12 text-left">
+            <div>
+              <InputBlock
+                label="연락처"
+                placeholder="010-0000-0000"
+                required
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+              {fieldErrors.phone && (
+                <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.phone}</p>
+              )}
+            </div>
 
             <div>
               <InputBlock
-                label={isBrand ? "프로젝트 명" : "전시명 (가제)"}
+                label={isBrand ? "설립일" : "생년월일"}
+                placeholder="YYYYMMDD"
                 required
-                value={formData.exhibitionTitle}
+                value={formData.birthDate}
                 onChange={(e) =>
-                  setFormData({ ...formData, exhibitionTitle: e.target.value })
+                  setFormData({ ...formData, birthDate: e.target.value })
                 }
               />
-              {fieldErrors.exhibitionTitle && (
-                <p className="mt-3 text-red-500 text-xs font-black">
-                  {fieldErrors.exhibitionTitle}
-                </p>
+              {fieldErrors.birthDate && (
+                <p className="mt-3 text-red-500 text-xs font-black">{fieldErrors.birthDate}</p>
               )}
             </div>
           </div>
+
+          <div className="space-y-5 md:space-y-6 text-left">
+            <label className="text-[11px] font-black uppercase text-[#004aad] tracking-widest">
+              주소 *
+            </label>
+            <input
+              className="w-full bg-zinc-50/50 border border-gray-100 p-5 md:p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors text-left"
+              placeholder="기본 주소"
+              value={formData.addressMain}
+              onChange={(e) =>
+                setFormData({ ...formData, addressMain: e.target.value })
+              }
+            />
+            <input
+              className="w-full bg-zinc-50/50 border border-gray-100 p-5 md:p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors text-left"
+              placeholder="상세 주소"
+              value={formData.addressDetail}
+              onChange={(e) =>
+                setFormData({ ...formData, addressDetail: e.target.value })
+              }
+            />
+            {fieldErrors.addressMain && (
+              <p className="text-red-500 text-xs font-black">{fieldErrors.addressMain}</p>
+            )}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-10 md:gap-12 border-t border-gray-50 pt-12 md:pt-16 text-left">
+            <div>
+              <button
+                onClick={() => fileInputRefs.profile.current.click()}
+                className="aspect-[1/1] sm:aspect-square w-full bg-zinc-50 border border-dashed border-zinc-200 rounded-[30px] md:rounded-[42px] flex flex-col items-center justify-center gap-2 hover:bg-white transition-all overflow-hidden relative group shadow-inner"
+              >
+                {formData.profilePhotoUrl ? (
+                  <img
+                    src={formData.profilePhotoUrl}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    alt="Profile"
+                  />
+                ) : null}
+
+                {uploadingMap.profilePhotoUrl ? (
+                  <Loader2 className="animate-spin text-[#004aad]" />
+                ) : (
+                  <div className="z-10 bg-white/80 p-4 md:p-5 rounded-full shadow-xl transition-transform group-hover:scale-110">
+                    <Upload size={22} className="text-[#004aad]" />
+                  </div>
+                )}
+
+                <div className="z-10 text-[9px] font-black text-zinc-400 mt-2 text-center uppercase">
+                  {isBrand ? "BRAND LOGO" : "PROFILE PHOTO"}
+                </div>
+              </button>
+
+              <UploadStatus
+                error={uploadErrors.profilePhotoUrl || fieldErrors.profilePhotoUrl}
+                successText={formData.profilePhotoUrl ? "이미지 업로드 완료" : ""}
+              />
+            </div>
+
+            <div className="space-y-10 md:space-y-12 text-zinc-900 text-left">
+              <InputBlock
+                label="SNS / Website"
+                placeholder="@instagram / https://"
+                value={formData.snsLink}
+                onChange={(e) =>
+                  setFormData({ ...formData, snsLink: e.target.value })
+                }
+              />
+
+              <div>
+                <InputBlock
+                  label={isBrand ? "프로젝트 명" : "전시명 (가제)"}
+                  required
+                  value={formData.exhibitionTitle}
+                  onChange={(e) =>
+                    setFormData({ ...formData, exhibitionTitle: e.target.value })
+                  }
+                />
+                {fieldErrors.exhibitionTitle && (
+                  <p className="mt-3 text-red-500 text-xs font-black">
+                    {fieldErrors.exhibitionTitle}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-5 md:space-y-6 pt-8 md:pt-10 border-t border-gray-50 text-left">
+            <label className="text-[11px] font-black uppercase text-[#004aad] tracking-widest leading-relaxed">
+              {isBrand
+                ? "공간 활용 계획 및 협업 제안서 *"
+                : "작가 노트 및 프로젝트 개요 *"}
+            </label>
+            <textarea
+              className="w-full bg-zinc-50/50 border border-gray-100 p-5 md:p-10 rounded-[28px] md:rounded-[40px] h-56 md:h-80 text-base outline-none focus:bg-white shadow-sm resize-none font-bold transition-colors text-zinc-900 text-left"
+              value={isBrand ? formData.projectPurpose : formData.artistNote}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  [isBrand ? "projectPurpose" : "artistNote"]: e.target.value,
+                })
+              }
+            />
+            {(fieldErrors.projectPurpose || fieldErrors.artistNote) && (
+              <p className="text-red-500 text-xs font-black">
+                {fieldErrors.projectPurpose || fieldErrors.artistNote}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-6 pt-10 border-t border-gray-50 text-left">
-          <label className="text-[11px] font-black uppercase text-[#004aad] tracking-widest leading-relaxed text-left">
-            {isBrand
-              ? "공간 활용 계획 및 협업 제안서 *"
-              : "작가 노트 및 프로젝트 개요 *"}
-          </label>
-          <textarea
-            className="w-full bg-zinc-50/50 border border-gray-100 p-6 md:p-10 rounded-[40px] h-80 text-base outline-none focus:bg-white shadow-sm resize-none font-bold transition-colors text-zinc-900 text-left"
-            value={isBrand ? formData.projectPurpose : formData.artistNote}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                [isBrand ? "projectPurpose" : "artistNote"]: e.target.value,
-              })
-            }
-          />
-          {(fieldErrors.projectPurpose || fieldErrors.artistNote) && (
-            <p className="text-red-500 text-xs font-black">
-              {fieldErrors.projectPurpose || fieldErrors.artistNote}
+        <div ref={uploadSectionRef} className="space-y-12">
+          <div className="grid grid-cols-3 gap-3 md:gap-6">
+            <div>
+              <FileBtn
+                label="포트폴리오"
+                hasFile={!!formData.portfolioUrl}
+                onClick={() => fileInputRefs.portfolio.current.click()}
+                loading={uploadingMap.portfolioUrl}
+              />
+              <UploadStatus
+                error={uploadErrors.portfolioUrl || fieldErrors.portfolioUrl}
+                successText={formData.portfolioUrl ? "문서 업로드 완료" : ""}
+              />
+            </div>
+
+            <div>
+              <FileBtn
+                label="작품리스트"
+                hasFile={!!formData.workListUrl}
+                onClick={() => fileInputRefs.workList.current.click()}
+                loading={uploadingMap.workListUrl}
+              />
+              <UploadStatus
+                error={uploadErrors.workListUrl || fieldErrors.workListUrl}
+                successText={formData.workListUrl ? "문서 업로드 완료" : ""}
+              />
+            </div>
+
+            <div>
+              <FileBtn
+                label="대표작 원본"
+                hasFile={!!formData.highResPhotosUrl}
+                onClick={() => fileInputRefs.highRes.current.click()}
+                loading={uploadingMap.highResPhotosUrl}
+                isPrimary
+              />
+              <UploadStatus
+                error={uploadErrors.highResPhotosUrl || fieldErrors.highResPhotosUrl}
+                successText={formData.highResPhotosUrl ? "이미지 업로드 완료" : ""}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-[24px] md:rounded-[28px] border border-[#004aad]/12 bg-[#004aad]/5 px-5 py-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad] mb-3">
+              Upload Guide
             </p>
-          )}
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <FileBtn
-              label="포트폴리오"
-              hasFile={!!formData.portfolioUrl}
-              onClick={() => fileInputRefs.portfolio.current.click()}
-              loading={uploadingMap.portfolioUrl}
-            />
-            <UploadStatus
-              error={uploadErrors.portfolioUrl || fieldErrors.portfolioUrl}
-              successText={formData.portfolioUrl ? "문서 업로드 완료" : ""}
-            />
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                  Portfolio
+                </p>
+                <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                  PDF, ZIP, DOC, DOCX
+                </p>
+                <p className="mt-2 text-xs font-bold text-zinc-400 leading-relaxed break-keep">
+                  포트폴리오 전체본 또는 대표 작업 중심 자료를 권장합니다.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                  Work List
+                </p>
+                <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                  PDF, ZIP, DOC, DOCX
+                </p>
+                <p className="mt-2 text-xs font-bold text-zinc-400 leading-relaxed break-keep">
+                  작품 정보, 캡션, 구성안이 정리된 문서를 권장합니다.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+                  Image
+                </p>
+                <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                  JPG, PNG, WEBP
+                </p>
+                <p className="mt-2 text-xs font-bold text-zinc-400 leading-relaxed break-keep">
+                  대표작 또는 로고는 가능한 한 고해상도 원본을 권장합니다.
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs font-bold text-zinc-400 leading-relaxed break-keep">
+              업로드 중에는 제출 버튼이 비활성화됩니다. 파일 업로드가 모두 끝난 뒤 제출해 주세요.
+            </p>
           </div>
 
-          <div>
-            <FileBtn
-              label="작품리스트"
-              hasFile={!!formData.workListUrl}
-              onClick={() => fileInputRefs.workList.current.click()}
-              loading={uploadingMap.workListUrl}
-            />
-            <UploadStatus
-              error={uploadErrors.workListUrl || fieldErrors.workListUrl}
-              successText={formData.workListUrl ? "문서 업로드 완료" : ""}
-            />
-          </div>
-
-          <div>
-            <FileBtn
-              label="대표작 원본"
-              hasFile={!!formData.highResPhotosUrl}
-              onClick={() => fileInputRefs.highRes.current.click()}
-              loading={uploadingMap.highResPhotosUrl}
-              isPrimary
-            />
-            <UploadStatus
-              error={uploadErrors.highResPhotosUrl || fieldErrors.highResPhotosUrl}
-              successText={formData.highResPhotosUrl ? "이미지 업로드 완료" : ""}
-            />
+          <div className="rounded-[24px] md:rounded-[28px] border border-zinc-100 bg-zinc-50 px-5 py-4 text-xs font-bold text-zinc-500 leading-relaxed break-keep">
+            이미지 파일은 ImgBB로 업로드되고, 포트폴리오/작품리스트 같은 문서 파일은 Cloudflare R2로 업로드됩니다.
+            임시저장본은 24시간 후 자동 만료됩니다.
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-zinc-100 bg-zinc-50 px-5 py-4 text-xs font-bold text-zinc-500 leading-relaxed break-keep">
-          이미지 파일은 ImgBB로 업로드되고, 포트폴리오/작품리스트 같은 문서 파일은 Cloudflare R2로 업로드됩니다.
-          임시저장본은 24시간 후 자동 만료됩니다.
-        </div>
-
-        <div className="pt-20 flex flex-col items-center">
-          <label className="flex items-center gap-6 cursor-pointer mb-6 group">
+        <div ref={submitSectionRef} className="pt-10 md:pt-16 flex flex-col items-center">
+          <label className="flex items-start sm:items-center gap-4 md:gap-6 cursor-pointer mb-6 group w-full">
             <input
               type="checkbox"
               checked={formData.privacyAgreed}
               onChange={(e) =>
                 setFormData({ ...formData, privacyAgreed: e.target.checked })
               }
-              className="w-8 h-8 accent-[#004aad] rounded border-zinc-200"
+              className="mt-1 sm:mt-0 w-6 h-6 md:w-8 md:h-8 accent-[#004aad] rounded border-zinc-200 shrink-0"
             />
-            <span className="text-sm md:text-lg font-black text-zinc-400 group-hover:text-zinc-900 transition-colors uppercase tracking-widest text-center">
+            <span className="text-sm md:text-lg font-black text-zinc-400 group-hover:text-zinc-900 transition-colors uppercase tracking-[0.12em] md:tracking-widest break-keep">
               개인정보 수집 및 이용 동의
             </span>
           </label>
@@ -899,22 +1158,28 @@ const ProposalFormStep = ({
             </p>
           )}
 
-          <button
-            onClick={handleSubmit}
-            disabled={isUploading || isSubmitting}
-            className="w-full bg-zinc-900 text-white py-10 rounded-full font-black uppercase tracking-[0.4em] text-xl md:text-2xl shadow-2xl hover:bg-[#004aad] active:scale-95 transition-all text-center shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <span className="inline-flex items-center gap-3">
-                <Loader2 className="animate-spin" size={28} />
-                SUBMITTING
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-3">
-                Submit Proposal <ArrowRight size={32} />
-              </span>
-            )}
-          </button>
+          <div className="w-full space-y-4">
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-xs font-bold text-zinc-500 leading-relaxed break-keep text-center">
+              제출 후 결과 및 추가 요청은 마이페이지와 등록된 이메일, 알림을 통해 순차적으로 안내됩니다.
+            </div>
+
+            <button
+              onClick={handleSubmit}
+              disabled={isUploading || isSubmitting}
+              className="w-full bg-zinc-900 text-white py-6 md:py-10 rounded-full font-black uppercase tracking-[0.24em] md:tracking-[0.4em] text-base md:text-2xl shadow-2xl hover:bg-[#004aad] active:scale-95 transition-all text-center shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <span className="inline-flex items-center gap-3">
+                  <Loader2 className="animate-spin" size={24} />
+                  SUBMITTING
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-3">
+                  Submit Proposal <ArrowRight size={26} />
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </section>
