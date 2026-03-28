@@ -59,13 +59,6 @@ const EMPTY_FORM_DATA = {
   privacyAgreed: false,
 };
 
-const STEP_ITEMS = [
-  { key: "program", no: "01", label: "PROGRAM" },
-  { key: "info", no: "02", label: "INFO" },
-  { key: "upload", no: "03", label: "FILES" },
-  { key: "submit", no: "04", label: "SUBMIT" },
-];
-
 const normalizePhone = (value) => value.replace(/[^\d]/g, "");
 
 const isValidBirthDate = (value) => /^\d{8}$/.test(value);
@@ -153,7 +146,7 @@ const MiniUploadButton = ({ label, hasFile, onClick, loading, isPrimary = false 
   <button
     type="button"
     onClick={onClick}
-    className={`w-full rounded-[20px] border px-2 py-4 sm:px-3 sm:py-5 text-center transition-all ${
+    className={`w-full rounded-[18px] border px-2 py-4 sm:px-3 sm:py-5 text-center transition-all ${
       isPrimary
         ? "border-[#004aad]/18 bg-[#004aad]/6 hover:bg-[#004aad]/10"
         : "border-zinc-200 bg-zinc-50 hover:bg-white"
@@ -173,7 +166,7 @@ const MiniUploadButton = ({ label, hasFile, onClick, loading, isPrimary = false 
       {label}
     </div>
 
-    <div className="mt-1 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-300">
+    <div className="mt-1 text-[9px] font-black uppercase tracking-[0.1em] text-zinc-300">
       {hasFile ? "Done" : "Upload"}
     </div>
   </button>
@@ -200,11 +193,6 @@ const ProposalFormStep = ({
   const [uploadErrors, setUploadErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftBanner, setDraftBanner] = useState(null);
-  const [activeStepKey, setActiveStepKey] = useState("info");
-
-  const infoSectionRef = useRef(null);
-  const uploadSectionRef = useRef(null);
-  const submitSectionRef = useRef(null);
 
   const fileInputRefs = {
     profile: useRef(),
@@ -223,50 +211,36 @@ const ProposalFormStep = ({
     ? doc(db, "artifacts", appId, "users", user.uid, "drafts", "current")
     : null;
 
-  useEffect(() => {
-    const getStepByScroll = () => {
-      const sections = [
-        { key: "info", ref: infoSectionRef },
-        { key: "upload", ref: uploadSectionRef },
-        { key: "submit", ref: submitSectionRef },
-      ];
+  const progress = useMemo(() => {
+    const checks = [];
 
-      const anchorY = 170;
-      let current = "info";
-      let best = Number.POSITIVE_INFINITY;
+    checks.push(!!selectedProgram);
 
-      sections.forEach(({ key, ref }) => {
-        const el = ref.current;
-        if (!el) return;
-        const rect = el.getBoundingClientRect();
-        const distance = Math.abs(rect.top - anchorY);
+    if (isBrand) {
+      checks.push(!!formData.brandName?.trim());
+      checks.push(!!formData.name?.trim());
+      checks.push(!!formData.projectPurpose?.trim());
+    } else {
+      checks.push(!!formData.realName?.trim());
+      checks.push(!!formData.artistNote?.trim());
+    }
 
-        if (rect.top <= anchorY + 40 && distance < best) {
-          best = distance;
-          current = key;
-        }
-      });
+    checks.push(!!formData.phone && isValidPhone(formData.phone));
+    checks.push(!!formData.birthDate && isValidBirthDate(formData.birthDate));
+    checks.push(!!formData.addressMain?.trim());
+    checks.push(!!formData.exhibitionTitle?.trim());
+    checks.push(!!formData.profilePhotoUrl);
+    checks.push(!!formData.portfolioUrl);
+    checks.push(!!formData.workListUrl);
+    checks.push(!!formData.highResPhotosUrl);
+    checks.push(!!formData.privacyAgreed);
 
-      const submitEl = submitSectionRef.current;
-      if (submitEl) {
-        const rect = submitEl.getBoundingClientRect();
-        if (rect.top <= window.innerHeight * 0.72) {
-          current = "submit";
-        }
-      }
+    const done = checks.filter(Boolean).length;
+    const total = checks.length;
+    const percent = Math.round((done / total) * 100);
 
-      setActiveStepKey(current);
-    };
-
-    getStepByScroll();
-    window.addEventListener("scroll", getStepByScroll, { passive: true });
-    window.addEventListener("resize", getStepByScroll);
-
-    return () => {
-      window.removeEventListener("scroll", getStepByScroll);
-      window.removeEventListener("resize", getStepByScroll);
-    };
-  }, []);
+    return { done, total, percent };
+  }, [formData, isBrand, selectedProgram]);
 
   const syncWritingPresence = async (date, uid, expiresAtMs = null) => {
     if (!date || !uid) return;
@@ -636,63 +610,37 @@ const ProposalFormStep = ({
       id="application-form-section"
       className="max-w-4xl mx-auto animate-in fade-in py-8 md:py-10 min-h-screen relative z-10 text-zinc-900 text-left px-4"
     >
-      {/* Fixed Progress */}
       <div className="fixed top-3 left-0 right-0 z-40 px-4 pointer-events-none">
         <div className="max-w-4xl mx-auto">
-          <div className="rounded-[20px] border border-zinc-100 bg-white/95 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.08)] px-2 py-2 sm:px-3 sm:py-3 pointer-events-auto">
-            <div className="grid grid-cols-4 gap-2">
-              {STEP_ITEMS.map((step) => {
-                const isDone =
-                  step.key === "program" ||
-                  (step.key === "info" &&
-                    (activeStepKey === "upload" || activeStepKey === "submit")) ||
-                  (step.key === "upload" && activeStepKey === "submit");
+          <div className="rounded-full border border-zinc-100 bg-white/95 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.08)] px-3 py-2 pointer-events-auto">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[9px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Proposal Progress
+                </div>
+                <div className="text-[11px] sm:text-xs font-black text-zinc-700">
+                  {progress.done} / {progress.total} completed
+                </div>
+              </div>
 
-                const isActive = step.key === activeStepKey;
-
-                return (
+              <div className="w-full max-w-[180px] sm:max-w-[260px]">
+                <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
                   <div
-                    key={step.key}
-                    className={`rounded-2xl border px-1.5 py-2 text-center transition-all min-w-0 ${
-                      isActive
-                        ? "border-[#004aad]/20 bg-[#004aad]/8"
-                        : isDone
-                        ? "border-emerald-200 bg-emerald-50"
-                        : "border-zinc-200 bg-zinc-50"
-                    }`}
-                  >
-                    <div
-                      className={`text-[8px] sm:text-[9px] font-black uppercase tracking-[0.14em] sm:tracking-[0.2em] mb-1 ${
-                        isActive
-                          ? "text-[#004aad]"
-                          : isDone
-                          ? "text-emerald-600"
-                          : "text-zinc-300"
-                      }`}
-                    >
-                      {step.no}
-                    </div>
-                    <div
-                      className={`text-[9px] sm:text-[11px] font-black uppercase tracking-[0.08em] sm:tracking-[0.14em] leading-none ${
-                        isActive
-                          ? "text-[#004aad]"
-                          : isDone
-                          ? "text-emerald-700"
-                          : "text-zinc-500"
-                      }`}
-                    >
-                      {step.label}
-                    </div>
-                  </div>
-                );
-              })}
+                    className="h-full rounded-full bg-[#004aad] transition-all duration-300"
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="text-[11px] sm:text-xs font-black text-[#004aad] shrink-0">
+                {progress.percent}%
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Spacer for fixed bar */}
-      <div className="h-[84px] sm:h-[96px]" />
+      <div className="h-[66px]" />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8 md:mb-10">
         <button
@@ -709,55 +657,6 @@ const ProposalFormStep = ({
         >
           <Save size={16} /> Save Draft
         </button>
-      </div>
-
-      <div className="mb-8 md:mb-10 grid gap-4 md:grid-cols-[0.78fr_1.22fr]">
-        <div className="rounded-[22px] md:rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-4 md:px-6 md:py-6">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-2">
-            Estimated Time
-          </p>
-          <p className="text-2xl md:text-3xl font-black tracking-tight text-zinc-900">
-            약 3분
-          </p>
-          <p className="mt-2 text-[13px] sm:text-sm font-bold text-zinc-500 leading-relaxed break-keep">
-            기본 정보 입력과 자료 업로드까지 포함한 평균 소요 시간입니다.
-          </p>
-        </div>
-
-        <div className="rounded-[22px] md:rounded-[28px] border border-zinc-100 bg-white px-4 py-4 md:px-6 md:py-6">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-3">
-            Before You Start
-          </p>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                Portfolio
-              </p>
-              <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                포트폴리오 PDF 또는 ZIP
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                Work List
-              </p>
-              <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                작품리스트 또는 기획 구성안
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                Image
-              </p>
-              <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                대표 이미지 또는 로고 원본
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {draftBanner && (
@@ -822,7 +721,7 @@ const ProposalFormStep = ({
           onChange={(e) => handleDocumentUpload(e, "portfolioUrl", "portfolio")}
         />
 
-        <header className="border-b border-zinc-100 pb-6 md:pb-10 text-left">
+        <header className="border-b border-zinc-100 pb-6 md:pb-10">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 text-[#004aad] shrink-0">
               {isBrand ? <Building2 size={24} /> : <Palette size={24} />}
@@ -856,7 +755,7 @@ const ProposalFormStep = ({
           )}
         </header>
 
-        <div ref={infoSectionRef} className="space-y-10 md:space-y-16">
+        <div className="space-y-10 md:space-y-16">
           {isBrand ? (
             <div className="grid md:grid-cols-2 gap-8 md:gap-12 text-left">
               <div>
@@ -1067,9 +966,7 @@ const ProposalFormStep = ({
               </p>
             )}
           </div>
-        </div>
 
-        <div ref={uploadSectionRef} className="space-y-10">
           <div className="grid grid-cols-3 gap-2.5 sm:gap-3 md:gap-5">
             <div>
               <MiniUploadButton
@@ -1112,92 +1009,53 @@ const ProposalFormStep = ({
             </div>
           </div>
 
-          <div className="rounded-[22px] md:rounded-[28px] border border-[#004aad]/12 bg-[#004aad]/5 px-4 py-4 md:px-5 md:py-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-3">
-              Upload Guide
-            </p>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-white/80 bg-white px-3 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                  Portfolio
-                </p>
-                <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                  PDF, ZIP, DOC, DOCX
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/80 bg-white px-3 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                  Work List
-                </p>
-                <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                  PDF, ZIP, DOC, DOCX
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/80 bg-white px-3 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                  Image
-                </p>
-                <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-                  JPG, PNG, WEBP
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-4 text-[11px] sm:text-xs font-bold text-zinc-400 leading-relaxed break-keep">
-              업로드 중에는 제출 버튼이 비활성화됩니다. 파일 업로드가 모두 끝난 뒤 제출해 주세요.
-            </p>
-          </div>
-
           <div className="rounded-[22px] md:rounded-[28px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-[11px] sm:text-xs font-bold text-zinc-500 leading-relaxed break-keep">
-            이미지 파일은 ImgBB, 문서 파일은 Cloudflare R2로 업로드됩니다. 임시저장본은 24시간 후 자동 만료됩니다.
+            임시저장본은 24시간 후 자동 만료됩니다.
           </div>
-        </div>
 
-        <div ref={submitSectionRef} className="pt-8 md:pt-12 flex flex-col items-center">
-          <label className="flex items-start sm:items-center gap-3 md:gap-5 cursor-pointer mb-5 group w-full">
-            <input
-              type="checkbox"
-              checked={formData.privacyAgreed}
-              onChange={(e) =>
-                setFormData({ ...formData, privacyAgreed: e.target.checked })
-              }
-              className="mt-0.5 sm:mt-0 w-5 h-5 md:w-7 md:h-7 accent-[#004aad] rounded border-zinc-200 shrink-0"
-            />
-            <span className="text-[13px] sm:text-sm md:text-lg font-black text-zinc-400 group-hover:text-zinc-900 transition-colors uppercase tracking-[0.08em] md:tracking-[0.12em] break-keep">
-              개인정보 수집 및 이용 동의
-            </span>
-          </label>
+          <div className="pt-8 md:pt-12 flex flex-col items-center">
+            <label className="flex items-start sm:items-center gap-3 md:gap-5 cursor-pointer mb-5 group w-full">
+              <input
+                type="checkbox"
+                checked={formData.privacyAgreed}
+                onChange={(e) =>
+                  setFormData({ ...formData, privacyAgreed: e.target.checked })
+                }
+                className="mt-0.5 sm:mt-0 w-5 h-5 md:w-7 md:h-7 accent-[#004aad] rounded border-zinc-200 shrink-0"
+              />
+              <span className="text-[13px] sm:text-sm md:text-lg font-black text-zinc-400 group-hover:text-zinc-900 transition-colors uppercase tracking-[0.08em] md:tracking-[0.12em] break-keep">
+                개인정보 수집 및 이용 동의
+              </span>
+            </label>
 
-          {fieldErrors.privacyAgreed && (
-            <p className="mb-6 text-red-500 text-xs font-black">
-              {fieldErrors.privacyAgreed}
-            </p>
-          )}
+            {fieldErrors.privacyAgreed && (
+              <p className="mb-6 text-red-500 text-xs font-black">
+                {fieldErrors.privacyAgreed}
+              </p>
+            )}
 
-          <div className="w-full space-y-4">
-            <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-[11px] sm:text-xs font-bold text-zinc-500 leading-relaxed break-keep text-center">
-              제출 후 결과 및 추가 요청은 마이페이지와 등록된 이메일, 알림을 통해 순차적으로 안내됩니다.
+            <div className="w-full space-y-4">
+              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-[11px] sm:text-xs font-bold text-zinc-500 leading-relaxed break-keep text-center">
+                제출 후 결과 및 추가 요청은 마이페이지와 등록된 이메일, 알림을 통해 순차적으로 안내됩니다.
+              </div>
+
+              <button
+                onClick={handleSubmit}
+                disabled={isUploading || isSubmitting}
+                className="w-full bg-zinc-900 text-white py-5 md:py-9 rounded-full font-black uppercase tracking-[0.18em] md:tracking-[0.3em] text-sm md:text-2xl shadow-2xl hover:bg-[#004aad] active:scale-95 transition-all text-center shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <span className="inline-flex items-center gap-3">
+                    <Loader2 className="animate-spin" size={22} />
+                    SUBMITTING
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2.5 md:gap-3">
+                    Submit Proposal <ArrowRight size={22} />
+                  </span>
+                )}
+              </button>
             </div>
-
-            <button
-              onClick={handleSubmit}
-              disabled={isUploading || isSubmitting}
-              className="w-full bg-zinc-900 text-white py-5 md:py-9 rounded-full font-black uppercase tracking-[0.18em] md:tracking-[0.3em] text-sm md:text-2xl shadow-2xl hover:bg-[#004aad] active:scale-95 transition-all text-center shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <span className="inline-flex items-center gap-3">
-                  <Loader2 className="animate-spin" size={22} />
-                  SUBMITTING
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-2.5 md:gap-3">
-                  Submit Proposal <ArrowRight size={22} />
-                </span>
-              )}
-            </button>
           </div>
         </div>
       </div>
