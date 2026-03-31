@@ -235,7 +235,7 @@ const App = () => {
         reset={resetAll}
       />
 
-      <main className="max-w-7xl mx-auto px-6 pt-32 pb-32 relative z-10 text-left">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left">
         {isSubmitSuccess ? (
           <SuccessView
             onReturn={() => {
@@ -269,6 +269,16 @@ const App = () => {
                 onSelectProgram={(program) => {
                   setSelectedProgram(program);
                   handleStepTransition(2);
+
+                  setTimeout(() => {
+                    const target = document.getElementById("partner-type-section");
+                    if (target) {
+                      target.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    }
+                  }, 120);
                 }}
               />
             )}

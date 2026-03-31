@@ -1,926 +1,905 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ChevronLeft,
-  ChevronDown,
-  ChevronUp,
-  Calendar,
-  Mail,
-  AlertCircle,
+  ArrowLeft,
+  User2,
+  LayoutDashboard,
+  FileText,
+  History,
+  Bell,
+  ChevronRight,
   CheckCircle2,
   Clock3,
+  AlertCircle,
+  XCircle,
   Upload,
-  Loader2,
-  RefreshCcw,
-  FileText,
-  ArrowRight,
-  CircleHelp,
+  Save,
+  Mail,
+  Phone,
+  MapPin,
+  Globe2,
+  Building2,
+  Palette,
 } from "lucide-react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
-  uploadImageToImgbb,
-  uploadDocumentToR2,
-  validateImageFile,
-  validateDocumentFile,
-} from "../lib/uploads";
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+
+const EMPTY_PROFILE = {
+  realName: "",
+  stageName: "",
+  englishName: "",
+  brandName: "",
+  phone: "",
+  addressMain: "",
+  addressDetail: "",
+  snsLink: "",
+};
+
+const STATUS_META = {
+  review: {
+    label: "검토 중",
+    className: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    icon: <Clock3 size={14} />,
+  },
+  pending: {
+    label: "접수 완료",
+    className: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    icon: <Clock3 size={14} />,
+  },
+  approved: {
+    label: "승인",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: <CheckCircle2 size={14} />,
+  },
+  rejected: {
+    label: "미선정",
+    className: "bg-red-50 text-red-600 border-red-200",
+    icon: <XCircle size={14} />,
+  },
+  additional_requested: {
+    label: "추가자료 요청",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    icon: <AlertCircle size={14} />,
+  },
+  additional_submitted: {
+    label: "추가자료 제출 완료",
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+    icon: <Upload size={14} />,
+  },
+};
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  try {
+    if (typeof value === "string") {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleDateString("ko-KR");
+      }
+      return value;
+    }
+    if (value?.seconds) {
+      return new Date(value.seconds * 1000).toLocaleDateString("ko-KR");
+    }
+    return "-";
+  } catch {
+    return "-";
+  }
+};
 
 const getStatusMeta = (status) => {
-  if (status === "confirmed") {
-    return {
-      label: "승인",
-      className: "bg-green-100 text-green-700",
-      icon: <CheckCircle2 size={14} />,
-    };
-  }
-
-  if (status === "rejected") {
-    return {
-      label: "미선정",
-      className: "bg-red-100 text-red-600",
-      icon: <AlertCircle size={14} />,
-    };
-  }
-
-  if (status === "additional_requested") {
-    return {
-      label: "추가자료 요청",
-      className: "bg-amber-100 text-amber-700",
-      icon: <Mail size={14} />,
-    };
-  }
-
-  return {
-    label: "심사중",
-    className: "bg-[#004aad]/10 text-[#004aad]",
-    icon: <Clock3 size={14} />,
-  };
+  return (
+    STATUS_META[status] || {
+      label: status || "상태 없음",
+      className: "bg-zinc-100 text-zinc-600 border-zinc-200",
+      icon: <Clock3 size={14} />,
+    }
+  );
 };
 
-const getStatusPageCopy = (app) => {
-  if (app.status === "confirmed") {
-    return {
-      eyebrow: "Approved",
-      title: app.customGuideTitle || "진행 가이드",
-      description:
-        app.customGuideIntro ||
-        "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 확인하실 수 있습니다. 세부 일정과 준비 사항은 순차적으로 안내드립니다.",
-    };
-  }
-
-  if (app.status === "rejected") {
-    return {
-      eyebrow: "Review Result",
-      title: "검토 결과",
-      description:
-        "이번 회차 검토 결과와 다음 지원 시 참고하실 수 있는 보완 포인트를 안내드립니다.",
-    };
-  }
-
-  if (app.status === "additional_requested") {
-    return {
-      eyebrow: "Additional Request",
-      title: "보완 요청",
-      description:
-        "추가 확인이 필요한 자료와 요청사항을 확인하신 뒤, 이 페이지에서 바로 업로드 및 회신하실 수 있습니다.",
-    };
-  }
-
-  return {
-    eyebrow: "In Review",
-    title: "현재 검토 중입니다",
-    description:
-      "제출해 주신 자료를 순차적으로 확인하고 있습니다. 결과 또는 추가 요청이 있을 경우, 이 페이지와 이메일을 통해 안내드립니다.",
-  };
+const sortApplications = (apps) => {
+  return [...apps].sort((a, b) => {
+    const aTime = a?.submittedAt?.seconds || 0;
+    const bTime = b?.submittedAt?.seconds || 0;
+    return bTime - aTime;
+  });
 };
 
-const getGuideSections = (app) => {
-  const programName = app?.selectedProgram?.name || "선택 프로그램";
-  const programPrice = app?.selectedProgram?.price
-    ? `${app.selectedProgram.price}만원`
-    : "";
-  const partnerType = app?.partnerType || "artist";
-  const projectTitle = app?.exhibitionTitle || "프로젝트";
+const TabButton = ({ icon, label, active, onClick, count }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border transition-all text-left ${
+      active
+        ? "bg-[#004aad] text-white border-[#004aad] shadow-lg"
+        : "bg-white text-zinc-700 border-zinc-100 hover:border-zinc-200 hover:bg-zinc-50"
+    }`}
+  >
+    <span className="flex items-center gap-3 min-w-0">
+      <span className="shrink-0">{icon}</span>
+      <span className="text-xs sm:text-sm font-black uppercase tracking-[0.12em] break-keep">
+        {label}
+      </span>
+    </span>
 
-  const commonSections = [
-    {
-      id: "next-steps",
-      title: "다음 진행 단계",
-      description:
-        "승인 이후의 커뮤니케이션과 준비 과정을 한눈에 확인할 수 있도록 정리했습니다.",
-      items: [
-        "세부 일정 및 진행 방향은 등록된 이메일을 통해 순차적으로 안내됩니다.",
-        "필요 시 추가 서류, 설치 참고자료, 이미지 원본 등을 요청드릴 수 있습니다.",
-        "오프닝, 현장 운영, 기본 안내 방식은 프로젝트 성격에 맞춰 조율됩니다.",
-      ],
-    },
-    {
-      id: "communication",
-      title: "커뮤니케이션 원칙",
-      description:
-        "프로젝트 진행 중 전달되는 주요 안내는 이메일을 기준으로 하며, 필요한 경우 추가 연락이 진행됩니다.",
-      items: [
-        "중요한 안내는 이메일을 기준으로 전달됩니다.",
-        "제출 자료의 변경이 필요한 경우 사전 공유 후 진행해 주세요.",
-        "일정 변경이나 취소가 필요한 경우 가능한 빠르게 알려주셔야 합니다.",
-      ],
-    },
-  ];
+    {typeof count === "number" ? (
+      <span
+        className={`text-[10px] font-black px-2 py-1 rounded-full ${
+          active ? "bg-white/15 text-white" : "bg-zinc-100 text-zinc-500"
+        }`}
+      >
+        {count}
+      </span>
+    ) : null}
+  </button>
+);
 
-  const artistSections = [
-    {
-      id: "artist-materials",
-      title: "작가 제출 자료 가이드",
-      description:
-        "전시 진행을 위해 아래 자료를 요청드릴 수 있습니다. 프로젝트 성격에 따라 일부 항목은 조정될 수 있습니다.",
-      items: [
-        "작품 리스트 최종본",
-        "대표 이미지 및 설치 참고 이미지",
-        "작가 노트 또는 전시 소개문 최종본",
-        "캡션 표기 정보 및 영문 표기 확인",
-      ],
-    },
-    {
-      id: "artist-space",
-      title: "전시 운영 안내",
-      description: `${projectTitle}는 ${programName}${programPrice ? ` (${programPrice})` : ""} 기준으로 운영 검토가 완료된 상태입니다.`,
-      items: [
-        "설치 및 철수 관련 기본 일정은 사전 조율 후 확정됩니다.",
-        "공간 운영 및 관람 동선 관련 세부 사항은 내부 기준에 따라 조정될 수 있습니다.",
-        "오프닝 진행 여부 및 현장 응대 방식은 프로젝트 방향에 맞춰 개별 안내됩니다.",
-      ],
-    },
-  ];
-
-  const brandSections = [
-    {
-      id: "brand-materials",
-      title: "브랜드/기획 제출 자료 가이드",
-      description:
-        "협업 및 공간 활용 검토를 위해 아래 자료를 기준으로 최종 정리를 요청드릴 수 있습니다.",
-      items: [
-        "프로젝트 소개서 또는 기획안 최종본",
-        "브랜드 소개 자료 및 시각 자료",
-        "공간 활용 방식, 설치 방식 관련 참고 자료",
-        "운영 및 일정 관련 실무 담당 정보",
-      ],
-    },
-    {
-      id: "brand-operation",
-      title: "프로젝트 운영 안내",
-      description: `${projectTitle}는 ${programName}${programPrice ? ` (${programPrice})` : ""} 기준으로 운영 검토가 완료된 상태입니다.`,
-      items: [
-        "공간 활용 범위와 세부 연출은 사전 협의 후 확정됩니다.",
-        "현장 운영, 응대 방식, 기본 안내 요소는 프로젝트 목적에 따라 조율됩니다.",
-        "추가 제작물 또는 현장 설치 요소가 필요한 경우 별도 협의가 진행될 수 있습니다.",
-      ],
-    },
-  ];
-
-  return [...(partnerType === "brand" ? brandSections : artistSections), ...commonSections];
+const StatusChip = ({ status }) => {
+  const meta = getStatusMeta(status);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black ${meta.className}`}
+    >
+      {meta.icon}
+      {meta.label}
+    </span>
+  );
 };
 
-const getReviewBlocks = (app) => {
-  return {
-    summary:
-      app.reviewSummary ||
-      "이번 회차에서는 프로젝트의 전체 방향성과 전달 밀도, 제출 자료의 완성도를 중심으로 검토했습니다.",
-    improvement:
-      app.improvementSuggestions ||
-      "대표 이미지의 선명도, 프로젝트 설명의 구조, 전시 구성안의 구체성을 조금 더 정리해주시면 다음 검토에서 강점이 더 분명하게 전달될 수 있습니다.",
-  };
-};
-
-const SummaryCard = ({ label, value }) => (
-  <div className="rounded-[22px] border border-zinc-100 bg-white p-5">
-    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-      {label}
-    </p>
-    <p className="text-sm font-bold text-zinc-700 break-keep whitespace-pre-wrap">
-      {value || "-"}
-    </p>
+const EmptyPanel = ({ title, desc }) => (
+  <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white px-6 py-12 text-center">
+    <h3 className="text-lg font-black text-zinc-900 mb-3 break-keep">{title}</h3>
+    <p className="text-sm font-bold text-zinc-400 leading-relaxed break-keep">{desc}</p>
   </div>
 );
 
-const SectionCard = ({ title, description, items }) => (
-  <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad] mb-3">
-      {title}
-    </p>
-    {description && (
-      <p className="text-sm font-bold text-zinc-600 leading-relaxed mb-5 break-keep whitespace-pre-wrap">
-        {description}
-      </p>
-    )}
-    {items?.length > 0 && (
-      <div className="space-y-3">
-        {items.map((item, idx) => (
-          <div key={`${title}-${idx}`} className="flex items-start gap-3">
-            <span className="mt-1 w-1.5 h-1.5 rounded-full bg-zinc-900 shrink-0" />
-            <p className="text-sm font-bold text-zinc-700 leading-relaxed break-keep">
-              {item}
-            </p>
-          </div>
-        ))}
+const ApplicationCard = ({ app, isActive, onClick }) => {
+  const statusMeta = getStatusMeta(app.status);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-[28px] border px-5 py-5 transition-all ${
+        isActive
+          ? "bg-[#004aad]/5 border-[#004aad]/20 shadow-[0_20px_40px_rgba(0,0,0,0.05)]"
+          : "bg-white border-zinc-100 hover:border-zinc-200 hover:shadow-[0_16px_30px_rgba(0,0,0,0.04)]"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+            Application
+          </p>
+          <h3 className="text-lg md:text-xl font-black text-zinc-900 leading-tight break-keep">
+            {app.exhibitionTitle || "제목 없음"}
+          </h3>
+        </div>
+        <ChevronRight size={18} className="text-zinc-300 shrink-0 mt-1" />
       </div>
-    )}
-  </div>
-);
 
-const DetailInfoCard = ({ eyebrow, title, children, tone = "default" }) => {
-  const toneClass =
-    tone === "blue"
-      ? "border-[#004aad]/15 bg-[#004aad]/5"
-      : tone === "amber"
-      ? "border-amber-200 bg-amber-50"
-      : tone === "red"
-      ? "border-red-200 bg-red-50"
-      : "border-zinc-100 bg-white";
+      <div className="mb-4">
+        <StatusChip status={app.status} />
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-zinc-50 border border-zinc-100 px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-1">
+            Program
+          </p>
+          <p className="text-sm font-bold text-zinc-700 break-keep">
+            {app.selectedProgram?.name
+              ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+              : "-"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-zinc-50 border border-zinc-100 px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-1">
+            Date
+          </p>
+          <p className="text-sm font-bold text-zinc-700 break-keep">
+            {app.selectedDate || "-"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 text-[11px] font-black text-zinc-400">
+        제출일 {formatDate(app.submittedAt)}
+      </div>
+    </button>
+  );
+};
+
+const ApplicationDetailPanel = ({ app }) => {
+  if (!app) {
+    return (
+      <EmptyPanel
+        title="선택된 신청 내역이 없습니다"
+        desc="좌측 또는 상단의 신청 카드에서 하나를 선택하면 상세 내용을 볼 수 있습니다."
+      />
+    );
+  }
+
+  const partnerLabel =
+    app.partnerType === "brand" ? "Brand / Team" : "Artist";
+
+  const nextAction =
+    app.status === "additional_requested"
+      ? "추가자료를 업로드해 주세요."
+      : app.status === "approved"
+      ? "가이드와 세부 진행 사항을 확인해 주세요."
+      : app.status === "rejected"
+      ? "심사 결과와 피드백을 확인해 주세요."
+      : "검토가 진행 중입니다.";
 
   return (
-    <div className={`rounded-3xl border p-5 md:p-6 ${toneClass}`}>
-      {eyebrow ? (
-        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400 mb-2">
-          {eyebrow}
+    <div className="space-y-5">
+      <div className="rounded-[30px] border border-zinc-100 bg-white px-6 py-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+              Selected Application
+            </p>
+            <h3 className="text-2xl md:text-3xl font-black text-zinc-900 leading-tight break-keep">
+              {app.exhibitionTitle || "제목 없음"}
+            </h3>
+            <p className="mt-3 text-sm font-bold text-zinc-400 break-keep">
+              {partnerLabel} · {app.selectedDate || "-"}
+            </p>
+          </div>
+
+          <div className="shrink-0">
+            <StatusChip status={app.status} />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[30px] border border-[#004aad]/12 bg-[#004aad]/5 px-6 py-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-2">
+          Next Action
         </p>
-      ) : null}
-      {title ? (
-        <h4 className="text-lg md:text-xl font-black text-zinc-900 mb-3 break-keep">
-          {title}
-        </h4>
-      ) : null}
-      <div className="text-sm md:text-[15px] font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap break-keep">
-        {children}
+        <p className="text-sm md:text-base font-black text-zinc-800 break-keep">
+          {nextAction}
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5">
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
+            Overview
+          </p>
+          <div className="space-y-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                Program
+              </p>
+              <p className="text-sm font-bold text-zinc-700 break-keep">
+                {app.selectedProgram?.name
+                  ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+                  : "-"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                Submitted
+              </p>
+              <p className="text-sm font-bold text-zinc-700">
+                {formatDate(app.submittedAt)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                Email
+              </p>
+              <p className="text-sm font-bold text-zinc-700 break-all">
+                {app.applicantEmail || "-"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
+            Summary
+          </p>
+          <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep">
+            {app.partnerType === "brand"
+              ? app.projectPurpose || "아직 등록된 제안 요약이 없습니다."
+              : app.artistNote || "아직 등록된 프로젝트 요약이 없습니다."}
+          </p>
+        </div>
       </div>
     </div>
   );
 };
 
-const UploadLine = ({ label, value, loading, error, success, onClick }) => (
-  <div className="rounded-[20px] border border-zinc-100 bg-white p-4">
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-300 mb-1">
-          {label}
-        </p>
-        <p className="text-sm font-bold text-zinc-700 break-all">
-          {value ? "업로드 완료" : "미등록"}
-        </p>
+const ProfileForm = ({
+  profileForm,
+  setProfileForm,
+  onSave,
+  saving,
+  user,
+}) => (
+  <div className="space-y-5">
+    <div className="rounded-[30px] border border-zinc-100 bg-white px-6 py-6">
+      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+        Profile
+      </p>
+      <h3 className="text-2xl md:text-3xl font-black text-zinc-900 break-keep">
+        기본정보 관리
+      </h3>
+      <p className="mt-3 text-sm font-bold text-zinc-400 leading-relaxed break-keep">
+        저장된 정보는 이후 신청서 작성 시 더 빠르게 활용할 수 있도록 확장할 수 있습니다.
+      </p>
+    </div>
+
+    <div className="grid md:grid-cols-2 gap-5">
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          본명 / 담당자명
+        </label>
+        <input
+          value={profileForm.realName}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, realName: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="이름을 입력해 주세요"
+        />
       </div>
 
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          활동명 / 예명
+        </label>
+        <input
+          value={profileForm.stageName}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, stageName: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="활동명 또는 예명을 입력해 주세요"
+        />
+      </div>
+
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          영문 이름
+        </label>
+        <input
+          value={profileForm.englishName}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, englishName: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="예: Hong Gil Dong"
+        />
+      </div>
+
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          브랜드명 / 소속
+        </label>
+        <input
+          value={profileForm.brandName}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, brandName: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="브랜드명 또는 소속을 입력해 주세요"
+        />
+      </div>
+
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          연락처
+        </label>
+        <input
+          value={profileForm.phone}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, phone: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="010-0000-0000"
+        />
+      </div>
+
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          SNS / Website
+        </label>
+        <input
+          value={profileForm.snsLink}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, snsLink: e.target.value }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+          placeholder="@instagram / https://"
+        />
+      </div>
+    </div>
+
+    <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+      <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+        기본 주소
+      </label>
+      <input
+        value={profileForm.addressMain}
+        onChange={(e) =>
+          setProfileForm((prev) => ({ ...prev, addressMain: e.target.value }))
+        }
+        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white mb-3"
+        placeholder="기본 주소"
+      />
+      <input
+        value={profileForm.addressDetail}
+        onChange={(e) =>
+          setProfileForm((prev) => ({ ...prev, addressDetail: e.target.value }))
+        }
+        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none focus:bg-white"
+        placeholder="상세 주소"
+      />
+    </div>
+
+    <div className="flex justify-end">
       <button
-        onClick={onClick}
         type="button"
-        className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl bg-zinc-50 border border-zinc-100 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-zinc-100 transition-all"
+        onClick={onSave}
+        disabled={saving}
+        className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-[#004aad] text-white text-[11px] font-black uppercase tracking-[0.14em] hover:opacity-90 transition-all disabled:opacity-50"
       >
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-        교체 업로드
+        <Save size={15} />
+        {saving ? "Saving..." : "Save Profile"}
       </button>
     </div>
 
-    {error && <p className="mt-3 text-xs font-black text-red-500">{error}</p>}
-    {success && <p className="mt-3 text-xs font-black text-emerald-600">{success}</p>}
+    <div className="rounded-[24px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-xs font-bold text-zinc-500 leading-relaxed break-keep">
+      로그인 계정: {user?.email || "-"}
+    </div>
   </div>
 );
 
-const formatDateTime = (value) => {
-  if (!value) return "";
-  try {
-    const date =
-      typeof value?.toDate === "function" ? value.toDate() : new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return new Intl.DateTimeFormat("ko-KR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return "";
+const HistoryPanel = ({ applications }) => {
+  const approvedItems = applications.filter((app) => app.status === "approved");
+
+  if (approvedItems.length === 0) {
+    return (
+      <EmptyPanel
+        title="아직 확정된 전시 / 협업 이력이 없습니다"
+        desc="승인된 프로젝트가 쌓이면 이곳에서 진행 이력과 기록을 함께 관리할 수 있습니다."
+      />
+    );
   }
-};
-
-const MyPage = ({ applications = [], handleReturn, db, appId, user, focusedApplicationId }) => {
-  const [expandedId, setExpandedId] = useState(null);
-  const [responseMap, setResponseMap] = useState({});
-  const [uploadingMap, setUploadingMap] = useState({});
-  const [uploadErrors, setUploadErrors] = useState({});
-  const [savingId, setSavingId] = useState(null);
-
-  const portfolioRefs = useRef({});
-  const workListRefs = useRef({});
-  const highResRefs = useRef({});
-
-  const sortedApplications = useMemo(() => {
-    return [...applications].sort((a, b) => {
-      const aDate = a.selectedDate || "";
-      const bDate = b.selectedDate || "";
-      return bDate.localeCompare(aDate);
-    });
-  }, [applications]);
-
-  useEffect(() => {
-    if (!focusedApplicationId) return;
-    const found = applications.find((app) => app.id === focusedApplicationId);
-    if (found) {
-      setExpandedId(found.id);
-    }
-  }, [focusedApplicationId, applications]);
-
-  const setUploading = (applicationId, field, value) => {
-    setUploadingMap((prev) => ({
-      ...prev,
-      [applicationId]: {
-        ...(prev[applicationId] || {}),
-        [field]: value,
-      },
-    }));
-  };
-
-  const setFieldError = (applicationId, field, value) => {
-    setUploadErrors((prev) => ({
-      ...prev,
-      [applicationId]: {
-        ...(prev[applicationId] || {}),
-        [field]: value,
-      },
-    }));
-  };
-
-  const setResponseField = (applicationId, key, value) => {
-    setResponseMap((prev) => ({
-      ...prev,
-      [applicationId]: {
-        ...(prev[applicationId] || {}),
-        [key]: value,
-      },
-    }));
-  };
-
-  const getDraftValue = (app, key) => {
-    return responseMap[app.id]?.[key] ?? app[key] ?? "";
-  };
-
-  const handleDocumentReplace = async (app, fieldName, folder, file) => {
-    const error = validateDocumentFile(file);
-    if (error) {
-      setFieldError(app.id, fieldName, error);
-      return;
-    }
-
-    setFieldError(app.id, fieldName, "");
-    setUploading(app.id, fieldName, true);
-
-    try {
-      const result = await uploadDocumentToR2({
-        file,
-        folder,
-        userId: user?.uid || "anonymous",
-      });
-
-      setResponseField(app.id, fieldName, result.url);
-    } catch (err) {
-      setFieldError(app.id, fieldName, err.message || "문서 업로드 실패");
-    } finally {
-      setUploading(app.id, fieldName, false);
-    }
-  };
-
-  const handleImageReplace = async (app, fieldName, file) => {
-    const error = validateImageFile(file);
-    if (error) {
-      setFieldError(app.id, fieldName, error);
-      return;
-    }
-
-    setFieldError(app.id, fieldName, "");
-    setUploading(app.id, fieldName, true);
-
-    try {
-      const result = await uploadImageToImgbb(file);
-      setResponseField(app.id, fieldName, result.url);
-    } catch (err) {
-      setFieldError(app.id, fieldName, err.message || "이미지 업로드 실패");
-    } finally {
-      setUploading(app.id, fieldName, false);
-    }
-  };
-
-  const handleResubmit = async (app) => {
-    const draft = responseMap[app.id] || {};
-    const additionalResponse = (draft.additionalResponse || "").trim();
-
-    if (!additionalResponse) {
-      alert("추가자료에 대한 설명 또는 회신 내용을 입력해 주세요.");
-      return;
-    }
-
-    const appUploadState = uploadingMap[app.id] || {};
-    if (Object.values(appUploadState).some(Boolean)) {
-      alert("업로드가 완료될 때까지 기다려 주세요.");
-      return;
-    }
-
-    setSavingId(app.id);
-
-    try {
-      await updateDoc(
-        doc(db, "artifacts", appId, "public", "data", "applications", app.id),
-        {
-          status: "review",
-          additionalResponse,
-          additionalSubmittedAt: serverTimestamp(),
-          portfolioUrl: draft.portfolioUrl || app.portfolioUrl || "",
-          workListUrl: draft.workListUrl || app.workListUrl || "",
-          highResPhotosUrl: draft.highResPhotosUrl || app.highResPhotosUrl || "",
-        }
-      );
-
-      for (const phone of ["01037848885", "01020494878"]) {
-        try {
-          await fetch("/.netlify/functions/send-kakao-alimtalk", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "additional_submitted_admin",
-              to: phone,
-              applicantName:
-                app.name || app.realName || app.brandName || app.stageName || "신청자",
-              exhibitionTitle: app.exhibitionTitle || "-",
-            }),
-          });
-        } catch (kakaoError) {
-          console.error("additional_submitted_admin kakao failed:", kakaoError);
-        }
-      }
-
-      alert("추가자료가 재제출되었습니다.");
-      setResponseMap((prev) => ({
-        ...prev,
-        [app.id]: {
-          ...prev[app.id],
-          additionalResponse: "",
-        },
-      }));
-    } catch (error) {
-      console.error(error);
-      alert("재제출 중 오류가 발생했습니다.");
-    } finally {
-      setSavingId(null);
-    }
-  };
 
   return (
-    <section className="max-w-5xl mx-auto py-20 px-4 text-zinc-900">
-      <div className="flex items-center justify-between mb-14">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.25em] text-[#004aad] mb-4">
-            My Applications
+    <div className="space-y-4">
+      {approvedItems.map((app) => (
+        <div
+          key={app.id}
+          className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5"
+        >
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+                Exhibition / Collaboration
+              </p>
+              <h3 className="text-xl font-black text-zinc-900 break-keep">
+                {app.exhibitionTitle || "-"}
+              </h3>
+              <p className="mt-2 text-sm font-bold text-zinc-400 break-keep">
+                {app.selectedDate || "-"} ·{" "}
+                {app.selectedProgram?.name
+                  ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+                  : "-"}
+              </p>
+            </div>
+
+            <StatusChip status={app.status} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const UpdatesPanel = ({ applications }) => {
+  const items = sortApplications(applications).slice(0, 5);
+
+  if (items.length === 0) {
+    return (
+      <EmptyPanel
+        title="아직 표시할 최근 업데이트가 없습니다"
+        desc="신청이나 상태 변경이 발생하면 최근 업데이트가 이곳에 정리됩니다."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {items.map((app) => {
+        const meta = getStatusMeta(app.status);
+        return (
+          <div
+            key={app.id}
+            className="rounded-[26px] border border-zinc-100 bg-white px-5 py-5"
+          >
+            <div className="flex items-start gap-4">
+              <div className="mt-1 text-[#004aad]">{meta.icon}</div>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-zinc-900 break-keep">
+                  {app.exhibitionTitle || "제목 없음"}
+                </p>
+                <p className="mt-2 text-sm font-bold text-zinc-500 leading-relaxed break-keep">
+                  현재 상태는 <span className="text-zinc-800">{meta.label}</span> 입니다.
+                </p>
+                <p className="mt-2 text-[11px] font-black text-zinc-300">
+                  {formatDate(app.submittedAt)}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const DashboardPanel = ({
+  profileForm,
+  user,
+  applications,
+  selectedApplication,
+  setActiveTab,
+}) => {
+  const latestApp = sortApplications(applications)[0] || null;
+  const current = selectedApplication || latestApp;
+
+  const displayName =
+    profileForm.stageName ||
+    profileForm.realName ||
+    profileForm.brandName ||
+    user?.displayName ||
+    "Partner";
+
+  const nextAction =
+    !current
+      ? "아직 신청 내역이 없습니다. 새로운 신청을 시작해 보세요."
+      : current.status === "additional_requested"
+      ? "추가자료 요청이 도착했습니다. 신청 상세를 확인해 주세요."
+      : current.status === "approved"
+      ? "승인된 프로젝트의 가이드와 다음 단계를 확인해 주세요."
+      : current.status === "rejected"
+      ? "심사 결과와 피드백을 확인해 주세요."
+      : "현재 신청 건이 검토 중입니다.";
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-[32px] border border-zinc-100 bg-white px-6 py-6">
+        <div className="grid lg:grid-cols-[1.15fr_0.85fr] gap-5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+              Partner Dashboard
+            </p>
+            <h2 className="text-2xl md:text-4xl font-black text-zinc-900 tracking-tight break-keep">
+              안녕하세요, {displayName}님.
+            </h2>
+            <p className="mt-4 text-sm md:text-base font-bold text-zinc-500 leading-relaxed break-keep">
+              현재 진행 상태와 다음 액션을 한눈에 확인할 수 있도록 정리했습니다.
+            </p>
+          </div>
+
+          <div className="rounded-[24px] border border-[#004aad]/12 bg-[#004aad]/5 px-5 py-5">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad] mb-2">
+              Next Action
+            </p>
+            <p className="text-sm font-black text-zinc-800 leading-relaxed break-keep">
+              {nextAction}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-5">
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+            Total Applications
           </p>
-          <h2 className="text-4xl md:text-6xl font-black tracking-tighter leading-none">
-            신청 내역
-          </h2>
+          <p className="text-3xl font-black text-zinc-900">{applications.length}</p>
+        </div>
+
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+            Latest Status
+          </p>
+          <div className="mt-2">
+            {current ? <StatusChip status={current.status} /> : <p className="text-sm font-bold text-zinc-400">-</p>}
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+            Selected Program
+          </p>
+          <p className="text-sm font-bold text-zinc-700 break-keep">
+            {current?.selectedProgram?.name
+              ? `${current.selectedProgram.name} · ${current.selectedProgram.price}만원`
+              : "-"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-[1fr_1fr] gap-5">
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h3 className="text-lg font-black text-zinc-900">현재 신청 요약</h3>
+            <button
+              type="button"
+              onClick={() => setActiveTab("applications")}
+              className="text-[10px] font-black uppercase tracking-[0.14em] text-[#004aad]"
+            >
+              See More
+            </button>
+          </div>
+          {current ? <ApplicationDetailPanel app={current} /> : <EmptyPanel title="신청 내역 없음" desc="아직 등록된 신청 내역이 없습니다." />}
+        </div>
+
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h3 className="text-lg font-black text-zinc-900">기본 프로필 요약</h3>
+            <button
+              type="button"
+              onClick={() => setActiveTab("profile")}
+              className="text-[10px] font-black uppercase tracking-[0.14em] text-[#004aad]"
+            >
+              Edit
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <User2 size={16} className="text-zinc-300 mt-0.5" />
+              <p className="text-sm font-bold text-zinc-600 break-keep">
+                {profileForm.realName || profileForm.stageName || user?.displayName || "-"}
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <Mail size={16} className="text-zinc-300 mt-0.5" />
+              <p className="text-sm font-bold text-zinc-600 break-all">
+                {user?.email || "-"}
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <Phone size={16} className="text-zinc-300 mt-0.5" />
+              <p className="text-sm font-bold text-zinc-600">
+                {profileForm.phone || "-"}
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <Globe2 size={16} className="text-zinc-300 mt-0.5" />
+              <p className="text-sm font-bold text-zinc-600 break-all">
+                {profileForm.snsLink || "-"}
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <MapPin size={16} className="text-zinc-300 mt-0.5" />
+              <p className="text-sm font-bold text-zinc-600 break-keep">
+                {profileForm.addressMain || "-"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MyPage = ({
+  applications,
+  handleReturn,
+  db,
+  appId,
+  user,
+  focusedApplicationId,
+}) => {
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [selectedAppId, setSelectedAppId] = useState(focusedApplicationId || "");
+  const [profileForm, setProfileForm] = useState(EMPTY_PROFILE);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const orderedApplications = useMemo(() => sortApplications(applications || []), [applications]);
+
+  useEffect(() => {
+    if (!selectedAppId && focusedApplicationId) {
+      setSelectedAppId(focusedApplicationId);
+    }
+  }, [focusedApplicationId, selectedAppId]);
+
+  useEffect(() => {
+    if (!selectedAppId && orderedApplications.length > 0) {
+      setSelectedAppId(orderedApplications[0].id);
+    }
+  }, [orderedApplications, selectedAppId]);
+
+  const selectedApplication = useMemo(
+    () => orderedApplications.find((app) => app.id === selectedAppId) || orderedApplications[0] || null,
+    [orderedApplications, selectedAppId]
+  );
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const loadProfile = async () => {
+      setProfileLoading(true);
+      try {
+        const ref = doc(db, "artifacts", appId, "users", user.uid, "profile", "basic");
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          setProfileForm({ ...EMPTY_PROFILE, ...snap.data() });
+        } else {
+          setProfileForm({
+            ...EMPTY_PROFILE,
+            realName: user.displayName || "",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [db, appId, user]);
+
+  const handleSaveProfile = async () => {
+    if (!user?.uid) return;
+
+    try {
+      setProfileSaving(true);
+      const ref = doc(db, "artifacts", appId, "users", user.uid, "profile", "basic");
+
+      await setDoc(
+        ref,
+        {
+          ...profileForm,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      alert("기본정보가 저장되었습니다.");
+    } catch (error) {
+      console.error(error);
+      alert("기본정보 저장 중 오류가 발생했습니다.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const tabs = [
+    {
+      key: "dashboard",
+      label: "Dashboard",
+      icon: <LayoutDashboard size={16} />,
+    },
+    {
+      key: "applications",
+      label: "Applications",
+      icon: <FileText size={16} />,
+      count: orderedApplications.length,
+    },
+    {
+      key: "profile",
+      label: "Profile",
+      icon: <User2 size={16} />,
+    },
+    {
+      key: "history",
+      label: "History",
+      icon: <History size={16} />,
+    },
+    {
+      key: "updates",
+      label: "Updates",
+      icon: <Bell size={16} />,
+    },
+  ];
+
+  return (
+    <section className="animate-in fade-in duration-700 max-w-7xl mx-auto px-4">
+      <div className="mb-8 md:mb-10 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
+            My Page
+          </p>
+          <h1 className="text-3xl md:text-5xl font-black tracking-tighter text-zinc-900 break-keep">
+            Partner Hub
+          </h1>
         </div>
 
         <button
+          type="button"
           onClick={handleReturn}
-          className="inline-flex items-center gap-2 text-zinc-400 hover:text-zinc-900 text-xs font-black uppercase tracking-[0.2em]"
+          className="inline-flex items-center gap-2 px-4 py-3 rounded-2xl border border-zinc-100 bg-white text-[11px] font-black uppercase tracking-[0.14em] text-zinc-500 hover:text-zinc-900 transition-all"
         >
-          <ChevronLeft size={16} />
+          <ArrowLeft size={15} />
           Back
         </button>
       </div>
 
-      {sortedApplications.length === 0 ? (
-        <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-16 text-center">
-          <p className="text-zinc-300 font-black uppercase tracking-[0.3em] text-sm">
-            No applications yet
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {sortedApplications.map((app) => {
-            const meta = getStatusMeta(app.status);
-            const pageCopy = getStatusPageCopy(app);
-            const isExpanded = expandedId === app.id;
-            const appUploads = uploadingMap[app.id] || {};
-            const appErrors = uploadErrors[app.id] || {};
-            const guideSections = getGuideSections(app);
-            const reviewBlocks = getReviewBlocks(app);
+      <div className="grid xl:grid-cols-[260px_minmax(0,1fr)] gap-6 xl:gap-8 items-start">
+        <aside className="xl:sticky xl:top-28">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-1 gap-3">
+            {tabs.map((tab) => (
+              <TabButton
+                key={tab.key}
+                icon={tab.icon}
+                label={tab.label}
+                count={tab.count}
+                active={activeTab === tab.key}
+                onClick={() => setActiveTab(tab.key)}
+              />
+            ))}
+          </div>
+        </aside>
 
-            return (
-              <div
-                key={app.id}
-                className="bg-white rounded-[36px] border border-zinc-100 shadow-xl overflow-hidden"
-              >
-                <div className="p-8 md:p-10">
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
-                    <div className="space-y-5">
-                      <div
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-black ${meta.className}`}
-                      >
-                        {meta.icon}
-                        {meta.label}
-                      </div>
-
-                      <h3 className="text-2xl md:text-4xl font-black tracking-tight leading-tight break-keep">
-                        {app.exhibitionTitle || "Untitled Project"}
-                      </h3>
-
-                      <div className="flex flex-wrap items-center gap-4 text-sm font-bold text-zinc-500">
-                        <span className="inline-flex items-center gap-2">
-                          <Calendar size={14} />
-                          {app.selectedDate || "-"}
-                        </span>
-
-                        {app.selectedProgram && (
-                          <span className="px-3 py-1.5 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-widest">
-                            {app.selectedProgram.name} · {app.selectedProgram.price}만원
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setExpandedId(isExpanded ? null : app.id)}
-                      className="inline-flex items-center justify-center gap-2 bg-zinc-50 border border-zinc-100 rounded-2xl px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] hover:bg-zinc-100 transition-all"
-                    >
-                      {isExpanded ? (
-                        <>
-                          <ChevronUp size={14} />
-                          상세 닫기
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown size={14} />
-                          상세 보기
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {isExpanded && (
-                  <div className="border-t border-zinc-100 bg-zinc-50 p-8 md:p-10 space-y-8">
-                    <div className="rounded-[30px] border border-zinc-100 bg-white p-7 md:p-8">
-                      <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#004aad] mb-4">
-                        {pageCopy.eyebrow}
-                      </p>
-                      <div className="flex items-start gap-4 mb-4">
-                        <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center shrink-0">
-                          {app.status === "confirmed" ? (
-                            <CheckCircle2 size={20} />
-                          ) : app.status === "rejected" ? (
-                            <AlertCircle size={20} />
-                          ) : app.status === "additional_requested" ? (
-                            <CircleHelp size={20} />
-                          ) : (
-                            <Clock3 size={20} />
-                          )}
-                        </div>
-
-                        <div>
-                          <h4 className="text-2xl md:text-3xl font-black tracking-tight leading-tight mb-2">
-                            {pageCopy.title}
-                          </h4>
-                          <p className="text-sm font-bold text-zinc-600 leading-relaxed break-keep">
-                            {pageCopy.description}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid md:grid-cols-3 gap-5">
-                      <SummaryCard label="프로젝트명" value={app.exhibitionTitle || "-"} />
-                      <SummaryCard label="선택 일정" value={app.selectedDate || "-"} />
-                      <SummaryCard
-                        label="선택 프로그램"
-                        value={
-                          app.selectedProgram
-                            ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
-                            : "-"
-                        }
-                      />
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-5">
-                      <SummaryCard
-                        label="신청자 정보"
-                        value={`이름: ${app.name || app.realName || app.brandName || "-"}\n이메일: ${
-                          app.applicantEmail || "-"
-                        }\n연락처: ${app.phone || "-"}`}
-                      />
-                      <SummaryCard
-                        label="기본 자료"
-                        value={`포트폴리오: ${getDraftValue(app, "portfolioUrl") ? "등록됨" : "미등록"}\n작품리스트: ${
-                          getDraftValue(app, "workListUrl") ? "등록됨" : "미등록"
-                        }\n대표작 원본: ${getDraftValue(app, "highResPhotosUrl") ? "등록됨" : "미등록"}`}
-                      />
-                    </div>
-
-                    {app.status === "review" && (
-                      <div className="space-y-5">
-                        <DetailInfoCard
-                          eyebrow="In Review"
-                          title="현재 검토 중입니다"
-                          tone="blue"
-                        >
-                          제출해 주신 자료를 순차적으로 확인하고 있습니다.
-                          결과 또는 추가 요청이 있을 경우, 이 페이지와 이메일을 통해 안내드립니다.
-                        </DetailInfoCard>
-
-                        <div className="grid md:grid-cols-2 gap-5">
-                          <SectionCard
-                            title="검토 진행 안내"
-                            description="현재 신청 내용은 내부 검토 중이며, 결과는 이메일 및 안내 메시지를 통해 전달됩니다."
-                            items={[
-                              "검토 단계에서는 신청 내용이 내부 기준에 따라 순차적으로 확인됩니다.",
-                              "필요 시 추가자료 요청 또는 일정 관련 보완 안내가 진행될 수 있습니다.",
-                              "제출 자료는 상세 영역에서 다시 확인하실 수 있습니다.",
-                            ]}
-                          />
-                          <SectionCard
-                            title="프로젝트 개요"
-                            description={
-                              app.partnerType === "brand"
-                                ? app.projectPurpose || "-"
-                                : app.artistNote || "-"
-                            }
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {app.status === "confirmed" && (
-                      <div className="space-y-5">
-                        <DetailInfoCard
-                          eyebrow="Approved"
-                          title={app.customGuideTitle || "진행 가이드"}
-                          tone="blue"
-                        >
-                          {app.customGuideIntro ||
-                            "승인 이후 필요한 자료와 진행 흐름을 이 페이지에서 확인하실 수 있습니다. 세부 일정과 준비 사항은 순차적으로 안내드립니다."}
-                        </DetailInfoCard>
-
-                        <div className="grid md:grid-cols-2 gap-5">
-                          {guideSections.slice(0, 2).map((section) => (
-                            <SectionCard
-                              key={section.id}
-                              title={section.title}
-                              description={section.description}
-                              items={section.items}
-                            />
-                          ))}
-                        </div>
-
-                        {guideSections.slice(2).map((section) => (
-                          <SectionCard
-                            key={section.id}
-                            title={section.title}
-                            description={section.description}
-                            items={section.items}
-                          />
-                        ))}
-
-                        {app.guideNotes ? (
-                          <DetailInfoCard
-                            eyebrow="Director Note"
-                            title="개별 안내 메모"
-                            tone="default"
-                          >
-                            {app.guideNotes}
-                          </DetailInfoCard>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {app.status === "rejected" && (
-                      <div className="space-y-5">
-                        <DetailInfoCard
-                          eyebrow="Review Result"
-                          title="검토 결과"
-                          tone="red"
-                        >
-                          {reviewBlocks.summary}
-                        </DetailInfoCard>
-
-                        {app.improvementSuggestions ? (
-                          <DetailInfoCard
-                            eyebrow="Suggestion"
-                            title="보완 제안"
-                            tone="default"
-                          >
-                            {reviewBlocks.improvement}
-                          </DetailInfoCard>
-                        ) : null}
-                      </div>
-                    )}
-
-                    {app.status === "additional_requested" && (
-                      <div className="space-y-5">
-                        <DetailInfoCard
-                          eyebrow="Additional Request"
-                          title="보완 요청"
-                          tone="amber"
-                        >
-                          {app.requestMessage ||
-                            "추가 확인이 필요한 자료와 요청사항이 등록되면 이곳에 표시됩니다."}
-                        </DetailInfoCard>
-
-                        {app.requestUpdatedAt ? (
-                          <div className="text-xs font-bold text-zinc-400">
-                            최근 요청일 · {formatDateTime(app.requestUpdatedAt)}
-                          </div>
-                        ) : null}
-
-                        <div className="rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 p-6 md:p-7">
-                          <div className="flex items-center gap-2 text-[#004aad] mb-4">
-                            <RefreshCcw size={15} />
-                            <p className="text-[10px] font-black uppercase tracking-[0.22em]">
-                              추가자료 재제출
-                            </p>
-                          </div>
-
-                          <div className="space-y-4">
-                            <UploadLine
-                              label="포트폴리오"
-                              value={getDraftValue(app, "portfolioUrl")}
-                              loading={appUploads.portfolioUrl}
-                              error={appErrors.portfolioUrl}
-                              success={responseMap[app.id]?.portfolioUrl ? "새 파일 업로드 완료" : ""}
-                              onClick={() => portfolioRefs.current[app.id]?.click()}
-                            />
-
-                            <UploadLine
-                              label="작품리스트"
-                              value={getDraftValue(app, "workListUrl")}
-                              loading={appUploads.workListUrl}
-                              error={appErrors.workListUrl}
-                              success={responseMap[app.id]?.workListUrl ? "새 파일 업로드 완료" : ""}
-                              onClick={() => workListRefs.current[app.id]?.click()}
-                            />
-
-                            <UploadLine
-                              label="대표작 원본"
-                              value={getDraftValue(app, "highResPhotosUrl")}
-                              loading={appUploads.highResPhotosUrl}
-                              error={appErrors.highResPhotosUrl}
-                              success={
-                                responseMap[app.id]?.highResPhotosUrl ? "새 파일 업로드 완료" : ""
-                              }
-                              onClick={() => highResRefs.current[app.id]?.click()}
-                            />
-
-                            <input
-                              type="file"
-                              className="hidden"
-                              ref={(el) => (portfolioRefs.current[app.id] = el)}
-                              accept=".pdf,.zip,.doc,.docx,application/pdf,application/zip,application/x-zip-compressed,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                handleDocumentReplace(app, "portfolioUrl", "portfolio-reupload", file);
-                              }}
-                            />
-
-                            <input
-                              type="file"
-                              className="hidden"
-                              ref={(el) => (workListRefs.current[app.id] = el)}
-                              accept=".pdf,.zip,.doc,.docx,application/pdf,application/zip,application/x-zip-compressed,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                handleDocumentReplace(app, "workListUrl", "work-list-reupload", file);
-                              }}
-                            />
-
-                            <input
-                              type="file"
-                              className="hidden"
-                              ref={(el) => (highResRefs.current[app.id] = el)}
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                handleImageReplace(app, "highResPhotosUrl", file);
-                              }}
-                            />
-
-                            <div className="rounded-[20px] border border-zinc-100 bg-white p-4">
-                              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-2">
-                                회신 내용
-                              </p>
-
-                              <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep mb-3">
-                                어떤 자료를 보완했는지, 또는 함께 확인해 주셨으면 하는 내용을 간단히 적어 주세요.
-                              </p>
-
-                              <textarea
-                                value={responseMap[app.id]?.additionalResponse || ""}
-                                onChange={(e) =>
-                                  setResponseField(app.id, "additionalResponse", e.target.value)
-                                }
-                                placeholder="요청받은 자료에 대한 설명이나 보완 내용을 작성해 주세요."
-                                className="w-full h-32 rounded-2xl border border-zinc-100 bg-white p-4 text-sm font-bold text-zinc-700 outline-none resize-none"
-                              />
-                            </div>
-
-                            {app.additionalSubmittedAt ? (
-                              <div className="rounded-[18px] border border-zinc-100 bg-white p-4">
-                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-2">
-                                  Last Submission
-                                </p>
-                                <p className="text-sm font-bold text-zinc-700">
-                                  {formatDateTime(app.additionalSubmittedAt)}
-                                </p>
-                              </div>
-                            ) : null}
-
-                            <button
-                              onClick={() => handleResubmit(app)}
-                              disabled={savingId === app.id}
-                              className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-[#004aad] text-white text-[10px] font-black uppercase tracking-[0.2em] hover:scale-[1.01] transition-all disabled:opacity-50"
-                            >
-                              {savingId === app.id ? (
-                                <>
-                                  <Loader2 size={14} className="animate-spin" />
-                                  제출중
-                                </>
-                              ) : (
-                                <>
-                                  <ArrowRight size={14} />
-                                  추가자료 재제출
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300 mb-3">
-                        제출한 프로젝트 개요
-                      </p>
-                      <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap break-keep">
-                        {app.partnerType === "brand"
-                          ? app.projectPurpose || "-"
-                          : app.artistNote || "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
-                      <div className="flex items-center gap-2 mb-4">
-                        <FileText size={16} />
-                        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
-                          업로드 자료 바로가기
-                        </p>
-                      </div>
-                      <div className="space-y-3 text-sm font-bold">
-                        {getDraftValue(app, "portfolioUrl") && (
-                          <a
-                            href={getDraftValue(app, "portfolioUrl")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-[#004aad] hover:underline"
-                          >
-                            포트폴리오 보기
-                          </a>
-                        )}
-                        {getDraftValue(app, "workListUrl") && (
-                          <a
-                            href={getDraftValue(app, "workListUrl")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-[#004aad] hover:underline"
-                          >
-                            작품리스트 보기
-                          </a>
-                        )}
-                        {getDraftValue(app, "highResPhotosUrl") && (
-                          <a
-                            href={getDraftValue(app, "highResPhotosUrl")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-[#004aad] hover:underline"
-                          >
-                            대표작 원본 보기
-                          </a>
-                        )}
-                        {!getDraftValue(app, "portfolioUrl") &&
-                          !getDraftValue(app, "workListUrl") &&
-                          !getDraftValue(app, "highResPhotosUrl") && (
-                            <p className="text-zinc-400">등록된 자료가 없습니다.</p>
-                          )}
-                      </div>
-                    </div>
-                  </div>
+        <div className="min-w-0">
+          {profileLoading ? (
+            <div className="rounded-[32px] border border-zinc-100 bg-white px-6 py-20 text-center">
+              <p className="text-sm font-black text-zinc-400">프로필을 불러오는 중입니다...</p>
+            </div>
+          ) : activeTab === "dashboard" ? (
+            <DashboardPanel
+              profileForm={profileForm}
+              user={user}
+              applications={orderedApplications}
+              selectedApplication={selectedApplication}
+              setActiveTab={setActiveTab}
+            />
+          ) : activeTab === "applications" ? (
+            <div className="grid lg:grid-cols-[0.95fr_1.05fr] gap-5">
+              <div className="space-y-4">
+                {orderedApplications.length === 0 ? (
+                  <EmptyPanel
+                    title="아직 신청 내역이 없습니다"
+                    desc="신청이 등록되면 이곳에서 상태와 상세 내용을 한눈에 확인하실 수 있습니다."
+                  />
+                ) : (
+                  orderedApplications.map((app) => (
+                    <ApplicationCard
+                      key={app.id}
+                      app={app}
+                      isActive={selectedApplication?.id === app.id}
+                      onClick={() => setSelectedAppId(app.id)}
+                    />
+                  ))
                 )}
               </div>
-            );
-          })}
+
+              <div>
+                <ApplicationDetailPanel app={selectedApplication} />
+              </div>
+            </div>
+          ) : activeTab === "profile" ? (
+            <ProfileForm
+              profileForm={profileForm}
+              setProfileForm={setProfileForm}
+              onSave={handleSaveProfile}
+              saving={profileSaving}
+              user={user}
+            />
+          ) : activeTab === "history" ? (
+            <HistoryPanel applications={orderedApplications} />
+          ) : activeTab === "updates" ? (
+            <UpdatesPanel applications={orderedApplications} />
+          ) : null}
         </div>
-      )}
+      </div>
     </section>
   );
 };
