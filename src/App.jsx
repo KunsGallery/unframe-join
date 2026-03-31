@@ -5,7 +5,7 @@ import {
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
 
 import { ADMIN_EMAILS } from "./constants/admin";
 import { auth, db, googleProvider, appId } from "./lib/firebase";
@@ -44,6 +44,17 @@ const EMPTY_FORM_DATA = {
   targetAudience: "",
   budgetRange: "",
   privacyAgreed: false,
+};
+
+const EMPTY_PROFILE_DATA = {
+  realName: "",
+  stageName: "",
+  englishName: "",
+  brandName: "",
+  phone: "",
+  addressMain: "",
+  addressDetail: "",
+  snsLink: "",
 };
 
 const getUrlState = () => {
@@ -92,6 +103,7 @@ const App = () => {
   const [selectedDate, setSelectedDate] = useState(null);
 
   const [formData, setFormData] = useState(EMPTY_FORM_DATA);
+  const [savedProfileData, setSavedProfileData] = useState(EMPTY_PROFILE_DATA);
 
   const myApplications = useMemo(() => {
     if (!user || user.isAnonymous) return [];
@@ -126,6 +138,40 @@ const App = () => {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (!user || user.isAnonymous) {
+      setSavedProfileData(EMPTY_PROFILE_DATA);
+      return;
+    }
+
+    const loadSavedProfile = async () => {
+      try {
+        const ref = doc(db, "artifacts", appId, "users", user.uid, "profile", "basic");
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          setSavedProfileData({
+            ...EMPTY_PROFILE_DATA,
+            ...snap.data(),
+          });
+        } else {
+          setSavedProfileData({
+            ...EMPTY_PROFILE_DATA,
+            realName: user.displayName || "",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        setSavedProfileData({
+          ...EMPTY_PROFILE_DATA,
+          realName: user.displayName || "",
+        });
+      }
+    };
+
+    loadSavedProfile();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -325,6 +371,7 @@ const App = () => {
                 setSelectedDate={setSelectedDate}
                 setSelectedProgram={setSelectedProgram}
                 setPartnerType={setPartnerType}
+                initialProfileData={savedProfileData}
               />
             )}
           </div>

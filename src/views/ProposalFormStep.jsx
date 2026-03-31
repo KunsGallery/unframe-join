@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   RefreshCcw,
   Trash2,
+  Download,
 } from "lucide-react";
 import {
   doc,
@@ -187,12 +188,14 @@ const ProposalFormStep = ({
   setSelectedDate,
   setSelectedProgram,
   setPartnerType,
+  initialProfileData,
 }) => {
   const [uploadingMap, setUploadingMap] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
   const [uploadErrors, setUploadErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftBanner, setDraftBanner] = useState(null);
+  const [profileLoadedBanner, setProfileLoadedBanner] = useState(false);
 
   const fileInputRefs = {
     profile: useRef(),
@@ -241,6 +244,20 @@ const ProposalFormStep = ({
 
     return { done, total, percent };
   }, [formData, isBrand, selectedProgram]);
+
+  const hasUsableProfile = useMemo(() => {
+    if (!initialProfileData) return false;
+    return Boolean(
+      initialProfileData.realName ||
+        initialProfileData.stageName ||
+        initialProfileData.englishName ||
+        initialProfileData.brandName ||
+        initialProfileData.phone ||
+        initialProfileData.addressMain ||
+        initialProfileData.addressDetail ||
+        initialProfileData.snsLink
+    );
+  }, [initialProfileData]);
 
   const syncWritingPresence = async (date, uid, expiresAtMs = null) => {
     if (!date || !uid) return;
@@ -348,6 +365,49 @@ const ProposalFormStep = ({
   const clearUploadError = (field) => {
     setUploadErrors((prev) => ({ ...prev, [field]: "" }));
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleUseSavedProfile = () => {
+    if (!hasUsableProfile) {
+      alert("저장된 기본정보가 없습니다.");
+      return;
+    }
+
+    const hasExistingInput =
+      formData.realName ||
+      formData.name ||
+      formData.stageName ||
+      formData.englishName ||
+      formData.brandName ||
+      formData.phone ||
+      formData.addressMain ||
+      formData.addressDetail ||
+      formData.snsLink;
+
+    if (hasExistingInput) {
+      const ok = window.confirm(
+        "현재 입력된 기본정보 항목이 저장된 정보로 교체됩니다. 불러오시겠습니까?"
+      );
+      if (!ok) return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      realName: initialProfileData.realName || "",
+      name:
+        partnerType === "brand"
+          ? initialProfileData.realName || prev.name
+          : initialProfileData.realName || "",
+      stageName: initialProfileData.stageName || "",
+      englishName: initialProfileData.englishName || "",
+      brandName: initialProfileData.brandName || "",
+      phone: initialProfileData.phone || "",
+      addressMain: initialProfileData.addressMain || "",
+      addressDetail: initialProfileData.addressDetail || "",
+      snsLink: initialProfileData.snsLink || "",
+    }));
+
+    setProfileLoadedBanner(true);
   };
 
   const handleImageUpload = async (e, fieldName) => {
@@ -754,6 +814,37 @@ const ProposalFormStep = ({
             </div>
           )}
         </header>
+
+        {hasUsableProfile && (
+          <div className="rounded-[22px] md:rounded-[28px] border border-[#004aad]/12 bg-[#004aad]/5 px-4 py-4 md:px-5 md:py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-2">
+                  Saved Profile
+                </p>
+                <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
+                  마이페이지에 저장한 기본정보를 신청서에 불러올 수 있습니다.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleUseSavedProfile}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#004aad] text-white text-[10px] font-black uppercase tracking-[0.14em] hover:opacity-90 transition-all"
+              >
+                <Download size={14} />
+                내 기본정보 불러오기
+              </button>
+            </div>
+
+            {profileLoadedBanner && (
+              <div className="mt-4 flex items-start gap-2 text-emerald-600 text-[11px] font-black break-keep leading-relaxed">
+                <CheckCircle2 size={14} className="shrink-0 mt-0.5" />
+                <span>저장된 기본정보를 신청서에 반영했습니다.</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-10 md:space-y-16">
           {isBrand ? (
