@@ -29,8 +29,8 @@ const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(0, 74, 173, ${alpha})`;
   if (typeof hex !== "string") return fallback;
 
-  const normalized = hex.trim();
-  const match = normalized.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  const normalized = hex.trim().replace("#", "");
+  const match = normalized.match(/^([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (!match) return fallback;
 
   const value =
@@ -48,45 +48,6 @@ const hexToRgba = (hex, alpha = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const isDarkHex = (hex) => {
-  if (typeof hex !== "string") return false;
-  const normalized = hex.trim().replace("#", "");
-
-  if (!/^[0-9a-f]{3}([0-9a-f]{3})?$/i.test(normalized)) {
-    return false;
-  }
-
-  const fullHex =
-    normalized.length === 3
-      ? normalized
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : normalized;
-
-  const r = Number.parseInt(fullHex.slice(0, 2), 16);
-  const g = Number.parseInt(fullHex.slice(2, 4), 16);
-  const b = Number.parseInt(fullHex.slice(4, 6), 16);
-
-  return (r * 299 + g * 587 + b * 114) / 1000 < 150;
-};
-
-const getTrackTone = (track) => {
-  const dark = isDarkHex(track?.accentColor) || !!track?.backgroundImageUrl;
-  return {
-    isDark: dark,
-    titleClass: dark ? "text-white" : "text-zinc-900",
-    descriptionClass: dark ? "text-white/80" : "text-zinc-600",
-    badgeClass: dark
-      ? "border-white/20 bg-white/10 text-white"
-      : "border-white/80 bg-white/85 text-zinc-700",
-    metaClass: dark ? "text-white/70" : "text-zinc-500",
-    ctaClass: dark
-      ? "border-white/18 bg-white/10 text-white"
-      : "border-white/70 bg-white/80 text-zinc-900",
-  };
-};
-
 const getEntryLabel = (routeTrack) => {
   if (routeTrack === "rental") return "SPACE";
   if (routeTrack === "open-call") return "OPEN CALL";
@@ -101,87 +62,78 @@ const getCtaLabel = (routeTrack) => {
   return "준비 중";
 };
 
-const getPanelClipPath = (index, count) => {
-  const normalizedCount = Math.max(1, Math.min(4, count));
-  const clipPaths = {
-    1: ["polygon(0 0, 100% 0, 100% 100%, 0 100%)"],
-    2: [
-      "polygon(0 0, 58% 0, 46% 100%, 0 100%)",
-      "polygon(42% 0, 100% 0, 100% 100%, 54% 100%)",
-    ],
-    3: [
-      "polygon(0 0, 40% 0, 29% 100%, 0 100%)",
-      "polygon(24% 0, 69% 0, 58% 100%, 13% 100%)",
-      "polygon(55% 0, 100% 0, 100% 100%, 42% 100%)",
-    ],
-    4: [
-      "polygon(0 0, 31% 0, 19% 100%, 0 100%)",
-      "polygon(25% 0, 56% 0, 44% 100%, 13% 100%)",
-      "polygon(50% 0, 81% 0, 69% 100%, 38% 100%)",
-      "polygon(75% 0, 100% 0, 100% 100%, 63% 100%)",
-    ],
-  };
+const getPanelBasis = (track, hoveredTrackId, trackCount) => {
+  if (trackCount <= 1 || !hoveredTrackId) {
+    return `${100 / Math.max(trackCount, 1)}%`;
+  }
 
-  return clipPaths[normalizedCount][index] || clipPaths[normalizedCount][clipPaths[normalizedCount].length - 1];
+  if (track.id === hoveredTrackId) {
+    return "46%";
+  }
+
+  return `${54 / Math.max(trackCount - 1, 1)}%`;
+};
+
+const getTrackTone = (track) => {
+  const brightImage = !!track?.backgroundImageUrl;
+  const darkAccent = typeof track?.accentColor === "string" && /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(track.accentColor.replace("#", ""));
+
+  return {
+    titleClass: "text-zinc-950",
+    descriptionClass: "text-zinc-700/90",
+    metaClass: "text-zinc-500",
+    badgeClass: brightImage || darkAccent
+      ? "border-zinc-950/10 bg-white/72 text-zinc-900"
+      : "border-white/12 bg-white/70 text-zinc-900",
+    ctaClass: "border-zinc-950/10 bg-white/85 text-zinc-950",
+    accentClass: brightImage ? "text-white" : "text-zinc-950",
+  };
 };
 
 const buildTrackBackgroundStyle = (track, isHovered) => {
   const accentColor = track?.accentColor || "#004AAD";
-  const accentAlpha = isHovered ? 0.45 : 0.22;
-  const darkenAlpha = isHovered ? 0.36 : 0.58;
 
   if (track?.backgroundImageUrl) {
     return {
-      backgroundImage: `linear-gradient(180deg, rgba(4, 4, 6, 0.02), rgba(4, 4, 6, ${darkenAlpha})), url(${track.backgroundImageUrl})`,
+      backgroundImage: `url(${track.backgroundImageUrl})`,
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundColor: accentColor,
-      filter: isHovered ? "grayscale(0) brightness(1.05)" : "grayscale(1) brightness(0.55) contrast(1.08)",
+      filter: isHovered
+        ? "grayscale(0) brightness(1.02) saturate(1.08) contrast(1.02)"
+        : "grayscale(1) brightness(0.75) contrast(0.95)",
     };
   }
 
   return {
-    backgroundImage: `linear-gradient(140deg, ${hexToRgba(accentColor, accentAlpha)} 0%, ${hexToRgba(
-      accentColor,
-      isHovered ? 0.22 : 0.1
-    )} 42%, rgba(10, 10, 13, ${darkenAlpha}) 100%)`,
+    backgroundImage: `linear-gradient(135deg, ${hexToRgba(accentColor, isHovered ? 0.72 : 0.52)} 0%, #F6F4EE 58%, #ffffff 100%)`,
     backgroundColor: hexToRgba(accentColor, 0.08),
-    filter: isHovered ? "grayscale(0) brightness(1.03)" : "grayscale(1) brightness(0.62) contrast(1.06)",
+    filter: isHovered
+      ? "grayscale(0) brightness(1.02) saturate(1.08) contrast(1.02)"
+      : "grayscale(1) brightness(0.82) contrast(0.96)",
   };
 };
 
-const TrackSlice = ({
-  track,
-  index,
-  count,
-  hoveredTrackId,
-  onHover,
-  onClick,
-}) => {
+const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
-  const tone = getTrackTone(track);
   const isHovered = hoveredTrackId === track.id;
   const hasHover = Boolean(hoveredTrackId);
-  const isInactive = hasHover && !isHovered;
-  const clipPath = getPanelClipPath(index, count);
-  const entryIndex = String(index + 1).padStart(2, "0");
-
-  const flexGrow = !hasHover ? 1 : isHovered ? 3.05 : 0.88;
+  const isDimmed = hasHover && !isHovered;
+  const tone = getTrackTone(track);
 
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseEnter={onHover}
-      className="group relative min-w-0 overflow-hidden text-left transition-[flex-grow,transform,opacity,filter] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+      className="group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
       style={{
-        flexGrow,
-        flexBasis: 0,
-        clipPath,
-        marginLeft: index === 0 ? 0 : "-3.5%",
-        zIndex: isHovered ? 30 : isInactive ? 8 : 12 - index,
+        flexBasis: getPanelBasis(track, hoveredTrackId, count),
+        flexGrow: isHovered ? 2 : 1,
+        flexShrink: 1,
+        zIndex: isHovered ? 20 : 10,
+        opacity: isDimmed ? 0.72 : 1,
         transform: isHovered ? "translateY(-2px)" : "translateY(0)",
-        opacity: isInactive ? 0.72 : 1,
       }}
     >
       <div
@@ -189,103 +141,77 @@ const TrackSlice = ({
         style={buildTrackBackgroundStyle(track, isHovered)}
       />
 
-      <div
-        className={`absolute inset-0 ${
-          isHovered
-            ? "bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.34)_32%,rgba(0,0,0,0.72)_100%)]"
-            : "bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.42)_48%,rgba(0,0,0,0.78)_100%)]"
-        }`}
-      />
+      <div className="absolute inset-0 bg-[#F6F4EE]/12 mix-blend-screen" />
+      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/48 via-zinc-950/10 to-white/5" />
+      <div className="absolute inset-y-0 -right-10 w-24 skew-x-[-8deg] bg-white/18 opacity-45 mix-blend-overlay transition-opacity duration-500 group-hover:opacity-70" />
+      <div className="absolute inset-y-0 right-0 w-px bg-white/25" />
 
-      <div className="absolute inset-0 border border-white/10" />
-      <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_30%,rgba(255,255,255,0.08)_50%,transparent_68%)] opacity-40" />
-
-      <div className="relative flex h-full min-h-[28rem] flex-col justify-between p-5 md:p-6 lg:p-8">
+      <div className="relative z-30 flex h-full min-h-[620px] flex-col justify-between p-6 text-white md:p-8 lg:p-10">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/85 backdrop-blur">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
-            {entryIndex} / {getEntryLabel(track.routeTrack)}
+            {String(track.order || 0).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
           </div>
 
           <div
-            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur ${
-              tone.badgeClass
-            }`}
+            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md ${tone.badgeClass}`}
           >
             {track.badgeText || "OPEN"}
           </div>
         </div>
 
-        <div className="grid gap-5">
+        <div className="max-w-[34rem]">
           <div className="flex items-center gap-3">
-            <div
-              className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.18)] backdrop-blur ${
-                isHovered ? "text-white" : "text-white/88"
-              }`}
-            >
-              <Icon size={22} />
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/14 bg-white/12 shadow-[0_18px_40px_rgba(0,0,0,0.12)] backdrop-blur-md">
+              <Icon size={22} className={tone.accentClass} />
             </div>
-            <div className="min-w-0">
+            <div>
               <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${tone.metaClass}`}>
                 {track.eyebrow || "UNFRAME JOIN"}
               </p>
-              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/58">
+              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500/90">
                 {track.routeTrack}
               </p>
             </div>
           </div>
 
-          <div className="max-w-[30rem]">
-            <h2
-              className={`text-[1.7rem] font-black tracking-tighter break-keep transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:text-[2.1rem] lg:text-[2.7rem] ${
-                tone.titleClass
-              } ${hasHover && !isHovered ? "opacity-55" : "opacity-100"}`}
-            >
-              {track.title}
-            </h2>
+          <h2
+            className={`mt-5 text-[1.85rem] font-black tracking-tighter break-keep transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:text-[2.4rem] lg:text-[3.1rem] ${tone.titleClass} ${
+              hasHover && !isHovered ? "opacity-55" : "opacity-100"
+            }`}
+          >
+            {track.title}
+          </h2>
 
-            <div
-              className={`mt-4 overflow-hidden transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                isHovered ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
-              }`}
-            >
-              <p
-                className={`max-w-xl text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${
-                  tone.descriptionClass
-                }`}
-              >
-                {track.description}
-              </p>
+          <p
+            className={`mt-4 max-w-[30rem] text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${tone.descriptionClass} ${
+              isHovered ? "opacity-100" : "opacity-92"
+            }`}
+          >
+            {track.description}
+          </p>
 
-              <div className="mt-5 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/92 backdrop-blur">
-                <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5">
-                  {getCtaLabel(track.routeTrack)}
-                </span>
-                <ArrowRight size={14} />
-              </div>
-            </div>
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 shadow-[0_12px_30px_rgba(0,0,0,0.08)] backdrop-blur-sm transition-transform duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
+            <span>{getCtaLabel(track.routeTrack)}</span>
+            <ArrowRight size={14} />
           </div>
         </div>
 
-        <div
-          className={`flex items-end justify-between gap-3 transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            isHovered ? "opacity-100 translate-y-0" : "opacity-90 translate-y-0"
-          }`}
-        >
+        <div className="flex items-end justify-between gap-4">
           <div className="max-w-[18rem]">
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-white/48">
+            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-zinc-500/90">
               {isHovered ? "ENTER" : "SELECT ENTRY POINT"}
             </p>
-            <p className="mt-2 text-xs font-medium leading-relaxed text-white/64 break-keep">
+            <p className="mt-2 text-xs font-medium leading-relaxed text-zinc-700/85 break-keep">
               {isHovered
-                ? track.description
-                : "Hover to expand the track and reveal the full entry point."}
+                ? "Hover active track for entry actions and extended copy."
+                : "Hover to expand the panel and reveal the full route."}
             </p>
           </div>
 
           <div
             className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              isHovered ? tone.ctaClass : "border-white/14 bg-white/8 text-white/72"
+              isHovered ? tone.ctaClass : "border-zinc-950/10 bg-white/80 text-zinc-950"
             }`}
           >
             <span>{getCtaLabel(track.routeTrack)}</span>
@@ -304,23 +230,23 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition-colors duration-300 hover:border-white/20 hover:bg-white/[0.08]"
+      className="group flex items-center justify-between gap-4 rounded-[24px] border border-zinc-950/10 bg-white/85 px-4 py-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-[#004AAD]/20 hover:shadow-[0_16px_36px_rgba(0,0,0,0.08)]"
     >
       <div className="flex min-w-0 items-center gap-4">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white/85">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-950/10 bg-[#F6F4EE] text-zinc-950">
           <Icon size={18} />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/42">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
             {track.eyebrow || "UNFRAME"}
           </p>
-          <p className="mt-1 text-sm font-black tracking-tight text-white break-keep">
+          <p className="mt-1 text-sm font-black tracking-tight text-zinc-950 break-keep">
             {track.title}
           </p>
         </div>
       </div>
 
-      <ArrowRight size={16} className="shrink-0 text-white/24 transition-colors group-hover:text-white/80" />
+      <ArrowRight size={16} className="shrink-0 text-zinc-300 transition-colors group-hover:text-[#004AAD]" />
     </button>
   );
 };
@@ -354,7 +280,6 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   );
   const primaryTracks = visibleTracks.slice(0, 4);
   const auxiliaryTracks = visibleTracks.slice(4);
-  const hasHover = Boolean(hoveredTrackId);
 
   const handleTrackClick = (track) => {
     if (track.routeTrack === "rental") {
@@ -371,24 +296,20 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   };
 
   return (
-    <section className="relative isolate min-h-[calc(100vh-7rem)] overflow-hidden bg-zinc-950 text-white">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(170,208,4,0.18),transparent_26%),radial-gradient(circle_at_top_right,rgba(0,74,173,0.18),transparent_26%),linear-gradient(180deg,#09090b_0%,#111114_48%,#09090b_100%)]" />
-      <div className="absolute inset-0 -z-10 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:64px_64px]" />
-      <div className="absolute inset-x-0 top-0 -z-10 h-56 bg-[linear-gradient(90deg,rgba(255,255,255,0.06),rgba(170,208,4,0.05),rgba(0,74,173,0.05))] blur-3xl" />
-
-      <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-[1680px] flex-col px-4 py-4 md:px-6 md:py-6">
-        <header className="grid gap-4 border-b border-white/10 pb-4 md:grid-cols-[1.1fr_0.9fr] md:items-end md:pb-5">
+    <section className="min-h-[calc(100vh-7rem)] bg-[#F6F4EE] text-zinc-950">
+      <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-[1600px] flex-col px-4 py-4 md:px-6 md:py-6">
+        <header className="grid gap-5 border-b border-zinc-950/10 pb-5 md:grid-cols-[1.1fr_0.9fr] md:items-end">
           <div>
-            <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white">
+            <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
                 <Sparkles size={15} />
               </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.34em] text-white/72">
+              <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
                 UNFRAME JOIN
               </span>
             </div>
 
-            <h1 className="mt-5 max-w-4xl text-[2.8rem] font-black tracking-tighter leading-[0.9] break-keep md:text-6xl lg:text-[5.4rem]">
+            <h1 className="mt-5 max-w-4xl text-[2.8rem] font-black tracking-tighter leading-[0.9] break-keep text-zinc-950 md:text-6xl lg:text-[5.2rem]">
               하나의 방식으로만
               <br />
               연결되지 않습니다.
@@ -396,17 +317,17 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
           </div>
 
           <div className="max-w-xl justify-self-start md:justify-self-end">
-            <p className="text-sm font-medium leading-relaxed text-white/68 break-keep md:text-base">
+            <p className="text-sm font-medium leading-relaxed text-zinc-700 break-keep md:text-base">
               공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다.
               각 트랙은 열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/52">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
                 <CircleDot size={11} />
                 Select your entry point
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-3 py-1.5 text-[#d7f05a]">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
                 Live Tracks
               </span>
             </div>
@@ -414,10 +335,10 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
         </header>
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/42">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
             Select your entry point — UNFRAME JOIN SYSTEM
           </p>
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/38">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-400">
             {loading ? "SYNCING" : `${visibleTracks.length} TRACKS ACTIVE`}
           </p>
         </div>
@@ -426,14 +347,14 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
           {primaryTracks.length > 0 ? (
             <>
               <div
-                className="hidden h-[clamp(30rem,72vh,52rem)] overflow-hidden rounded-[36px] border border-white/10 bg-white/[0.03] shadow-[0_28px_120px_rgba(0,0,0,0.5)] backdrop-blur-xl md:flex"
+                className="hidden overflow-hidden rounded-[36px] border border-zinc-950/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] md:flex"
+                style={{ minHeight: "clamp(32rem, 72vh, 52rem)" }}
                 onMouseLeave={() => setHoveredTrackId(null)}
               >
-                {primaryTracks.map((track, index) => (
+                {primaryTracks.map((track) => (
                   <TrackSlice
                     key={track.id}
                     track={track}
-                    index={index}
                     count={primaryTracks.length}
                     hoveredTrackId={hoveredTrackId}
                     onHover={() => setHoveredTrackId(track.id)}
@@ -448,34 +369,36 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
                     key={track.id}
                     type="button"
                     onClick={() => handleTrackClick(track)}
-                    className="group relative min-h-[16rem] overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.04] text-left shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
+                    className="group relative min-h-[18rem] overflow-hidden rounded-[30px] border border-zinc-950/10 bg-white text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)]"
                   >
                     <div
                       className="absolute inset-0"
                       style={buildTrackBackgroundStyle(track, true)}
                     />
-                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.38)_46%,rgba(0,0,0,0.72)_100%)]" />
-                    <div className="relative flex min-h-[16rem] flex-col justify-between p-5">
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-zinc-950/5 to-white/15" />
+                    <div className="absolute inset-y-0 -right-8 w-16 skew-x-[-8deg] bg-white/18 opacity-50 mix-blend-overlay" />
+
+                    <div className="relative z-30 flex min-h-[18rem] flex-col justify-between p-5 text-white">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/84 backdrop-blur">
+                        <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
                           {String(index + 1).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
                         </div>
-                        <div className="rounded-full border border-white/18 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/82 backdrop-blur">
+                        <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
                           {track.badgeText || "OPEN"}
                         </div>
                       </div>
 
                       <div className="max-w-[18rem]">
-                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/58">
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
                           {track.eyebrow || "UNFRAME JOIN"}
                         </p>
                         <h2 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
                           {track.title}
                         </h2>
-                        <p className="mt-3 text-sm font-medium leading-relaxed text-white/78 break-keep">
+                        <p className="mt-3 text-sm font-medium leading-relaxed text-white/82 break-keep">
                           {track.description}
                         </p>
-                        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
                           {getCtaLabel(track.routeTrack)}
                           <ArrowRight size={14} />
                         </div>
@@ -486,10 +409,10 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
               </div>
             </>
           ) : (
-            <div className="flex h-full min-h-[26rem] items-center justify-center rounded-[34px] border border-dashed border-white/10 bg-white/[0.03] px-6 text-center">
+            <div className="flex h-full min-h-[26rem] items-center justify-center rounded-[34px] border border-dashed border-zinc-950/10 bg-white/80 px-6 text-center">
               <div>
-                <p className="text-lg font-black text-white">노출 중인 트랙이 없습니다</p>
-                <p className="mt-2 text-sm font-medium text-white/58 break-keep">
+                <p className="text-lg font-black text-zinc-950">노출 중인 트랙이 없습니다</p>
+                <p className="mt-2 text-sm font-medium text-zinc-700 break-keep">
                   관리자에서 joinTracks를 활성화하면 이 허브가 열립니다.
                 </p>
               </div>
@@ -497,12 +420,12 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
           )}
 
           {auxiliaryTracks.length > 0 ? (
-            <div className="mt-5 rounded-[30px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm md:p-5">
+            <div className="mt-5 rounded-[30px] border border-zinc-950/10 bg-white/80 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.06)] md:p-5">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/48">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
                   Auxiliary entry points
                 </p>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/36">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
                   more than four tracks
                 </p>
               </div>
@@ -520,11 +443,11 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
           ) : null}
         </div>
 
-        <footer className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/44">
+        <footer className="mt-4 flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
             Select your entry point — UNFRAME JOIN SYSTEM
           </p>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/28">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
             BASE STRUCTURE {DEFAULT_JOIN_TRACKS.length} TRACKS
           </p>
         </footer>
@@ -534,3 +457,4 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
 };
 
 export default JoinHome;
+
