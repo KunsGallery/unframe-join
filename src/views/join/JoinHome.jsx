@@ -33,12 +33,13 @@ const hexToRgba = (hex, alpha = 1) => {
   const match = normalized.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (!match) return fallback;
 
-  const value = match[1].length === 3
-    ? match[1]
-        .split("")
-        .map((char) => char + char)
-        .join("")
-    : match[1];
+  const value =
+    match[1].length === 3
+      ? match[1]
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : match[1];
 
   const r = Number.parseInt(value.slice(0, 2), 16);
   const g = Number.parseInt(value.slice(2, 4), 16);
@@ -75,193 +76,251 @@ const getTrackTone = (track) => {
   return {
     isDark: dark,
     titleClass: dark ? "text-white" : "text-zinc-900",
-    descriptionClass: dark ? "text-white/75" : "text-zinc-600",
-    eyebrowClass: dark ? "text-white/70" : "text-zinc-500",
+    descriptionClass: dark ? "text-white/80" : "text-zinc-600",
     badgeClass: dark
       ? "border-white/20 bg-white/10 text-white"
       : "border-white/80 bg-white/85 text-zinc-700",
-    arrowClass: dark ? "text-white/80 group-hover:text-white" : "text-zinc-300 group-hover:text-[#004AAD]",
+    metaClass: dark ? "text-white/70" : "text-zinc-500",
+    ctaClass: dark
+      ? "border-white/18 bg-white/10 text-white"
+      : "border-white/70 bg-white/80 text-zinc-900",
   };
 };
 
-const buildTrackBackgroundStyle = (track) => {
+const getEntryLabel = (routeTrack) => {
+  if (routeTrack === "rental") return "SPACE";
+  if (routeTrack === "open-call") return "OPEN CALL";
+  if (routeTrack === "salon") return "SALON";
+  if (routeTrack === "collaboration") return "COLLAB";
+  return "ENTRY";
+};
+
+const getCtaLabel = (routeTrack) => {
+  if (routeTrack === "rental") return "신청 시작하기";
+  if (routeTrack === "open-call") return "공개모집 보기";
+  return "준비 중";
+};
+
+const getPanelClipPath = (index, count) => {
+  const normalizedCount = Math.max(1, Math.min(4, count));
+  const clipPaths = {
+    1: ["polygon(0 0, 100% 0, 100% 100%, 0 100%)"],
+    2: [
+      "polygon(0 0, 58% 0, 46% 100%, 0 100%)",
+      "polygon(42% 0, 100% 0, 100% 100%, 54% 100%)",
+    ],
+    3: [
+      "polygon(0 0, 40% 0, 29% 100%, 0 100%)",
+      "polygon(24% 0, 69% 0, 58% 100%, 13% 100%)",
+      "polygon(55% 0, 100% 0, 100% 100%, 42% 100%)",
+    ],
+    4: [
+      "polygon(0 0, 31% 0, 19% 100%, 0 100%)",
+      "polygon(25% 0, 56% 0, 44% 100%, 13% 100%)",
+      "polygon(50% 0, 81% 0, 69% 100%, 38% 100%)",
+      "polygon(75% 0, 100% 0, 100% 100%, 63% 100%)",
+    ],
+  };
+
+  return clipPaths[normalizedCount][index] || clipPaths[normalizedCount][clipPaths[normalizedCount].length - 1];
+};
+
+const buildTrackBackgroundStyle = (track, isHovered) => {
   const accentColor = track?.accentColor || "#004AAD";
+  const accentAlpha = isHovered ? 0.45 : 0.22;
+  const darkenAlpha = isHovered ? 0.36 : 0.58;
 
   if (track?.backgroundImageUrl) {
     return {
-      backgroundImage: `linear-gradient(180deg, rgba(12, 12, 16, 0.08), rgba(12, 12, 16, 0.72)), url(${track.backgroundImageUrl})`,
+      backgroundImage: `linear-gradient(180deg, rgba(4, 4, 6, 0.02), rgba(4, 4, 6, ${darkenAlpha})), url(${track.backgroundImageUrl})`,
       backgroundSize: "cover",
       backgroundPosition: "center",
       backgroundColor: accentColor,
+      filter: isHovered ? "grayscale(0) brightness(1.05)" : "grayscale(1) brightness(0.55) contrast(1.08)",
     };
   }
 
   return {
-    backgroundImage: `linear-gradient(135deg, ${hexToRgba(accentColor, 0.25)} 0%, ${hexToRgba(
+    backgroundImage: `linear-gradient(140deg, ${hexToRgba(accentColor, accentAlpha)} 0%, ${hexToRgba(
       accentColor,
-      0.12
-    )} 55%, rgba(246, 244, 238, 0.98) 100%)`,
+      isHovered ? 0.22 : 0.1
+    )} 42%, rgba(10, 10, 13, ${darkenAlpha}) 100%)`,
     backgroundColor: hexToRgba(accentColor, 0.08),
+    filter: isHovered ? "grayscale(0) brightness(1.03)" : "grayscale(1) brightness(0.62) contrast(1.06)",
   };
 };
 
-const desktopClipPaths = [
-  "polygon(0 0, 100% 0, 86% 100%, 0 100%)",
-  "polygon(14% 0, 100% 0, 100% 100%, 0 100%)",
-  "polygon(0 0, 100% 0, 100% 100%, 14% 100%)",
-  "polygon(0 0, 86% 0, 100% 100%, 0 100%)",
-];
-
-const mobileCardShadow =
-  "0 18px 42px rgba(15, 23, 42, 0.08), 0 2px 0 rgba(255, 255, 255, 0.35) inset";
-
-const TrackButton = ({
+const TrackSlice = ({
   track,
   index,
+  count,
   hoveredTrackId,
   onHover,
-  onLeave,
   onClick,
-  variant = "desktop",
 }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
   const tone = getTrackTone(track);
   const isHovered = hoveredTrackId === track.id;
-  const isDimmed = hoveredTrackId && !isHovered;
-  const clipPath = desktopClipPaths[index % desktopClipPaths.length];
+  const hasHover = Boolean(hoveredTrackId);
+  const isInactive = hasHover && !isHovered;
+  const clipPath = getPanelClipPath(index, count);
+  const entryIndex = String(index + 1).padStart(2, "0");
 
-  const baseClasses =
-    variant === "desktop"
-      ? "absolute overflow-hidden text-left transition-all duration-500 ease-out"
-      : "relative min-h-[18rem] w-full overflow-hidden rounded-[28px] border border-white/70 text-left transition-all duration-300";
-
-  const layoutStyle =
-    variant === "desktop"
-      ? {
-          top: `${Math.floor(index / 2) * 50}%`,
-          left: `${(index % 2) * 50}%`,
-          width: "50%",
-          height: "50%",
-          clipPath,
-          transform: isHovered ? "scale(1.035)" : isDimmed ? "scale(0.985)" : "scale(1)",
-          zIndex: isHovered ? 20 : 1,
-          boxShadow: isHovered
-            ? "0 30px 70px rgba(0, 0, 0, 0.18)"
-            : "0 12px 32px rgba(0, 0, 0, 0.08)",
-        }
-      : {
-          boxShadow: mobileCardShadow,
-          backgroundImage: `linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.02)), ${buildTrackBackgroundStyle(track).backgroundImage}`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        };
-
-  const content = (
-    <>
-      <div
-        className={`absolute inset-0 ${variant === "desktop" ? "" : ""}`}
-        style={{
-          ...buildTrackBackgroundStyle(track),
-          opacity: isDimmed ? 0.74 : 1,
-          transform: isHovered ? "scale(1.02)" : "scale(1)",
-          transition: "transform 500ms ease, opacity 300ms ease",
-        }}
-      />
-
-      <div
-        className={`absolute inset-0 ${
-          tone.isDark
-            ? "bg-[linear-gradient(180deg,rgba(0,0,0,0.02)_0%,rgba(0,0,0,0.22)_42%,rgba(0,0,0,0.74)_100%)]"
-            : "bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(246,244,238,0.24)_48%,rgba(246,244,238,0.78)_100%)]"
-        }`}
-      />
-
-      <div
-        className={`relative flex h-full flex-col justify-between p-5 md:p-6 ${
-          variant === "desktop" ? "lg:p-7" : ""
-        }`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur ${
-              tone.badgeClass
-            }`}
-          >
-            <CircleDot size={12} />
-            {track.badgeText || "OPEN"}
-          </div>
-
-          <div
-            className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] backdrop-blur ${
-              tone.isDark
-                ? "border-white/15 bg-white/10 text-white/80"
-                : "border-white/80 bg-white/75 text-zinc-500"
-            }`}
-          >
-            {track.eyebrow || "UNFRAME"}
-          </div>
-        </div>
-
-        <div className="max-w-[22rem]">
-          <div
-            className={`mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${
-              tone.isDark ? "bg-white/10 text-white" : "bg-white text-[#004AAD]"
-            } shadow-[0_8px_20px_rgba(0,0,0,0.12)]`}
-          >
-            <Icon size={22} />
-          </div>
-
-          <h2
-            className={`text-[1.65rem] font-black tracking-tighter break-keep md:text-[1.9rem] ${
-              tone.titleClass
-            }`}
-          >
-            {track.title}
-          </h2>
-
-          <p
-            className={`mt-3 max-w-md text-sm font-medium leading-relaxed break-keep md:text-[0.95rem] ${
-              tone.descriptionClass
-            }`}
-          >
-            {track.description}
-          </p>
-        </div>
-
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <span
-            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] ${
-              tone.isDark
-                ? "border-white/15 bg-white/10 text-white/90"
-                : "border-white/75 bg-white/80 text-zinc-500"
-            }`}
-          >
-            <Sparkles size={12} />
-            {track.routeTrack === "rental"
-              ? "대관 신청"
-              : track.routeTrack === "open-call"
-              ? "오픈콜 지원"
-              : "준비 중"}
-          </span>
-
-          <span className={tone.isDark ? "text-white/80" : "text-zinc-300"}>
-            <ArrowRight size={20} className={tone.arrowClass} />
-          </span>
-        </div>
-      </div>
-    </>
-  );
+  const flexGrow = !hasHover ? 1 : isHovered ? 3.05 : 0.88;
 
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      className={`${baseClasses} group`}
-      style={layoutStyle}
+      className="group relative min-w-0 overflow-hidden text-left transition-[flex-grow,transform,opacity,filter] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+      style={{
+        flexGrow,
+        flexBasis: 0,
+        clipPath,
+        marginLeft: index === 0 ? 0 : "-3.5%",
+        zIndex: isHovered ? 30 : isInactive ? 8 : 12 - index,
+        transform: isHovered ? "translateY(-2px)" : "translateY(0)",
+        opacity: isInactive ? 0.72 : 1,
+      }}
     >
-      {content}
+      <div
+        className="absolute inset-0 transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={buildTrackBackgroundStyle(track, isHovered)}
+      />
+
+      <div
+        className={`absolute inset-0 ${
+          isHovered
+            ? "bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.34)_32%,rgba(0,0,0,0.72)_100%)]"
+            : "bg-[linear-gradient(180deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.42)_48%,rgba(0,0,0,0.78)_100%)]"
+        }`}
+      />
+
+      <div className="absolute inset-0 border border-white/10" />
+      <div className="absolute inset-0 bg-[linear-gradient(115deg,transparent_30%,rgba(255,255,255,0.08)_50%,transparent_68%)] opacity-40" />
+
+      <div className="relative flex h-full min-h-[28rem] flex-col justify-between p-5 md:p-6 lg:p-8">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/85 backdrop-blur">
+            <CircleDot size={11} />
+            {entryIndex} / {getEntryLabel(track.routeTrack)}
+          </div>
+
+          <div
+            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur ${
+              tone.badgeClass
+            }`}
+          >
+            {track.badgeText || "OPEN"}
+          </div>
+        </div>
+
+        <div className="grid gap-5">
+          <div className="flex items-center gap-3">
+            <div
+              className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.18)] backdrop-blur ${
+                isHovered ? "text-white" : "text-white/88"
+              }`}
+            >
+              <Icon size={22} />
+            </div>
+            <div className="min-w-0">
+              <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${tone.metaClass}`}>
+                {track.eyebrow || "UNFRAME JOIN"}
+              </p>
+              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/58">
+                {track.routeTrack}
+              </p>
+            </div>
+          </div>
+
+          <div className="max-w-[30rem]">
+            <h2
+              className={`text-[1.7rem] font-black tracking-tighter break-keep transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:text-[2.1rem] lg:text-[2.7rem] ${
+                tone.titleClass
+              } ${hasHover && !isHovered ? "opacity-55" : "opacity-100"}`}
+            >
+              {track.title}
+            </h2>
+
+            <div
+              className={`mt-4 overflow-hidden transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                isHovered ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
+              }`}
+            >
+              <p
+                className={`max-w-xl text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${
+                  tone.descriptionClass
+                }`}
+              >
+                {track.description}
+              </p>
+
+              <div className="mt-5 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/92 backdrop-blur">
+                <span className="rounded-full border border-white/20 bg-white/10 px-2 py-0.5">
+                  {getCtaLabel(track.routeTrack)}
+                </span>
+                <ArrowRight size={14} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={`flex items-end justify-between gap-3 transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            isHovered ? "opacity-100 translate-y-0" : "opacity-90 translate-y-0"
+          }`}
+        >
+          <div className="max-w-[18rem]">
+            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-white/48">
+              {isHovered ? "ENTER" : "SELECT ENTRY POINT"}
+            </p>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-white/64 break-keep">
+              {isHovered
+                ? track.description
+                : "Hover to expand the track and reveal the full entry point."}
+            </p>
+          </div>
+
+          <div
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              isHovered ? tone.ctaClass : "border-white/14 bg-white/8 text-white/72"
+            }`}
+          >
+            <span>{getCtaLabel(track.routeTrack)}</span>
+            <ArrowRight size={14} />
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+};
+
+const AuxiliaryTrackItem = ({ track, onClick }) => {
+  const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex items-center justify-between gap-4 rounded-[24px] border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition-colors duration-300 hover:border-white/20 hover:bg-white/[0.08]"
+    >
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white/85">
+          <Icon size={18} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/42">
+            {track.eyebrow || "UNFRAME"}
+          </p>
+          <p className="mt-1 text-sm font-black tracking-tight text-white break-keep">
+            {track.title}
+          </p>
+        </div>
+      </div>
+
+      <ArrowRight size={16} className="shrink-0 text-white/24 transition-colors group-hover:text-white/80" />
     </button>
   );
 };
@@ -269,7 +328,7 @@ const TrackButton = ({
 const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hoveredTrackId, setHoveredTrackId] = useState("");
+  const [hoveredTrackId, setHoveredTrackId] = useState(null);
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", JOIN_TRACK_COLLECTION);
@@ -289,13 +348,13 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   }, [appId, db]);
 
   const mergedTracks = useMemo(() => mergeJoinTracks(joinTrackDocs), [joinTrackDocs]);
-
   const visibleTracks = useMemo(
     () => mergedTracks.filter((track) => track.enabled !== false),
     [mergedTracks]
   );
   const primaryTracks = visibleTracks.slice(0, 4);
-  const overflowTracks = visibleTracks.slice(4);
+  const auxiliaryTracks = visibleTracks.slice(4);
+  const hasHover = Boolean(hoveredTrackId);
 
   const handleTrackClick = (track) => {
     if (track.routeTrack === "rental") {
@@ -312,163 +371,163 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   };
 
   return (
-    <section className="relative overflow-hidden py-6 md:py-10">
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,74,173,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(170,208,4,0.16),transparent_24%),linear-gradient(180deg,#f6f4ee_0%,#fbfaf6_48%,#f6f4ee_100%)]" />
-      <div className="absolute inset-x-0 top-0 -z-10 h-44 bg-[linear-gradient(90deg,rgba(0,74,173,0.08),rgba(170,208,4,0.1),rgba(0,0,0,0.02))] blur-3xl" />
+    <section className="relative isolate min-h-[calc(100vh-7rem)] overflow-hidden bg-zinc-950 text-white">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(170,208,4,0.18),transparent_26%),radial-gradient(circle_at_top_right,rgba(0,74,173,0.18),transparent_26%),linear-gradient(180deg,#09090b_0%,#111114_48%,#09090b_100%)]" />
+      <div className="absolute inset-0 -z-10 opacity-60 [background-image:linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:64px_64px]" />
+      <div className="absolute inset-x-0 top-0 -z-10 h-56 bg-[linear-gradient(90deg,rgba(255,255,255,0.06),rgba(170,208,4,0.05),rgba(0,74,173,0.05))] blur-3xl" />
 
-      <div className="mx-auto max-w-6xl px-4 md:px-6">
-        <div className="rounded-[36px] border border-white/70 bg-white/65 px-5 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl md:px-8 md:py-10">
-          <div className="flex items-center gap-3 text-[#004AAD]">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6">
-              <Sparkles size={18} />
-            </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
-              UNFRAME JOIN
-            </span>
-          </div>
-
-          <div className="mt-6 grid gap-6 xl:grid-cols-[1.08fr_0.92fr] xl:items-end">
-            <div>
-              <h1 className="max-w-3xl text-[2.85rem] font-black tracking-tighter text-zinc-900 leading-[0.92] break-keep md:text-7xl">
-                하나의 방식으로만
-                <br />
-                연결되지 않습니다.
-              </h1>
-
-              <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-zinc-600 break-keep md:text-lg">
-                공간을 제안할 수도,
-                <br className="md:hidden" />
-                전시에 지원할 수도,
-                <br className="md:hidden" />
-                프로그램에 참여할 수도 있습니다.
-              </p>
-
-              <p className="mt-4 max-w-xl text-sm font-bold leading-relaxed text-zinc-500 break-keep md:text-base">
-                당신의 방식에 맞는 입구를 선택해 주세요.
-              </p>
+      <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-[1680px] flex-col px-4 py-4 md:px-6 md:py-6">
+        <header className="grid gap-4 border-b border-white/10 pb-4 md:grid-cols-[1.1fr_0.9fr] md:items-end md:pb-5">
+          <div>
+            <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white">
+                <Sparkles size={15} />
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-[0.34em] text-white/72">
+                UNFRAME JOIN
+              </span>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-[24px] border border-[#004AAD]/12 bg-[#004AAD]/5 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                  Live Tracks
-                </p>
-                <p className="mt-2 text-2xl font-black tracking-tight text-zinc-900">
-                  {visibleTracks.length}
-                </p>
-                <p className="mt-1 text-sm font-medium text-zinc-500 break-keep">
-                  현재 노출 중인 트랙
-                </p>
-              </div>
+            <h1 className="mt-5 max-w-4xl text-[2.8rem] font-black tracking-tighter leading-[0.9] break-keep md:text-6xl lg:text-[5.4rem]">
+              하나의 방식으로만
+              <br />
+              연결되지 않습니다.
+            </h1>
+          </div>
 
-              <div className="rounded-[24px] border border-zinc-100 bg-white/80 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  Source
-                </p>
-                <p className="mt-2 text-base font-black text-zinc-900">Firestore + fallback</p>
-                <p className="mt-1 text-sm font-medium text-zinc-500 break-keep">
-                  관리자가 트랙 노출을 제어할 수 있습니다.
-                </p>
-              </div>
+          <div className="max-w-xl justify-self-start md:justify-self-end">
+            <p className="text-sm font-medium leading-relaxed text-white/68 break-keep md:text-base">
+              공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다.
+              각 트랙은 열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
+            </p>
 
-              <div className="rounded-[24px] border border-[#AAD004]/15 bg-[#AAD004]/10 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
-                  Status
-                </p>
-                <p className="mt-2 text-base font-black text-zinc-900">입구 선택 허브</p>
-                <p className="mt-1 text-sm font-medium text-zinc-500 break-keep">
-                  rental / open-call / salon / collaboration
-                </p>
-              </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-white/52">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                <CircleDot size={11} />
+                Select your entry point
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-3 py-1.5 text-[#d7f05a]">
+                Live Tracks
+              </span>
             </div>
           </div>
+        </header>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/42">
+            Select your entry point — UNFRAME JOIN SYSTEM
+          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/38">
+            {loading ? "SYNCING" : `${visibleTracks.length} TRACKS ACTIVE`}
+          </p>
         </div>
 
-        {loading ? (
-          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/70 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm backdrop-blur-sm">
-            <Sparkles size={12} />
-            트랙을 불러오는 중입니다
-          </div>
-        ) : null}
-
-        {visibleTracks.length > 0 ? (
-          <>
-            <div className="mt-6 hidden min-h-[34rem] overflow-hidden rounded-[40px] border border-white/70 bg-white/50 shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl md:block">
-              <div className="relative h-[34rem]">
+        <div className="mt-4 flex-1">
+          {primaryTracks.length > 0 ? (
+            <>
+              <div
+                className="hidden h-[clamp(30rem,72vh,52rem)] overflow-hidden rounded-[36px] border border-white/10 bg-white/[0.03] shadow-[0_28px_120px_rgba(0,0,0,0.5)] backdrop-blur-xl md:flex"
+                onMouseLeave={() => setHoveredTrackId(null)}
+              >
                 {primaryTracks.map((track, index) => (
-                  <TrackButton
+                  <TrackSlice
                     key={track.id}
                     track={track}
                     index={index}
+                    count={primaryTracks.length}
                     hoveredTrackId={hoveredTrackId}
                     onHover={() => setHoveredTrackId(track.id)}
-                    onLeave={() => setHoveredTrackId("")}
                     onClick={() => handleTrackClick(track)}
-                    variant="desktop"
+                  />
+                ))}
+              </div>
+
+              <div className="grid gap-4 md:hidden">
+                {primaryTracks.map((track, index) => (
+                  <button
+                    key={track.id}
+                    type="button"
+                    onClick={() => handleTrackClick(track)}
+                    className="group relative min-h-[16rem] overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.04] text-left shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
+                  >
+                    <div
+                      className="absolute inset-0"
+                      style={buildTrackBackgroundStyle(track, true)}
+                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.38)_46%,rgba(0,0,0,0.72)_100%)]" />
+                    <div className="relative flex min-h-[16rem] flex-col justify-between p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="rounded-full border border-white/12 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/84 backdrop-blur">
+                          {String(index + 1).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
+                        </div>
+                        <div className="rounded-full border border-white/18 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/82 backdrop-blur">
+                          {track.badgeText || "OPEN"}
+                        </div>
+                      </div>
+
+                      <div className="max-w-[18rem]">
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/58">
+                          {track.eyebrow || "UNFRAME JOIN"}
+                        </p>
+                        <h2 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
+                          {track.title}
+                        </h2>
+                        <p className="mt-3 text-sm font-medium leading-relaxed text-white/78 break-keep">
+                          {track.description}
+                        </p>
+                        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+                          {getCtaLabel(track.routeTrack)}
+                          <ArrowRight size={14} />
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full min-h-[26rem] items-center justify-center rounded-[34px] border border-dashed border-white/10 bg-white/[0.03] px-6 text-center">
+              <div>
+                <p className="text-lg font-black text-white">노출 중인 트랙이 없습니다</p>
+                <p className="mt-2 text-sm font-medium text-white/58 break-keep">
+                  관리자에서 joinTracks를 활성화하면 이 허브가 열립니다.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {auxiliaryTracks.length > 0 ? (
+            <div className="mt-5 rounded-[30px] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm md:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/48">
+                  Auxiliary entry points
+                </p>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/36">
+                  more than four tracks
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {auxiliaryTracks.map((track) => (
+                  <AuxiliaryTrackItem
+                    key={track.id}
+                    track={track}
+                    onClick={() => handleTrackClick(track)}
                   />
                 ))}
               </div>
             </div>
-
-            <div className="mt-6 grid gap-4 md:hidden">
-              {primaryTracks.map((track, index) => (
-                <TrackButton
-                  key={track.id}
-                  track={track}
-                  index={index}
-                  hoveredTrackId={hoveredTrackId}
-                  onHover={() => setHoveredTrackId(track.id)}
-                  onLeave={() => setHoveredTrackId("")}
-                  onClick={() => handleTrackClick(track)}
-                  variant="mobile"
-                />
-              ))}
-            </div>
-
-            {overflowTracks.length > 0 ? (
-              <div className="mt-6 rounded-[32px] border border-zinc-200 bg-white/75 p-5 shadow-sm backdrop-blur-sm">
-                <div className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
-                  <Sparkles size={12} />
-                  추가 트랙
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {overflowTracks.map((track) => (
-                    <button
-                      key={track.id}
-                      type="button"
-                      onClick={() => handleTrackClick(track)}
-                      className="flex items-center justify-between gap-4 rounded-[22px] border border-zinc-100 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                          {track.eyebrow || "UNFRAME"}
-                        </p>
-                        <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                          {track.title}
-                        </p>
-                      </div>
-                      <ArrowRight size={16} className="shrink-0 text-zinc-300" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="mt-6 rounded-[32px] border border-dashed border-zinc-200 bg-white/70 px-6 py-12 text-center shadow-sm backdrop-blur-sm">
-            <p className="text-lg font-black text-zinc-900">노출 중인 트랙이 없습니다</p>
-            <p className="mt-2 text-sm font-medium text-zinc-500 break-keep">
-              관리자에서 joinTracks를 활성화하면 여기에 입구가 표시됩니다.
-            </p>
-          </div>
-        )}
-
-        <div className="mt-8 flex justify-center md:mt-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/70 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 shadow-sm backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#AAD004]" />
-            {DEFAULT_JOIN_TRACKS.length}개의 기본 트랙 구조를 기반으로 확장합니다
-          </div>
+          ) : null}
         </div>
+
+        <footer className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between">
+          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/44">
+            Select your entry point — UNFRAME JOIN SYSTEM
+          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/28">
+            BASE STRUCTURE {DEFAULT_JOIN_TRACKS.length} TRACKS
+          </p>
+        </footer>
       </div>
     </section>
   );
