@@ -54,6 +54,11 @@ const STATUS_META = {
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",
     icon: <CheckCircle2 size={14} />,
   },
+  confirmed: {
+    label: "승인",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: <CheckCircle2 size={14} />,
+  },
   rejected: {
     label: "미선정",
     className: "bg-red-50 text-red-600 border-red-200",
@@ -98,6 +103,31 @@ const getStatusMeta = (status) => {
       icon: <Clock3 size={14} />,
     }
   );
+};
+
+const getTrackLabel = (trackType) => {
+  if (trackType === "open-call") return "오픈콜";
+  return "공간 대관";
+};
+
+const getApplicationTitle = (app) =>
+  app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
+
+const getApplicationMetaLine = (app) => {
+  if (!app) return "-";
+
+  if (app.trackType === "open-call") {
+    return [app.medium, app.birthYear].filter(Boolean).join(" · ") || "-";
+  }
+
+  return [
+    app.selectedDate || "-",
+    app.selectedProgram?.name
+      ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+      : "-",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 };
 
 const sortApplications = (apps) => {
@@ -170,11 +200,16 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-            Application
-          </p>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
+              {getTrackLabel(app.trackType)}
+            </span>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+              Application
+            </p>
+          </div>
           <h3 className="text-lg md:text-xl font-black text-zinc-900 leading-tight break-keep">
-            {app.exhibitionTitle || "제목 없음"}
+            {getApplicationTitle(app)}
           </h3>
         </div>
         <ChevronRight size={18} className="text-zinc-300 shrink-0 mt-1" />
@@ -198,10 +233,10 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
 
         <div className="rounded-2xl bg-zinc-50 border border-zinc-100 px-4 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-1">
-            Date
+            {app.trackType === "open-call" ? "Medium" : "Date"}
           </p>
           <p className="text-sm font-bold text-zinc-700 break-keep">
-            {app.selectedDate || "-"}
+            {app.trackType === "open-call" ? app.medium || "-" : app.selectedDate || "-"}
           </p>
         </div>
       </div>
@@ -223,9 +258,6 @@ const ApplicationDetailPanel = ({ app }) => {
     );
   }
 
-  const partnerLabel =
-    app.partnerType === "brand" ? "Brand / Team" : "Artist";
-
   const nextAction =
     app.status === "additional_requested"
       ? "추가자료를 업로드해 주세요."
@@ -244,10 +276,10 @@ const ApplicationDetailPanel = ({ app }) => {
               Selected Application
             </p>
             <h3 className="text-2xl md:text-3xl font-black text-zinc-900 leading-tight break-keep">
-              {app.exhibitionTitle || "제목 없음"}
+              {getApplicationTitle(app)}
             </h3>
             <p className="mt-3 text-sm font-bold text-zinc-400 break-keep">
-              {partnerLabel} · {app.selectedDate || "-"}
+              {getTrackLabel(app.trackType)} · {getApplicationMetaLine(app)}
             </p>
           </div>
 
@@ -269,49 +301,171 @@ const ApplicationDetailPanel = ({ app }) => {
       <div className="grid md:grid-cols-2 gap-5">
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
-            Overview
+            지원 공고
           </p>
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                Program
-              </p>
-              <p className="text-sm font-bold text-zinc-700 break-keep">
-                {app.selectedProgram?.name
-                  ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
-                  : "-"}
-              </p>
+          {app.trackType === "open-call" ? (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  지원자
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-keep">
+                  {app.name || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Email
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-all">
+                  {app.email || app.applicantEmail || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  출생연도
+                </p>
+                <p className="text-sm font-bold text-zinc-700">
+                  {app.birthYear || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Medium
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-keep">
+                  {app.medium || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  제출일
+                </p>
+                <p className="text-sm font-bold text-zinc-700">
+                  {formatDate(app.submittedAt)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                Submitted
-              </p>
-              <p className="text-sm font-bold text-zinc-700">
-                {formatDate(app.submittedAt)}
-              </p>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Program
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-keep">
+                  {app.selectedProgram?.name
+                    ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
+                    : "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Submitted
+                </p>
+                <p className="text-sm font-bold text-zinc-700">
+                  {formatDate(app.submittedAt)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Email
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-all">
+                  {app.applicantEmail || "-"}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                Email
-              </p>
-              <p className="text-sm font-bold text-zinc-700 break-all">
-                {app.applicantEmail || "-"}
-              </p>
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
-            Summary
+            작업 소개
           </p>
-          <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep">
-            {app.partnerType === "brand"
-              ? app.projectPurpose || "아직 등록된 제안 요약이 없습니다."
-              : app.artistNote || "아직 등록된 프로젝트 요약이 없습니다."}
-          </p>
+          {app.trackType === "open-call" ? (
+            <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep whitespace-pre-wrap">
+              {app.artistStatement || "아직 등록된 작업 소개가 없습니다."}
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep">
+              {app.partnerType === "brand"
+                ? app.projectPurpose || "아직 등록된 제안 요약이 없습니다."
+                : app.artistNote || "아직 등록된 프로젝트 요약이 없습니다."}
+            </p>
+          )}
         </div>
       </div>
+
+      {app.trackType === "open-call" ? (
+        <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
+            지원서 정보
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                Address
+              </p>
+              <p className="text-sm font-bold text-zinc-700 break-keep">
+                {`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                SNS / Website
+              </p>
+              <p className="text-sm font-bold text-zinc-700 break-all">
+                {app.snsLink || "-"}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                Portfolio
+              </p>
+              <p className="text-sm font-bold text-zinc-700 break-all">
+                {app.portfolioUrl || "-"}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+              대표 작품
+            </p>
+            <div className="grid gap-4">
+              {(app.works || []).map((work, index) => {
+                if (
+                  !work?.imageUrl &&
+                  !work?.title &&
+                  !work?.material &&
+                  !work?.size &&
+                  !work?.year
+                ) {
+                  return null;
+                }
+
+                return (
+                  <div key={`${app.id}-work-${index}`} className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
+                      대표 작품 {index + 1}
+                    </p>
+                    <div className="space-y-1.5 text-sm font-bold text-zinc-700 break-keep">
+                      <p>제목: {work.title || "-"}</p>
+                      <p>재료: {work.material || "-"}</p>
+                      <p>크기: {work.size || "-"}</p>
+                      <p>제작연도: {work.year || "-"}</p>
+                      <p>이미지: {work.imageUrl || "-"}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -463,7 +617,9 @@ const ProfileForm = ({
 );
 
 const HistoryPanel = ({ applications }) => {
-  const approvedItems = applications.filter((app) => app.status === "approved");
+  const approvedItems = applications.filter(
+    (app) => app.status === "approved" || app.status === "confirmed"
+  );
 
   if (approvedItems.length === 0) {
     return (
@@ -487,13 +643,10 @@ const HistoryPanel = ({ applications }) => {
                 Exhibition / Collaboration
               </p>
               <h3 className="text-xl font-black text-zinc-900 break-keep">
-                {app.exhibitionTitle || "-"}
+                {getApplicationTitle(app)}
               </h3>
               <p className="mt-2 text-sm font-bold text-zinc-400 break-keep">
-                {app.selectedDate || "-"} ·{" "}
-                {app.selectedProgram?.name
-                  ? `${app.selectedProgram.name} · ${app.selectedProgram.price}만원`
-                  : "-"}
+                {getTrackLabel(app.trackType)} · {getApplicationMetaLine(app)}
               </p>
             </div>
 
@@ -526,13 +679,16 @@ const UpdatesPanel = ({ applications }) => {
             key={app.id}
             className="rounded-[26px] border border-zinc-100 bg-white px-5 py-5"
           >
-            <div className="flex items-start gap-4">
+              <div className="flex items-start gap-4">
               <div className="mt-1 text-[#004aad]">{meta.icon}</div>
               <div className="min-w-0">
                 <p className="text-sm font-black text-zinc-900 break-keep">
-                  {app.exhibitionTitle || "제목 없음"}
+                  {getApplicationTitle(app)}
                 </p>
                 <p className="mt-2 text-sm font-bold text-zinc-500 leading-relaxed break-keep">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-500 mr-2">
+                    {getTrackLabel(app.trackType)}
+                  </span>
                   현재 상태는 <span className="text-zinc-800">{meta.label}</span> 입니다.
                 </p>
                 <p className="mt-2 text-[11px] font-black text-zinc-300">
@@ -624,7 +780,9 @@ const DashboardPanel = ({
             Selected Program
           </p>
           <p className="text-sm font-bold text-zinc-700 break-keep">
-            {current?.selectedProgram?.name
+            {current?.trackType === "open-call"
+              ? getTrackLabel(current.trackType)
+              : current?.selectedProgram?.name
               ? `${current.selectedProgram.name} · ${current.selectedProgram.price}만원`
               : "-"}
           </p>

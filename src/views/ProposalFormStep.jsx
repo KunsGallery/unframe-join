@@ -588,6 +588,7 @@ const ProposalFormStep = ({
       const appDocRef = await addDoc(
         collection(db, "artifacts", appId, "public", "data", "applications"),
         {
+          trackType: "rental",
           userId: user.uid,
           applicantEmail: user.email,
           status: "review",

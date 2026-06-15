@@ -37,6 +37,8 @@ import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
 import { sendApplicationStatusEmail } from "../lib/uploads";
 import EmailTestPanel from "./EmailTestPanel";
+import OpenCallManager from "./admin/OpenCallManager";
+import JoinTrackManager from "./admin/JoinTrackManager";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -63,6 +65,26 @@ const getStatusLabel = (status) => {
 const getProgramLabel = (program) => {
   if (!program) return "-";
   return `${program.name} · ${program.price}만원`;
+};
+
+const getTrackLabel = (trackType) => {
+  if (trackType === "open-call") return "오픈콜";
+  return "공간 대관";
+};
+
+const getApplicationTitle = (app) => app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
+
+const getApplicationDateKey = (app) => {
+  if (app?.selectedDate) return app.selectedDate;
+  if (app?.submittedAt?.seconds) {
+    return new Date(app.submittedAt.seconds * 1000).toISOString().slice(0, 10);
+  }
+  return "";
+};
+
+const getApplicationGroupLabel = (app) => {
+  if (app?.trackType === "open-call") return "오픈콜";
+  return app?.selectedDate || "미정";
 };
 
 const formatSentAt = (value) => {
@@ -549,6 +571,38 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       appDoc.id
     );
 
+    if (appDoc.trackType === "open-call") {
+      if (status === "delete") {
+        await deleteDoc(appRef);
+      } else if (status === "confirmed") {
+        await updateDoc(appRef, {
+          status: "confirmed",
+          updatedAt: serverTimestamp(),
+        });
+      } else if (status === "additional_requested") {
+        await updateDoc(appRef, {
+          status: "additional_requested",
+          requestMessage: reason || "",
+          requestUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else if (status === "rejected") {
+        await updateDoc(appRef, {
+          status: "rejected",
+          rejectionReason: reason || "",
+          reviewSummary: "",
+          improvementSuggestions: "",
+          rejectedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      setRejectId(null);
+      setRejectReason("");
+      alert("Updated successfully.");
+      return;
+    }
+
     if (status === "confirmed") {
       const guideDraft = getGuideDraft(appDoc);
 
@@ -800,13 +854,14 @@ const handleAction = async (appDoc, date, status, reason = "") => {
   };
 
   const filteredApplications = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+      const term = searchTerm.trim().toLowerCase();
 
     let list = [...applications].filter((app) => {
       const matchesSearch =
         !term ||
         [
           app.exhibitionTitle,
+          app.openCallTitle,
           app.name,
           app.realName,
           app.stageName,
@@ -831,8 +886,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
     });
 
     list.sort((a, b) => {
-      if (sortOrder === "date-asc") return a.selectedDate.localeCompare(b.selectedDate);
-      if (sortOrder === "date-desc") return b.selectedDate.localeCompare(a.selectedDate);
+      if (sortOrder === "date-asc") return getApplicationDateKey(a).localeCompare(getApplicationDateKey(b));
+      if (sortOrder === "date-desc") return getApplicationDateKey(b).localeCompare(getApplicationDateKey(a));
       if (sortOrder === "submitted-desc") {
         const aTime = a.submittedAt?.seconds || 0;
         const bTime = b.submittedAt?.seconds || 0;
@@ -852,15 +907,34 @@ const handleAction = async (appDoc, date, status, reason = "") => {
   const groupedApps = useMemo(() => {
     const groups = {};
     filteredApplications.forEach((app) => {
-      if (!groups[app.selectedDate]) groups[app.selectedDate] = [];
-      groups[app.selectedDate].push(app);
+      const groupKey = getApplicationGroupLabel(app);
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(app);
     });
 
     const entries = Object.entries(groups);
-    if (sortOrder === "date-asc") {
-      return entries.sort((a, b) => a[0].localeCompare(b[0]));
-    }
-    return entries.sort((a, b) => b[0].localeCompare(a[0]));
+    return entries.sort((a, b) => {
+      const aOpen = a[0] === "오픈콜";
+      const bOpen = b[0] === "오픈콜";
+      if (aOpen || bOpen) {
+        if (aOpen === bOpen) {
+          return (sortOrder === "date-asc" ? 1 : -1) * a[0].localeCompare(b[0]);
+        }
+        return aOpen ? 1 : -1;
+      }
+
+      const aMissing = a[0] === "미정";
+      const bMissing = b[0] === "미정";
+      if (aMissing || bMissing) {
+        if (aMissing === bMissing) return 0;
+        return aMissing ? 1 : -1;
+      }
+
+      if (sortOrder === "date-asc") {
+        return a[0].localeCompare(b[0]);
+      }
+      return b[0].localeCompare(a[0]);
+    });
   }, [filteredApplications, sortOrder]);
 
   return (
@@ -883,8 +957,11 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       </div>
 
       <div className="mb-20">
-        <EmailTestPanel />
+      <EmailTestPanel />
       </div>
+
+      <OpenCallManager db={db} appId={appId} applications={applications} />
+      <JoinTrackManager db={db} appId={appId} />
 
       <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
@@ -1186,16 +1263,27 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                             </div>
 
                             <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight wrap-break-word text-left">
-                              {app.exhibitionTitle || "Untitled Project"}
+                              {getApplicationTitle(app)}
                             </h4>
 
                             <div className="flex items-center gap-6 flex-wrap text-left">
                               <p className="text-sm font-black text-zinc-400 uppercase">
-                                {app.partnerType === "brand" ? app.brandName : app.stageName || app.name}
+                                {app.trackType === "open-call"
+                                  ? app.medium || app.name || "-"
+                                  : app.partnerType === "brand"
+                                  ? app.brandName
+                                  : app.stageName || app.name || "-"}
                               </p>
                               <div className="w-1 h-1 bg-zinc-200 rounded-full" />
                               <p className="text-sm font-black text-zinc-400">{app.phone}</p>
-                              {app.selectedProgram && (
+                              {app.trackType === "open-call" ? (
+                                <>
+                                  <div className="w-1 h-1 bg-zinc-200 rounded-full" />
+                                  <span className="px-3 py-1.5 rounded-full bg-[#AAD004]/15 text-[#6e8d00] text-[10px] font-black uppercase tracking-widest">
+                                    {getTrackLabel(app.trackType)}
+                                  </span>
+                                </>
+                              ) : app.selectedProgram && (
                                 <>
                                   <div className="w-1 h-1 bg-zinc-200 rounded-full" />
                                   <span className="px-3 py-1.5 rounded-full bg-[#004aad]/10 text-[#004aad] text-[10px] font-black uppercase tracking-widest">
@@ -1307,81 +1395,161 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                             <div className="space-y-12 text-left">
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  User Profile Information
+                                  지원자 정보
                                 </h5>
-                                <div className="grid gap-4 text-left">
-                                  <DetailItem
-                                    label="전체 성함"
-                                    value={
-                                      app.partnerType === "brand"
-                                        ? app.brandName
-                                        : `${app.realName || "-"} (${app.englishName || "-"})`
-                                    }
-                                  />
-                                  <DetailItem
-                                    label="활동/예명"
-                                    value={app.partnerType === "brand" ? "-" : app.stageName || app.realName || "-"}
-                                  />
-                                  <DetailItem label="이메일" value={app.applicantEmail || "-"} />
-                                  <DetailItem label="연락처" value={app.phone || "-"} />
-                                  <DetailItem label="생년/설립일" value={app.birthDate || "-"} />
-                                  <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
-                                  <DetailItem label="신청 프로그램" value={getProgramLabel(app.selectedProgram)} />
-                                </div>
+                                {app.trackType === "open-call" ? (
+                                  <div className="grid gap-4 text-left">
+                                    <DetailItem label="이름" value={app.name || "-"} />
+                                    <DetailItem label="연락처" value={app.phone || "-"} />
+                                    <DetailItem label="이메일" value={app.email || app.applicantEmail || "-"} />
+                                    <DetailItem label="출생연도" value={app.birthYear || "-"} />
+                                    <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
+                                    <DetailItem label="매체" value={app.medium || "-"} />
+                                  </div>
+                                ) : (
+                                  <div className="grid gap-4 text-left">
+                                    <DetailItem
+                                      label="전체 성함"
+                                      value={
+                                        app.partnerType === "brand"
+                                          ? app.brandName
+                                          : `${app.realName || "-"} (${app.englishName || "-"})`
+                                      }
+                                    />
+                                    <DetailItem
+                                      label="활동/예명"
+                                      value={app.partnerType === "brand" ? "-" : app.stageName || app.realName || "-"}
+                                    />
+                                    <DetailItem label="이메일" value={app.applicantEmail || "-"} />
+                                    <DetailItem label="연락처" value={app.phone || "-"} />
+                                    <DetailItem label="생년/설립일" value={app.birthDate || "-"} />
+                                    <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
+                                    <DetailItem label="신청 프로그램" value={getProgramLabel(app.selectedProgram)} />
+                                  </div>
+                                )}
                               </div>
 
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  Proposal Note
+                                  작업 소개
                                 </h5>
-                                <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
-                                  {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
-                                </p>
+                                {app.trackType === "open-call" ? (
+                                  <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
+                                    {app.artistStatement || "-"}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
+                                    {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
+                                  </p>
+                                )}
                               </div>
                             </div>
 
                             <div className="space-y-12 text-left">
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  Visual & External Assets
+                                  포트폴리오 / 외부 링크
                                 </h5>
-                                <div className="flex flex-col gap-4 text-left">
-                                  {app.snsLink && (
-                                    <a
-                                      href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                    >
-                                      <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
-                                    </a>
-                                  )}
+                                {app.trackType === "open-call" ? (
+                                  <div className="flex flex-col gap-4 text-left">
+                                    {app.snsLink && (
+                                      <a
+                                        href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                      >
+                                        <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                      </a>
+                                    )}
 
-                                  {app.profilePhotoUrl && (
-                                    <a
-                                      href={app.profilePhotoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                    >
-                                      <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
-                                    </a>
-                                  )}
+                                    {app.portfolioUrl && (
+                                      <a
+                                        href={app.portfolioUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                      >
+                                        <FileText size={18} /> 포트폴리오 링크 바로가기
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col gap-4 text-left">
+                                    {app.snsLink && (
+                                      <a
+                                        href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                      >
+                                        <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                      </a>
+                                    )}
 
-                                  {app.highResPhotosUrl && (
-                                    <a
-                                      href={app.highResPhotosUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
-                                    >
-                                      <ImageIcon size={18} /> 대표작 고화질 이미지 원본 보기
-                                    </a>
-                                  )}
-                                </div>
+                                    {app.profilePhotoUrl && (
+                                      <a
+                                        href={app.profilePhotoUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                      >
+                                        <ImageIcon size={18} /> 프로필 사진 / 로고 원본 크게보기
+                                      </a>
+                                    )}
+
+                                    {app.highResPhotosUrl && (
+                                      <a
+                                        href={app.highResPhotosUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
+                                      >
+                                        <ImageIcon size={18} /> 대표작 고화질 이미지 원본 보기
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
                               </div>
 
-                              {app.experimentText && (
+                              {app.trackType === "open-call" ? (
+                                <div>
+                                  <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
+                                    대표 작품
+                                  </h5>
+                                  <div className="grid gap-4">
+                                    {(app.works || []).map((work, index) => {
+                                      if (
+                                        !work?.imageUrl &&
+                                        !work?.title &&
+                                        !work?.material &&
+                                        !work?.size &&
+                                        !work?.year
+                                      ) {
+                                        return null;
+                                      }
+
+                                      return (
+                                        <div
+                                          key={`${app.id}-work-${index}`}
+                                          className="rounded-[22px] border border-zinc-100 bg-white p-4"
+                                        >
+                                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-2">
+                                            대표 작품 {index + 1}
+                                          </p>
+                                          <div className="space-y-1.5 text-sm font-bold text-zinc-700 break-keep">
+                                            <p>제목: {work.title || "-"}</p>
+                                            <p>재료: {work.material || "-"}</p>
+                                            <p>크기: {work.size || "-"}</p>
+                                            <p>제작연도: {work.year || "-"}</p>
+                                            <p>이미지: {work.imageUrl || "-"}</p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : app.experimentText ? (
                                 <div>
                                   <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
                                     Experimental Trial
@@ -1390,7 +1558,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                     {app.experimentText}
                                   </p>
                                 </div>
-                              )}
+                              ) : null}
                             </div>
                           </div>
 

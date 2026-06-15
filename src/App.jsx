@@ -20,6 +20,9 @@ import ProposalFormStep from "./views/ProposalFormStep";
 import AdminDashboard from "./views/AdminDashboard";
 import MyPage from "./views/MyPage";
 import SuccessView from "./views/SuccessView";
+import JoinHome from "./views/join/JoinHome";
+import OpenCallLanding from "./views/open-call/OpenCallLanding";
+import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
 
 const EMPTY_FORM_DATA = {
   name: "",
@@ -92,6 +95,9 @@ const App = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [viewMode, setViewMode] = useState(initialUrlState.view);
   const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
+  const [selectedTrack, setSelectedTrack] = useState(null);
+  const [openCallMode, setOpenCallMode] = useState("landing");
+  const [selectedOpenCall, setSelectedOpenCall] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [reservations, setReservations] = useState({});
   const [applications, setApplications] = useState([]);
@@ -243,11 +249,51 @@ const App = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleSelectRentalTrack = () => {
+    setSelectedTrack("rental");
+    setOpenCallMode("landing");
+    setSelectedOpenCall(null);
+    setIsSubmitSuccess(false);
+    setSelectedDate(null);
+    setSelectedProgram(null);
+    setPartnerType("");
+    setFormData(EMPTY_FORM_DATA);
+    handleStepTransition(1);
+  };
+
+  const handleSelectOpenCallTrack = () => {
+    setSelectedTrack("open-call");
+    setOpenCallMode("landing");
+    setSelectedOpenCall(null);
+    setIsSubmitSuccess(false);
+    setSelectedDate(null);
+    setSelectedProgram(null);
+    setPartnerType("");
+    setCurrentStep(1);
+    setFormData(EMPTY_FORM_DATA);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleReturnToJoinHome = () => {
+    setSelectedTrack(null);
+    setOpenCallMode("landing");
+    setSelectedOpenCall(null);
+    setIsSubmitSuccess(false);
+    setSelectedDate(null);
+    setSelectedProgram(null);
+    setPartnerType("");
+    setFormData(EMPTY_FORM_DATA);
+    handleStepTransition(1);
+  };
+
   const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
 
   const resetAll = () => {
     setCurrentStep(1);
+    setSelectedTrack(null);
+    setOpenCallMode("landing");
+    setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSelectedDate(null);
     setSelectedProgram(null);
@@ -271,9 +317,23 @@ const App = () => {
         viewMode={viewMode}
         setViewMode={(v) => {
           setViewMode(v);
+
           if (v !== "my-page") {
             setFocusedApplicationId("");
           }
+
+          if (v === "user") {
+            setSelectedTrack(null);
+            setOpenCallMode("landing");
+            setSelectedOpenCall(null);
+            setCurrentStep(1);
+            setIsSubmitSuccess(false);
+            setSelectedDate(null);
+            setSelectedProgram(null);
+            setPartnerType("");
+            setFormData(EMPTY_FORM_DATA);
+          }
+
           window.scrollTo({ top: 0, behavior: "smooth" });
         }}
         handleLogin={handleLogin}
@@ -284,9 +344,9 @@ const App = () => {
       <main className="max-w-7xl mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left">
         {isSubmitSuccess ? (
           <SuccessView
+            trackType={selectedTrack}
             onReturn={() => {
-              setIsSubmitSuccess(false);
-              handleStepTransition(1);
+              handleReturnToJoinHome();
             }}
           />
         ) : viewMode === "admin" ? (
@@ -310,69 +370,112 @@ const App = () => {
           />
         ) : (
           <div className="transition-all duration-700">
-            {currentStep === 1 && (
-              <LandingPage
-                onSelectProgram={(program) => {
-                  setSelectedProgram(program);
-                  handleStepTransition(2);
-
-                  setTimeout(() => {
-                    const target = document.getElementById("partner-type-section");
-                    if (target) {
-                      target.scrollIntoView({
-                        behavior: "smooth",
-                        block: "center",
-                      });
-                    }
-                  }, 120);
-                }}
+            {selectedTrack === null ? (
+              <JoinHome
+                onSelectRental={() => handleSelectRentalTrack()}
+                onSelectOpenCall={() => handleSelectOpenCallTrack()}
               />
-            )}
+            ) : selectedTrack === "open-call" ? (
+              openCallMode === "landing" ? (
+                <OpenCallLanding
+                  onBack={handleReturnToJoinHome}
+                  onApply={(openCall) => {
+                    setSelectedOpenCall(openCall || null);
+                    setOpenCallMode("form");
+                  }}
+                />
+              ) : (
+                <OpenCallApplicationForm
+                  openCall={selectedOpenCall}
+                  db={db}
+                  appId={appId}
+                  user={user}
+                  handleLogin={handleLogin}
+                  initialProfileData={savedProfileData}
+                  onBack={() => setOpenCallMode("landing")}
+                  onSubmitSuccess={() => {
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    setIsSubmitSuccess(true);
+                  }}
+                />
+              )
+            ) : (
+              <>
+                <div className="mb-4 md:mb-6 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={handleReturnToJoinHome}
+                    className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                  >
+                    ← 신청 유형 다시 선택
+                  </button>
+                </div>
 
-            {currentStep === 2 && (
-              <PartnerSelectStep
-                onSelect={(type) => {
-                  setPartnerType(type);
-                  handleStepTransition(3);
-                }}
-                onBack={() => handleStepTransition(1)}
-              />
-            )}
+                {selectedTrack === "rental" && currentStep === 1 && (
+                  <LandingPage
+                    onSelectProgram={(program) => {
+                      setSelectedProgram(program);
+                      handleStepTransition(2);
 
-            {currentStep === 3 && (
-              <CalendarStep
-                reservations={reservations}
-                onSelect={(date) => {
-                  if (!user || user.isAnonymous) return handleLogin();
-                  setSelectedDate(date);
-                }}
-                onConfirm={() => handleStepTransition(4)}
-                selectedDate={selectedDate}
-                onBack={() => handleStepTransition(2)}
-              />
-            )}
+                      setTimeout(() => {
+                        const target = document.getElementById("partner-type-section");
+                        if (target) {
+                          target.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          });
+                        }
+                      }, 120);
+                    }}
+                  />
+                )}
 
-            {currentStep === 4 && (
-              <ProposalFormStep
-                selectedDate={selectedDate}
-                partnerType={partnerType}
-                selectedProgram={selectedProgram}
-                formData={formData}
-                setFormData={setFormData}
-                onBack={() => handleStepTransition(3)}
-                onSubmitSuccess={() => {
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                  setIsSubmitSuccess(true);
-                }}
-                db={db}
-                appId={appId}
-                user={user}
-                handleLogin={handleLogin}
-                setSelectedDate={setSelectedDate}
-                setSelectedProgram={setSelectedProgram}
-                setPartnerType={setPartnerType}
-                initialProfileData={savedProfileData}
-              />
+                {selectedTrack === "rental" && currentStep === 2 && (
+                  <PartnerSelectStep
+                    onSelect={(type) => {
+                      setPartnerType(type);
+                      handleStepTransition(3);
+                    }}
+                    onBack={() => handleStepTransition(1)}
+                  />
+                )}
+
+                {selectedTrack === "rental" && currentStep === 3 && (
+                  <CalendarStep
+                    reservations={reservations}
+                    onSelect={(date) => {
+                      if (!user || user.isAnonymous) return handleLogin();
+                      setSelectedDate(date);
+                    }}
+                    onConfirm={() => handleStepTransition(4)}
+                    selectedDate={selectedDate}
+                    onBack={() => handleStepTransition(2)}
+                  />
+                )}
+
+                {selectedTrack === "rental" && currentStep === 4 && (
+                  <ProposalFormStep
+                    selectedDate={selectedDate}
+                    partnerType={partnerType}
+                    selectedProgram={selectedProgram}
+                    formData={formData}
+                    setFormData={setFormData}
+                    onBack={() => handleStepTransition(3)}
+                    onSubmitSuccess={() => {
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      setIsSubmitSuccess(true);
+                    }}
+                    db={db}
+                    appId={appId}
+                    user={user}
+                    handleLogin={handleLogin}
+                    setSelectedDate={setSelectedDate}
+                    setSelectedProgram={setSelectedProgram}
+                    setPartnerType={setPartnerType}
+                    initialProfileData={savedProfileData}
+                  />
+                )}
+              </>
             )}
           </div>
         )}
