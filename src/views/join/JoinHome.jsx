@@ -15,6 +15,11 @@ import {
   JOIN_TRACK_COLLECTION,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
+import {
+  JOIN_POPUP_COLLECTION,
+  isJoinPopupWithinRange,
+  sortJoinPopups,
+} from "../../constants/joinPopups";
 
 const TRACK_ICON_MAP = {
   rental: Building2,
@@ -24,6 +29,7 @@ const TRACK_ICON_MAP = {
 };
 
 const TRACK_ALERT_MESSAGE = "준비 중입니다.";
+const JOIN_POPUP_DISMISS_PREFIX = "unframe-join-popup-dismissed-";
 
 const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(0, 74, 173, ${alpha})`;
@@ -251,10 +257,108 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
   );
 };
 
+const JoinPopupModal = ({ popup, onClose, onCta }) => {
+  if (!popup) return null;
+
+  const poster = popup.posterImageUrl?.trim();
+  const ctaLabel = popup.ctaLabel?.trim() || "신청하러 가기";
+  const dismissLabel = popup.dismissLabel?.trim() || "닫기";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-5 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-zinc-950/10 bg-[#F6F4EE] shadow-[0_30px_100px_rgba(0,0,0,0.35)]">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="팝업 닫기"
+          className="absolute right-4 top-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-950/10 bg-white/90 text-zinc-700 shadow-sm transition-colors hover:text-zinc-950"
+        >
+          <span className="text-2xl leading-none">×</span>
+        </button>
+
+        <div className="grid min-h-[32rem] md:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative min-h-[18rem] overflow-hidden bg-[#004AAD]">
+            {poster ? (
+              <img
+                src={poster}
+                alt={popup.title || "Join popup"}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,#004AAD_0%,#AAD004_54%,#F6F4EE_100%)]" />
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/55 via-zinc-950/10 to-white/10" />
+            <div className="absolute inset-y-0 right-0 w-16 skew-x-[-8deg] bg-white/20 opacity-40 mix-blend-overlay" />
+            <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
+              <Sparkles size={11} />
+              UNFRAME NOTICE
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-between p-6 text-zinc-950 md:p-8 lg:p-10">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#004AAD]">
+                UNFRAME NOTICE
+              </p>
+              <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
+                {popup.title || "공지"}
+              </h2>
+              <p className="mt-4 text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                {popup.subtitle || ""}
+              </p>
+              <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                {popup.body || ""}
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[#004AAD]">
+                  <CircleDot size={11} />
+                  {popup.targetTrack || "open-call"}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
+                  {popup.priority != null ? `priority ${popup.priority}` : "priority 999"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={onCta}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
+              >
+                {ctaLabel}
+                <ArrowRight size={14} />
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+              >
+                {dismissLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
+  const [joinPopupDocs, setJoinPopupDocs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [popupLoading, setPopupLoading] = useState(true);
   const [hoveredTrackId, setHoveredTrackId] = useState(null);
+  const [popupBlockedForVisit, setPopupBlockedForVisit] = useState(false);
+  const [nowTick, setNowTick] = useState(Date.now());
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", JOIN_TRACK_COLLECTION);
@@ -273,6 +377,31 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     return () => unsubscribe();
   }, [appId, db]);
 
+  useEffect(() => {
+    const ref = collection(db, "artifacts", appId, "public", "data", JOIN_POPUP_COLLECTION);
+    const unsubscribe = onSnapshot(
+      ref,
+      (snapshot) => {
+        setJoinPopupDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setPopupLoading(false);
+      },
+      (error) => {
+        console.error(error);
+        setPopupLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [appId, db]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTick(Date.now());
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   const mergedTracks = useMemo(() => mergeJoinTracks(joinTrackDocs), [joinTrackDocs]);
   const visibleTracks = useMemo(
     () => mergedTracks.filter((track) => track.enabled !== false),
@@ -280,19 +409,74 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   );
   const primaryTracks = visibleTracks.slice(0, 4);
   const auxiliaryTracks = visibleTracks.slice(4);
+  const activePopup = useMemo(() => {
+    if (popupBlockedForVisit) return null;
 
-  const handleTrackClick = (track) => {
-    if (track.routeTrack === "rental") {
+    return (
+      sortJoinPopups(joinPopupDocs).find(
+        (popup) =>
+          popup.enabled !== false &&
+          isJoinPopupWithinRange(popup, new Date(nowTick)) &&
+          !window.localStorage.getItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`)
+      ) || null
+    );
+  }, [joinPopupDocs, nowTick, popupBlockedForVisit]);
+
+  const handleTrackSelect = (routeTrack) => {
+    if (routeTrack === "rental") {
       onSelectRental?.();
       return;
     }
 
-    if (track.routeTrack === "open-call") {
+    if (routeTrack === "open-call") {
       onSelectOpenCall?.();
       return;
     }
 
     window.alert(TRACK_ALERT_MESSAGE);
+  };
+
+  const dismissPopup = (popup) => {
+    if (!popup?.id) return;
+
+    try {
+      window.localStorage.setItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`, "true");
+    } catch (error) {
+      console.error(error);
+    }
+
+    setPopupBlockedForVisit(true);
+  };
+
+  const popupToShow = popupLoading ? null : activePopup;
+  const handlePopupClose = () => dismissPopup(popupToShow);
+  const handlePopupCta = () => {
+    if (!popupToShow) return;
+    dismissPopup(popupToShow);
+    handleTrackSelect(popupToShow.targetTrack);
+  };
+
+  useEffect(() => {
+    if (!popupToShow) return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        dismissPopup(popupToShow);
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [popupToShow]);
+
+  const handleTrackClick = (track) => {
+    handleTrackSelect(track.routeTrack);
   };
 
   return (
@@ -452,9 +636,14 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
           </p>
         </footer>
       </div>
+
+      <JoinPopupModal
+        popup={popupToShow}
+        onClose={handlePopupClose}
+        onCta={handlePopupCta}
+      />
     </section>
   );
 };
 
 export default JoinHome;
-

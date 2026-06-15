@@ -39,6 +39,7 @@ import { sendApplicationStatusEmail } from "../lib/uploads";
 import EmailTestPanel from "./EmailTestPanel";
 import OpenCallManager from "./admin/OpenCallManager";
 import JoinTrackManager from "./admin/JoinTrackManager";
+import JoinPopupManager from "./admin/JoinPopupManager";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -962,6 +963,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
       <OpenCallManager db={db} appId={appId} applications={applications} />
       <JoinTrackManager db={db} appId={appId} />
+      <JoinPopupManager db={db} appId={appId} />
 
       <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
