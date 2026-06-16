@@ -11,6 +11,7 @@ import {
   Save,
   Star,
   StarOff,
+  Trash2,
   Users,
 } from "lucide-react";
 import {
@@ -24,8 +25,10 @@ import {
 import {
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
+  normalizeOpenCallCompletionSettings,
   normalizeOpenCallFormSettings,
   normalizeOpenCallFaqs,
+  normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
 
 const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
@@ -158,6 +161,20 @@ const getOpenCallDraftFormSettings = (draft, call) =>
     draft?.formSettings || call?.formSettings || OPEN_CALL_FALLBACK.formSettings
   );
 
+const getOpenCallDraftCompletionSettings = (draft, call) =>
+  normalizeOpenCallCompletionSettings(
+    draft?.completionSettings ||
+      call?.completionSettings ||
+      OPEN_CALL_FALLBACK.completionSettings
+  );
+
+const getOpenCallDraftNotificationSettings = (draft, call) =>
+  normalizeOpenCallNotificationSettings(
+    draft?.notificationSettings ||
+      call?.notificationSettings ||
+      OPEN_CALL_FALLBACK.notificationSettings
+  );
+
 const createEmptyFaq = (order = 1) => ({
   question: "",
   answer: "",
@@ -257,6 +274,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
             isFeatured: !!call.isFeatured,
             descriptionSections: normalizeSections(call.descriptionSections),
             formSettings: normalizeOpenCallFormSettings(call.formSettings),
+            completionSettings: normalizeOpenCallCompletionSettings(
+              call.completionSettings
+            ),
+            notificationSettings: normalizeOpenCallNotificationSettings(
+              call.notificationSettings
+            ),
             mediumText: call.mediumText || "",
             eligibilityText: call.eligibilityText || "",
             benefitText: call.benefitText || "",
@@ -346,6 +369,54 @@ const OpenCallManager = ({ db, appId, applications }) => {
         },
       },
     }));
+  };
+
+  const updateCompletionSettings = (callId, key, value) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const nextCompletionSettings = normalizeOpenCallCompletionSettings(
+        current.completionSettings || OPEN_CALL_FALLBACK.completionSettings
+      );
+
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          completionSettings: {
+            ...nextCompletionSettings,
+            [key]: value,
+          },
+        },
+      };
+    });
+  };
+
+  const updateNotificationSettings = (callId, key, value) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const nextNotificationSettings = normalizeOpenCallNotificationSettings(
+        current.notificationSettings || OPEN_CALL_FALLBACK.notificationSettings
+      );
+
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          notificationSettings: {
+            ...nextNotificationSettings,
+            [key]: value,
+          },
+        },
+      };
+    });
   };
 
   const updateDescriptionSection = (callId, index, key, value) => {
@@ -525,6 +596,16 @@ const OpenCallManager = ({ db, appId, applications }) => {
       faqs: normalizeFaqPayload(draft.faqs),
       formSettings: normalizeOpenCallFormSettings(
         draft.formSettings || call.formSettings || OPEN_CALL_FALLBACK.formSettings
+      ),
+      completionSettings: normalizeOpenCallCompletionSettings(
+        draft.completionSettings ||
+          call.completionSettings ||
+          OPEN_CALL_FALLBACK.completionSettings
+      ),
+      notificationSettings: normalizeOpenCallNotificationSettings(
+        draft.notificationSettings ||
+          call.notificationSettings ||
+          OPEN_CALL_FALLBACK.notificationSettings
       ),
       id: call.id,
       trackType: "open-call",
@@ -834,6 +915,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const isSelected = selectedOpenCallId === call.id;
             const statusMeta = STATUS_META[draft.status || call.status || "draft"];
             const formSettings = getOpenCallDraftFormSettings(draft, call);
+            const completionSettings = getOpenCallDraftCompletionSettings(draft, call);
+            const notificationSettings = getOpenCallDraftNotificationSettings(draft, call);
             const faqItems = normalizeFaqDrafts(draft.faqs);
 
             return (
@@ -1482,6 +1565,259 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                 </button>
                               </div>
                             </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                            지원 완료 화면 / 알림 설정
+                          </p>
+                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                            지원 접수 완료 후에 보이는 문구와, 접수 알림에 사용할 채널 정보를
+                            함께 저장합니다. 이메일과 알림톡은 기존 발송 함수를 재사용하고,
+                            SMS는 현재 저장만 지원합니다.
+                          </p>
+                        </div>
+
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#004aad]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
+                          <Megaphone size={14} />
+                          completionSettings / notificationSettings
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                            완료 화면 문구
+                          </p>
+
+                          <div className="mt-4 grid gap-3">
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                title
+                              </span>
+                              <input
+                                value={completionSettings.title || ""}
+                                onChange={(e) =>
+                                  updateCompletionSettings(call.id, "title", e.target.value)
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                message
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={completionSettings.message || ""}
+                                onChange={(e) =>
+                                  updateCompletionSettings(call.id, "message", e.target.value)
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                subMessage
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={completionSettings.subMessage || ""}
+                                onChange={(e) =>
+                                  updateCompletionSettings(call.id, "subMessage", e.target.value)
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
+
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                  buttonLabel
+                                </span>
+                                <input
+                                  value={completionSettings.buttonLabel || ""}
+                                  onChange={(e) =>
+                                    updateCompletionSettings(
+                                      call.id,
+                                      "buttonLabel",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                />
+                              </label>
+
+                              <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                  secondaryButtonLabel
+                                </span>
+                                <input
+                                  value={completionSettings.secondaryButtonLabel || ""}
+                                  onChange={(e) =>
+                                    updateCompletionSettings(
+                                      call.id,
+                                      "secondaryButtonLabel",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                            접수 알림 설정
+                          </p>
+
+                          <div className="mt-4 grid gap-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {[
+                                ["applicantEmailEnabled", "지원자 메일"],
+                                ["adminEmailEnabled", "운영자 메일"],
+                                ["kakaoEnabled", "알림톡"],
+                                ["smsEnabled", "SMS"],
+                              ].map(([key, label]) => {
+                                const enabled = notificationSettings[key];
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() =>
+                                      updateNotificationSettings(call.id, key, !enabled)
+                                    }
+                                    className={`inline-flex items-center justify-center gap-2 rounded-[20px] border px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      enabled
+                                        ? "bg-[#004aad] text-white border-[#004aad]"
+                                        : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <p className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                              이메일은 기존 발송 함수가 지원자/운영자 메일을 함께 보냅니다.
+                              SMS는 현재 별도 발송 체계가 없어 설정만 저장됩니다.
+                            </p>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                applicantEmailSubject
+                              </span>
+                              <input
+                                value={notificationSettings.applicantEmailSubject || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "applicantEmailSubject",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                applicantEmailBody
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={notificationSettings.applicantEmailBody || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "applicantEmailBody",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                adminEmailSubject
+                              </span>
+                              <input
+                                value={notificationSettings.adminEmailSubject || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "adminEmailSubject",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                adminEmailBody
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={notificationSettings.adminEmailBody || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "adminEmailBody",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                kakaoMessage
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={notificationSettings.kakaoMessage || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "kakaoMessage",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
+
+                            <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                smsMessage
+                              </span>
+                              <textarea
+                                rows={3}
+                                value={notificationSettings.smsMessage || ""}
+                                onChange={(e) =>
+                                  updateNotificationSettings(
+                                    call.id,
+                                    "smsMessage",
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </label>
                           </div>
                         </div>
                       </div>

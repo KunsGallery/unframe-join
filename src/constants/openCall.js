@@ -92,6 +92,27 @@ export const DEFAULT_OPEN_CALL_FAQS = [
   },
 ];
 
+export const DEFAULT_OPEN_CALL_COMPLETION_SETTINGS = {
+  title: "지원 접수 완료",
+  message: "지원서가 정상적으로 접수되었습니다.",
+  subMessage: "검토가 시작되면 마이페이지와 안내 메시지에서 확인하실 수 있습니다.",
+  buttonLabel: "Join Home으로 돌아가기",
+  secondaryButtonLabel: "오픈콜 다시 보기",
+};
+
+export const DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS = {
+  applicantEmailEnabled: true,
+  adminEmailEnabled: true,
+  kakaoEnabled: true,
+  smsEnabled: false,
+  applicantEmailSubject: "[UNFRAME] 오픈콜 지원이 정상적으로 접수되었습니다",
+  applicantEmailBody: "지원이 정상적으로 접수되었습니다.",
+  adminEmailSubject: "[UNFRAME] 오픈콜 신규 지원 접수",
+  adminEmailBody: "오픈콜 지원이 새로 접수되었습니다.",
+  kakaoMessage: "오픈콜 지원이 정상적으로 접수되었습니다.",
+  smsMessage: "오픈콜 지원이 정상적으로 접수되었습니다.",
+};
+
 const cloneFormSection = (section = {}, fallback = {}) => ({
   ...fallback,
   ...section,
@@ -111,6 +132,9 @@ const toNumber = (value, fallback) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
+
+const toText = (value, fallback = "") =>
+  typeof value === "string" ? value : fallback;
 
 export const normalizeOpenCallFormSettings = (formSettings = {}) => {
   const sections = formSettings?.sections || {};
@@ -192,6 +216,78 @@ export const normalizeOpenCallFaqs = (faqs = DEFAULT_OPEN_CALL_FAQS) => {
   return faqs.map((faq, index) => cloneFaq(faq, index + 1));
 };
 
+export const normalizeOpenCallCompletionSettings = (completionSettings = {}) => ({
+  ...DEFAULT_OPEN_CALL_COMPLETION_SETTINGS,
+  ...completionSettings,
+  title: toText(
+    completionSettings?.title,
+    DEFAULT_OPEN_CALL_COMPLETION_SETTINGS.title
+  ),
+  message: toText(
+    completionSettings?.message,
+    DEFAULT_OPEN_CALL_COMPLETION_SETTINGS.message
+  ),
+  subMessage: toText(
+    completionSettings?.subMessage,
+    DEFAULT_OPEN_CALL_COMPLETION_SETTINGS.subMessage
+  ),
+  buttonLabel: toText(
+    completionSettings?.buttonLabel,
+    DEFAULT_OPEN_CALL_COMPLETION_SETTINGS.buttonLabel
+  ),
+  secondaryButtonLabel: toText(
+    completionSettings?.secondaryButtonLabel,
+    DEFAULT_OPEN_CALL_COMPLETION_SETTINGS.secondaryButtonLabel
+  ),
+});
+
+export const normalizeOpenCallNotificationSettings = (
+  notificationSettings = {}
+) => ({
+  ...DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS,
+  ...notificationSettings,
+  applicantEmailEnabled: toBoolean(
+    notificationSettings?.applicantEmailEnabled,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.applicantEmailEnabled
+  ),
+  adminEmailEnabled: toBoolean(
+    notificationSettings?.adminEmailEnabled,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.adminEmailEnabled
+  ),
+  kakaoEnabled: toBoolean(
+    notificationSettings?.kakaoEnabled,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.kakaoEnabled
+  ),
+  smsEnabled: toBoolean(
+    notificationSettings?.smsEnabled,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.smsEnabled
+  ),
+  applicantEmailSubject: toText(
+    notificationSettings?.applicantEmailSubject,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.applicantEmailSubject
+  ),
+  applicantEmailBody: toText(
+    notificationSettings?.applicantEmailBody,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.applicantEmailBody
+  ),
+  adminEmailSubject: toText(
+    notificationSettings?.adminEmailSubject,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.adminEmailSubject
+  ),
+  adminEmailBody: toText(
+    notificationSettings?.adminEmailBody,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.adminEmailBody
+  ),
+  kakaoMessage: toText(
+    notificationSettings?.kakaoMessage,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.kakaoMessage
+  ),
+  smsMessage: toText(
+    notificationSettings?.smsMessage,
+    DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS.smsMessage
+  ),
+});
+
 export const OPEN_CALL_FALLBACK = {
   id: OPEN_CALL_ID,
   trackType: "open-call",
@@ -246,6 +342,8 @@ export const OPEN_CALL_FALLBACK = {
   isVisible: true,
   formSettings: normalizeOpenCallFormSettings(),
   faqs: DEFAULT_OPEN_CALL_FAQS,
+  completionSettings: normalizeOpenCallCompletionSettings(),
+  notificationSettings: normalizeOpenCallNotificationSettings(),
 };
 
 export const parseOpenCallDate = (value) => {
@@ -300,5 +398,11 @@ export const createFallbackOpenCall = (overrides = {}) => ({
   ),
   formSettings: normalizeOpenCallFormSettings(
     overrides.formSettings || OPEN_CALL_FALLBACK.formSettings
+  ),
+  completionSettings: normalizeOpenCallCompletionSettings(
+    overrides.completionSettings || OPEN_CALL_FALLBACK.completionSettings
+  ),
+  notificationSettings: normalizeOpenCallNotificationSettings(
+    overrides.notificationSettings || OPEN_CALL_FALLBACK.notificationSettings
   ),
 });

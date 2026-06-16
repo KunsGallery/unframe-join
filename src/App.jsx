@@ -23,6 +23,7 @@ import SuccessView from "./views/SuccessView";
 import JoinHome from "./views/join/JoinHome";
 import OpenCallLanding from "./views/open-call/OpenCallLanding";
 import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
+import { createFallbackOpenCall } from "./constants/openCall";
 
 const EMPTY_FORM_DATA = {
   name: "",
@@ -115,6 +116,11 @@ const App = () => {
     if (!user || user.isAnonymous) return [];
     return applications.filter((app) => app.userId === user.uid);
   }, [applications, user]);
+
+  const selectedOpenCallView = useMemo(
+    () => (selectedOpenCall ? createFallbackOpenCall(selectedOpenCall) : null),
+    [selectedOpenCall]
+  );
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
@@ -286,6 +292,12 @@ const App = () => {
     handleStepTransition(1);
   };
 
+  const handleReturnToOpenCallLanding = () => {
+    setIsSubmitSuccess(false);
+    setOpenCallMode("landing");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
 
@@ -345,9 +357,13 @@ const App = () => {
         {isSubmitSuccess ? (
           <SuccessView
             trackType={selectedTrack}
+            completionSettings={selectedOpenCallView?.completionSettings}
             onReturn={() => {
               handleReturnToJoinHome();
             }}
+            onSecondaryAction={
+              selectedTrack === "open-call" ? handleReturnToOpenCallLanding : undefined
+            }
           />
         ) : viewMode === "admin" ? (
           <AdminDashboard
@@ -388,7 +404,7 @@ const App = () => {
                 />
               ) : (
                 <OpenCallApplicationForm
-                  openCall={selectedOpenCall}
+                  openCall={selectedOpenCallView}
                   db={db}
                   appId={appId}
                   user={user}

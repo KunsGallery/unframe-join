@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import InputBlock from "../../components/ui/InputBlock";
-import { uploadDocumentToR2, uploadImageToImgbb, validateDocumentFile, validateImageFile } from "../../lib/uploads";
+import {
+  sendApplicationEmails,
+  uploadDocumentToR2,
+  uploadImageToImgbb,
+  validateDocumentFile,
+  validateImageFile,
+} from "../../lib/uploads";
 import {
   OPEN_CALL_FALLBACK,
   OPEN_CALL_ID,
@@ -30,6 +36,7 @@ import {
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
   normalizeOpenCallFormSettings,
+  normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
 import { OPEN_CALL_PRIVACY_TEXT } from "../../constants/openCallPrivacy";
 
@@ -174,6 +181,13 @@ const OpenCallApplicationForm = ({
   const formSettings = useMemo(
     () => normalizeOpenCallFormSettings(currentOpenCall.formSettings),
     [currentOpenCall.formSettings]
+  );
+  const notificationSettings = useMemo(
+    () =>
+      normalizeOpenCallNotificationSettings(
+        currentOpenCall.notificationSettings
+      ),
+    [currentOpenCall.notificationSettings]
   );
   const openCallStatus = useMemo(
     () => getOpenCallDisplayStatus(currentOpenCall),
@@ -478,43 +492,112 @@ const OpenCallApplicationForm = ({
     setIsSubmitting(true);
 
     try {
-      await addDoc(collection(db, "artifacts", appId, "public", "data", "applications"), {
-        trackType: "open-call",
-        openCallId: currentOpenCall.id || OPEN_CALL_ID,
-        openCallTitle: currentOpenCall.title || OPEN_CALL_TITLE,
-        status: "review",
-        userId: user.uid,
-        applicantEmail: trimValue(formData.email) || user.email || "",
-        name: trimValue(formData.name),
-        phone: normalizePhone(formData.phone),
-        email: trimValue(formData.email),
-        birthYear: isFieldEnabled(formSettings.fields.birthYear)
-          ? trimValue(formData.birthYear)
-          : "",
-        addressMain: isFieldEnabled(formSettings.fields.address)
-          ? trimValue(formData.addressMain)
-          : "",
-        addressDetail: isFieldEnabled(formSettings.fields.address)
-          ? trimValue(formData.addressDetail)
-          : "",
-        medium: isFieldEnabled(formSettings.fields.medium)
-          ? trimValue(formData.medium)
-          : "",
-        snsLink: isFieldEnabled(formSettings.fields.snsLink)
-          ? trimValue(formData.snsLink)
-          : "",
-        artistStatement: isSectionEnabled(formSettings.sections.statement)
-          ? trimValue(formData.artistStatement)
-          : "",
-        works,
-        portfolioUrl: isSectionEnabled(formSettings.sections.portfolio)
-          ? trimValue(formData.portfolioUrl)
-          : "",
-        privacyAgreed: isSectionEnabled(formSettings.sections.privacy)
-          ? formData.privacyAgreed
-          : false,
-        submittedAt: serverTimestamp(),
-      });
+      const appDocRef = await addDoc(
+        collection(db, "artifacts", appId, "public", "data", "applications"),
+        {
+          trackType: "open-call",
+          openCallId: currentOpenCall.id || OPEN_CALL_ID,
+          openCallTitle: currentOpenCall.title || OPEN_CALL_TITLE,
+          status: "review",
+          userId: user.uid,
+          applicantEmail: trimValue(formData.email) || user.email || "",
+          name: trimValue(formData.name),
+          phone: normalizePhone(formData.phone),
+          email: trimValue(formData.email),
+          birthYear: isFieldEnabled(formSettings.fields.birthYear)
+            ? trimValue(formData.birthYear)
+            : "",
+          addressMain: isFieldEnabled(formSettings.fields.address)
+            ? trimValue(formData.addressMain)
+            : "",
+          addressDetail: isFieldEnabled(formSettings.fields.address)
+            ? trimValue(formData.addressDetail)
+            : "",
+          medium: isFieldEnabled(formSettings.fields.medium)
+            ? trimValue(formData.medium)
+            : "",
+          snsLink: isFieldEnabled(formSettings.fields.snsLink)
+            ? trimValue(formData.snsLink)
+            : "",
+          artistStatement: isSectionEnabled(formSettings.sections.statement)
+            ? trimValue(formData.artistStatement)
+            : "",
+          works,
+          portfolioUrl: isSectionEnabled(formSettings.sections.portfolio)
+            ? trimValue(formData.portfolioUrl)
+            : "",
+          privacyAgreed: isSectionEnabled(formSettings.sections.privacy)
+            ? formData.privacyAgreed
+            : false,
+          submittedAt: serverTimestamp(),
+        }
+      );
+
+      const applicationDetailUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/?view=my-page&applicationId=${encodeURIComponent(
+              appDocRef.id
+            )}&app=${encodeURIComponent(appDocRef.id)}`
+          : "";
+      const applicantName =
+        trimValue(formData.name) || user?.displayName || "Applicant";
+      const applicantEmail = trimValue(formData.email) || user?.email || "";
+      const openCallProgram = {
+        name: currentOpenCall.title || OPEN_CALL_TITLE,
+        price: 0,
+      };
+      const openCallDateLabel =
+        currentOpenCall.subtitle || OPEN_CALL_SUBTITLE || "Open Call";
+
+      if (
+        notificationSettings.applicantEmailEnabled ||
+        notificationSettings.adminEmailEnabled
+      ) {
+        try {
+          await sendApplicationEmails({
+            applicantName,
+            applicantEmail,
+            exhibitionTitle: currentOpenCall.title || OPEN_CALL_TITLE,
+            selectedDate: openCallDateLabel,
+            selectedProgram: openCallProgram,
+            partnerType: "open-call",
+            phone: normalizePhone(formData.phone),
+            brandName: "",
+            stageName: currentOpenCall.heroAccent || "",
+            myPageUrl: applicationDetailUrl,
+            applicationDetailUrl,
+            submittedAt: new Date().toISOString(),
+            applicationId: appDocRef.id,
+          });
+        } catch (mailError) {
+          console.error("open-call mail failed:", mailError);
+        }
+      }
+
+      if (notificationSettings.kakaoEnabled) {
+        try {
+          await fetch("/.netlify/functions/send-kakao-alimtalk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "application_received",
+              to: normalizePhone(formData.phone),
+              applicantName,
+              exhibitionTitle: currentOpenCall.title || OPEN_CALL_TITLE,
+              selectedDate: openCallDateLabel,
+              selectedProgram: openCallProgram,
+              applicationId: appDocRef.id,
+              applicationDetailUrl,
+            }),
+          });
+        } catch (kakaoError) {
+          console.error("open-call kakao failed:", kakaoError);
+        }
+      }
+
+      if (notificationSettings.smsEnabled) {
+        console.info("SMS 알림 설정은 저장되었지만 현재 발송 체계가 없습니다.");
+      }
 
       onSubmitSuccess();
     } catch (error) {
