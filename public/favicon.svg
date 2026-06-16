@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="UNFRAME favicon">
+  <rect width="128" height="128" rx="28" fill="#004AAD"/>
+  <circle cx="96" cy="32" r="12" fill="#AAD004" opacity="0.92"/>
+  <path d="M28 34h24c5.523 0 10 4.477 10 10v40c0 11.046-8.954 20-20 20s-20-8.954-20-20V44c0-5.523 4.477-10 10-10Z" fill="#F6F4EE" opacity="0.12"/>
+  <text x="64" y="86" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#AAD004">U</text>
+</svg>

@@ -72,16 +72,23 @@ const normalizeNumber = (value, fallback = 999) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const formatFirestorePermissionMessage = (error) => {
+const isFirestorePermissionError = (error) => {
   const message = `${error?.code || ""} ${error?.message || ""}`.toLowerCase();
-  if (
+  return (
     message.includes("permission-denied") ||
     message.includes("missing or insufficient permissions")
-  ) {
-    return "Firestore 권한 오류입니다. joinPopups rules가 추가되었는지 확인해 주세요.";
+  );
+};
+
+const getJoinPopupErrorMessage = (error) => {
+  if (isFirestorePermissionError(error)) {
+    return [
+      "Firestore 권한 오류입니다. joinPopups rules가 추가되었는지 확인해 주세요.",
+      "Firebase Console > Firestore Rules에 joinTracks / joinPopups 권한이 추가되어야 합니다.",
+    ].join("\n");
   }
 
-  return "저장 중 오류가 발생했습니다.";
+  return "팝업 설정을 저장하는 중 오류가 발생했습니다.";
 };
 
 const JoinPopupManager = ({ db, appId }) => {
@@ -90,6 +97,7 @@ const JoinPopupManager = ({ db, appId }) => {
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
+  const [managerNoticeTone, setManagerNoticeTone] = useState("blue");
   const clearTimersRef = useRef({});
 
   useEffect(() => {
@@ -190,9 +198,11 @@ const JoinPopupManager = ({ db, appId }) => {
       );
 
       setManagerNotice("새 팝업이 생성되었습니다.");
+      setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(formatFirestorePermissionMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNoticeTone("red");
     }
   };
 
@@ -218,9 +228,11 @@ const JoinPopupManager = ({ db, appId }) => {
       );
 
       setManagerNotice("오픈콜 팝업 예시가 생성되었습니다.");
+      setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(formatFirestorePermissionMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNoticeTone("red");
     }
   };
 
@@ -261,12 +273,14 @@ const JoinPopupManager = ({ db, appId }) => {
         state: "saved",
         message: "저장되었습니다.",
       });
+      setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
       setTimedSaveFeedback(popup.id, {
         state: "error",
-        message: formatFirestorePermissionMessage(error),
+        message: getJoinPopupErrorMessage(error),
       });
+      setManagerNoticeTone("red");
     }
   };
 
@@ -277,9 +291,11 @@ const JoinPopupManager = ({ db, appId }) => {
     try {
       await deleteDoc(doc(db, "artifacts", appId, "public", "data", JOIN_POPUP_COLLECTION, popup.id));
       setManagerNotice("팝업이 삭제되었습니다.");
+      setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(formatFirestorePermissionMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNoticeTone("red");
     }
   };
 
@@ -322,7 +338,13 @@ const JoinPopupManager = ({ db, appId }) => {
       </div>
 
       {managerNotice ? (
-        <div className="mb-5 rounded-2xl border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-3 text-sm font-bold text-[#004aad] break-keep">
+        <div
+          className={`mb-5 rounded-2xl border px-4 py-3 text-sm font-bold break-keep whitespace-pre-wrap ${
+            managerNoticeTone === "red"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-[#004aad]/15 bg-[#004aad]/5 text-[#004aad]"
+          }`}
+        >
           {managerNotice}
         </div>
       ) : null}
@@ -574,7 +596,7 @@ const JoinPopupManager = ({ db, appId }) => {
                     <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
                       {feedback?.message ? (
                         <div
-                          className={`rounded-[22px] border px-4 py-3 text-sm font-bold break-keep ${
+                          className={`rounded-[22px] border px-4 py-3 text-sm font-bold break-keep whitespace-pre-wrap ${
                             feedback.state === "error"
                               ? "border-red-200 bg-red-50 text-red-600"
                               : feedback.state === "saved"
