@@ -66,6 +66,8 @@ const normalizeOrderValue = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const getCurrentLoginEmail = (currentUser) => currentUser?.email?.trim() || "-";
+
 const isFirestorePermissionError = (error) => {
   const message = `${error?.code || ""} ${error?.message || ""}`.toLowerCase();
   return (
@@ -74,10 +76,11 @@ const isFirestorePermissionError = (error) => {
   );
 };
 
-const getJoinTrackErrorMessage = (error) => {
+const getJoinTrackErrorMessage = (error, currentUser) => {
   if (isFirestorePermissionError(error)) {
     return [
       "Firestore 권한 오류입니다. joinTracks rules가 추가되었는지 확인해 주세요.",
+      `현재 로그인 이메일: ${getCurrentLoginEmail(currentUser)}`,
       "Firebase Console > Firestore Rules에 joinTracks / joinPopups 권한이 추가되어야 합니다.",
     ].join("\n");
   }
@@ -85,7 +88,7 @@ const getJoinTrackErrorMessage = (error) => {
   return "설정을 저장하는 중 오류가 발생했습니다.";
 };
 
-const JoinTrackManager = ({ db, appId }) => {
+const JoinTrackManager = ({ db, appId, currentUser }) => {
   const [trackDocs, setTrackDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
@@ -99,7 +102,7 @@ const JoinTrackManager = ({ db, appId }) => {
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        setTrackDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setTrackDocs(snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })));
         setLoading(false);
       },
       (error) => {
@@ -208,7 +211,7 @@ const JoinTrackManager = ({ db, appId }) => {
       setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(getJoinTrackErrorMessage(error));
+      setManagerNotice(getJoinTrackErrorMessage(error, currentUser));
       setManagerNoticeTone("red");
     }
   };
@@ -252,7 +255,7 @@ const JoinTrackManager = ({ db, appId }) => {
       console.error(error);
       setTimedSaveFeedback(track.id, {
         state: "error",
-        message: getJoinTrackErrorMessage(error),
+        message: getJoinTrackErrorMessage(error, currentUser),
       });
       setManagerNoticeTone("red");
     }

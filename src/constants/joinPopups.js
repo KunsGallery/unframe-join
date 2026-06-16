@@ -2,6 +2,8 @@ export const JOIN_POPUP_COLLECTION = "joinPopups";
 
 export const DEFAULT_JOIN_POPUPS = [];
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 const normalizeString = (value, fallback = "") =>
   typeof value === "string" ? value.trim() : fallback;
 
@@ -46,6 +48,42 @@ export const parseJoinPopupDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+export const getJoinPopupWindowStatus = (popup = {}, now = new Date()) => {
+  const current = now instanceof Date ? now : new Date(now);
+  const startRaw = normalizeString(popup?.startAt || "");
+  const endRaw = normalizeString(popup?.endAt || "");
+
+  const startAt = startRaw ? parseJoinPopupDate(startRaw) : null;
+  const endAt = endRaw ? parseJoinPopupDate(endRaw) : null;
+  const startAtInvalid = !!startRaw && !startAt;
+  const endAtInvalid = !!endRaw && !endAt;
+
+  let effectiveEndAt = endAt;
+  if (effectiveEndAt && DATE_ONLY_PATTERN.test(endRaw)) {
+    effectiveEndAt = new Date(effectiveEndAt);
+    effectiveEndAt.setHours(23, 59, 59, 999);
+  }
+
+  const withinRange =
+    !startAtInvalid &&
+    !endAtInvalid &&
+    (!startAt || startAt.getTime() <= current.getTime()) &&
+    (!effectiveEndAt || effectiveEndAt.getTime() >= current.getTime());
+
+  return {
+    current,
+    startRaw,
+    endRaw,
+    startAt,
+    endAt: effectiveEndAt,
+    startAtInvalid,
+    endAtInvalid,
+    hasDateFormatIssue: startAtInvalid || endAtInvalid,
+    withinRange,
+    statusLabel: startAtInvalid || endAtInvalid ? "날짜 형식 확인 필요" : withinRange ? "YES" : "NO",
+  };
+};
+
 export const normalizeJoinPopup = (popup = {}) => {
   const targetTrack = ["rental", "open-call", "salon", "collaboration"].includes(
     popup?.targetTrack
@@ -79,18 +117,5 @@ export const sortJoinPopups = (popups = []) =>
     });
 
 export const isJoinPopupWithinRange = (popup, now = new Date()) => {
-  const current = now instanceof Date ? now : new Date(now);
-  const startAt = parseJoinPopupDate(popup?.startAt);
-  const endAt = parseJoinPopupDate(popup?.endAt);
-
-  if (startAt && startAt.getTime() > current.getTime()) {
-    return false;
-  }
-
-  if (endAt && endAt.getTime() < current.getTime()) {
-    return false;
-  }
-
-  return true;
+  return getJoinPopupWindowStatus(popup, now).withinRange;
 };
-

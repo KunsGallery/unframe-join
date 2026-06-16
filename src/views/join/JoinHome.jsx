@@ -358,14 +358,14 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   const [popupLoading, setPopupLoading] = useState(true);
   const [hoveredTrackId, setHoveredTrackId] = useState(null);
   const [popupBlockedForVisit, setPopupBlockedForVisit] = useState(false);
-  const [nowTick, setNowTick] = useState(Date.now());
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", JOIN_TRACK_COLLECTION);
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        setJoinTrackDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setJoinTrackDocs(snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })));
         setLoading(false);
       },
       (error) => {
@@ -382,7 +382,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        setJoinPopupDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setJoinPopupDocs(snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })));
         setPopupLoading(false);
       },
       (error) => {
@@ -402,6 +402,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     return () => clearInterval(timer);
   }, []);
 
+  const currentTime = useMemo(() => new Date(nowTick), [nowTick]);
   const mergedTracks = useMemo(() => mergeJoinTracks(joinTrackDocs), [joinTrackDocs]);
   const visibleTracks = useMemo(
     () => mergedTracks.filter((track) => track.enabled !== false),
@@ -409,18 +410,28 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   );
   const primaryTracks = visibleTracks.slice(0, 4);
   const auxiliaryTracks = visibleTracks.slice(4);
+  const eligiblePopups = useMemo(
+    () =>
+      sortJoinPopups(joinPopupDocs).filter(
+        (popup) => popup.enabled !== false && isJoinPopupWithinRange(popup, currentTime)
+      ),
+    [currentTime, joinPopupDocs]
+  );
   const activePopup = useMemo(() => {
     if (popupBlockedForVisit) return null;
 
     return (
-      sortJoinPopups(joinPopupDocs).find(
-        (popup) =>
-          popup.enabled !== false &&
-          isJoinPopupWithinRange(popup, new Date(nowTick)) &&
-          !window.localStorage.getItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`)
+      eligiblePopups.find(
+        (popup) => !window.localStorage.getItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`)
       ) || null
     );
-  }, [joinPopupDocs, nowTick, popupBlockedForVisit]);
+  }, [eligiblePopups, popupBlockedForVisit]);
+
+  useEffect(() => {
+    console.log("JOIN_POPUPS_RAW", joinPopupDocs);
+    console.log("JOIN_POPUPS_ELIGIBLE", eligiblePopups);
+    console.log("JOIN_ACTIVE_POPUP", activePopup);
+  }, [activePopup, eligiblePopups, joinPopupDocs]);
 
   const handleTrackSelect = (routeTrack) => {
     if (routeTrack === "rental") {

@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { collection, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
 
-import { ADMIN_EMAILS } from "./constants/admin";
+import { isEmailAdmin } from "./constants/admin";
 import { auth, db, googleProvider, appId } from "./lib/firebase";
 import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ParticleBackground from "./components/ui/ParticleBackground";
@@ -126,7 +126,7 @@ const App = () => {
         }
       } else {
         setUser(u);
-        setIsAdmin(ADMIN_EMAILS.includes(u.email));
+        setIsAdmin(isEmailAdmin(u.email));
         setLoading(false);
       }
     });
@@ -355,6 +355,8 @@ const App = () => {
             reservations={reservations}
             db={db}
             appId={appId}
+            user={user}
+            isAdmin={isAdmin}
           />
         ) : viewMode === "my-page" ? (
           <MyPage

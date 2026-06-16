@@ -6,11 +6,13 @@ import {
   Plus,
   Save,
   Sparkles,
+  X,
   Trash2,
 } from "lucide-react";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, deleteDoc } from "firebase/firestore";
 import {
   JOIN_POPUP_COLLECTION,
+  getJoinPopupWindowStatus,
   parseJoinPopupDate,
   sortJoinPopups,
 } from "../../constants/joinPopups";
@@ -72,6 +74,8 @@ const normalizeNumber = (value, fallback = 999) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const getCurrentLoginEmail = (currentUser) => currentUser?.email?.trim() || "-";
+
 const isFirestorePermissionError = (error) => {
   const message = `${error?.code || ""} ${error?.message || ""}`.toLowerCase();
   return (
@@ -80,10 +84,11 @@ const isFirestorePermissionError = (error) => {
   );
 };
 
-const getJoinPopupErrorMessage = (error) => {
+const getJoinPopupErrorMessage = (error, currentUser) => {
   if (isFirestorePermissionError(error)) {
     return [
       "Firestore 권한 오류입니다. joinPopups rules가 추가되었는지 확인해 주세요.",
+      `현재 로그인 이메일: ${getCurrentLoginEmail(currentUser)}`,
       "Firebase Console > Firestore Rules에 joinTracks / joinPopups 권한이 추가되어야 합니다.",
     ].join("\n");
   }
@@ -91,21 +96,127 @@ const getJoinPopupErrorMessage = (error) => {
   return "팝업 설정을 저장하는 중 오류가 발생했습니다.";
 };
 
-const JoinPopupManager = ({ db, appId }) => {
+const JoinPopupPreviewModal = ({ popup, onClose }) => {
+  if (!popup) return null;
+
+  const poster = popup.posterImageUrl?.trim();
+  const ctaLabel = popup.ctaLabel?.trim() || "신청하러 가기";
+  const dismissLabel = popup.dismissLabel?.trim() || "닫기";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-5 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-zinc-950/10 bg-[#F6F4EE] shadow-[0_30px_100px_rgba(0,0,0,0.35)]">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="팝업 미리보기 닫기"
+          className="absolute right-4 top-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-zinc-950/10 bg-white/90 text-zinc-700 shadow-sm transition-colors hover:text-zinc-950"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="grid min-h-[32rem] md:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative min-h-[18rem] overflow-hidden bg-[#004AAD]">
+            {poster ? (
+              <img
+                src={poster}
+                alt={popup.title || "Join popup preview"}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 bg-[linear-gradient(135deg,#004AAD_0%,#AAD004_54%,#F6F4EE_100%)]" />
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/55 via-zinc-950/10 to-white/10" />
+            <div className="absolute inset-y-0 right-0 w-16 skew-x-[-8deg] bg-white/20 opacity-40 mix-blend-overlay" />
+            <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
+              <Sparkles size={11} />
+              JOIN POPUP PREVIEW
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-between p-6 text-zinc-950 md:p-8 lg:p-10">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#004AAD]">
+                PREVIEW ONLY
+              </p>
+              <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
+                {popup.title || "공지"}
+              </h2>
+              <p className="mt-4 text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                {popup.subtitle || ""}
+              </p>
+              <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                {popup.body || ""}
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[#004AAD]">
+                  {popup.targetTrack || "open-call"}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
+                  {popup.priority != null ? `priority ${popup.priority}` : "priority 999"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
+              >
+                {ctaLabel}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+              >
+                {dismissLabel}
+              </button>
+            </div>
+
+            <p className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+              미리보기에서는 실제 JoinHome 이동이 발생하지 않습니다.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const JoinPopupManager = ({ db, appId, currentUser }) => {
   const [popupDocs, setPopupDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
   const [managerNoticeTone, setManagerNoticeTone] = useState("blue");
+  const [previewPopup, setPreviewPopup] = useState(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const clearTimersRef = useRef({});
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 60 * 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", JOIN_POPUP_COLLECTION);
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        setPopupDocs(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setPopupDocs(snapshot.docs.map((docSnap) => ({ ...docSnap.data(), id: docSnap.id })));
         setLoading(false);
       },
       (error) => {
@@ -127,6 +238,7 @@ const JoinPopupManager = ({ db, appId }) => {
   );
 
   const sortedPopups = useMemo(() => sortJoinPopups(popupDocs), [popupDocs]);
+  const currentTime = useMemo(() => new Date(nowTick), [nowTick]);
 
   useEffect(() => {
     setDrafts((prev) => {
@@ -184,6 +296,15 @@ const JoinPopupManager = ({ db, appId }) => {
     }));
   };
 
+  const clearPopupDismissHistory = () => {
+    const keysToRemove = Object.keys(window.localStorage).filter((key) =>
+      key.includes("unframe-join-popup")
+    );
+    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+    setManagerNotice("이 브라우저의 팝업 닫힘 기록을 초기화했습니다.");
+    setManagerNoticeTone("blue");
+  };
+
   const handleCreatePopup = async () => {
     const popup = createBlankPopup();
     try {
@@ -201,7 +322,7 @@ const JoinPopupManager = ({ db, appId }) => {
       setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error, currentUser));
       setManagerNoticeTone("red");
     }
   };
@@ -231,7 +352,7 @@ const JoinPopupManager = ({ db, appId }) => {
       setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error, currentUser));
       setManagerNoticeTone("red");
     }
   };
@@ -278,7 +399,7 @@ const JoinPopupManager = ({ db, appId }) => {
       console.error(error);
       setTimedSaveFeedback(popup.id, {
         state: "error",
-        message: getJoinPopupErrorMessage(error),
+        message: getJoinPopupErrorMessage(error, currentUser),
       });
       setManagerNoticeTone("red");
     }
@@ -294,7 +415,7 @@ const JoinPopupManager = ({ db, appId }) => {
       setManagerNoticeTone("blue");
     } catch (error) {
       console.error(error);
-      setManagerNotice(getJoinPopupErrorMessage(error));
+      setManagerNotice(getJoinPopupErrorMessage(error, currentUser));
       setManagerNoticeTone("red");
     }
   };
@@ -334,6 +455,14 @@ const JoinPopupManager = ({ db, appId }) => {
             <Plus size={14} />
             오픈콜 팝업 예시 생성
           </button>
+
+          <button
+            type="button"
+            onClick={clearPopupDismissHistory}
+            className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+          >
+            이 브라우저 팝업 닫힘 기록 초기화
+          </button>
         </div>
       </div>
 
@@ -368,6 +497,11 @@ const JoinPopupManager = ({ db, appId }) => {
           {sortedPopups.map((popup) => {
             const draft = drafts[popup.id] || {};
             const feedback = saveFeedbacks[popup.id];
+            const effectivePopup = { ...popup, ...draft, id: popup.id };
+            const visibilityStatus = getJoinPopupWindowStatus(effectivePopup, currentTime);
+            const hasPoster = Boolean(effectivePopup.posterImageUrl?.trim());
+            const canShowOnJoinHome =
+              effectivePopup.enabled !== false && visibilityStatus.withinRange;
 
             return (
               <div
@@ -421,8 +555,75 @@ const JoinPopupManager = ({ db, appId }) => {
                           )}
                         </span>
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600">
-                          priority {draft.priority ?? popup.priority ?? 999}
+                          priority {effectivePopup.priority ?? 999}
                         </span>
+                      </div>
+
+                      <div className="mt-4 rounded-[22px] border border-dashed border-zinc-200 bg-white/85 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                            진단
+                          </p>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
+                              canShowOnJoinHome
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-red-200 bg-red-50 text-red-700"
+                            }`}
+                          >
+                            현재 JoinHome 노출 가능: {canShowOnJoinHome ? "YES" : "NO"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-[11px] font-bold text-zinc-600">
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">popup id</span>
+                            <span className="break-all text-right text-zinc-900">
+                              {effectivePopup.id}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">enabled</span>
+                            <span className="text-right text-zinc-900">
+                              {effectivePopup.enabled !== false ? "true" : "false"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">startAt</span>
+                            <span className="break-all text-right text-zinc-900">
+                              {effectivePopup.startAt || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">endAt</span>
+                            <span className="break-all text-right text-zinc-900">
+                              {effectivePopup.endAt || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">targetTrack</span>
+                            <span className="text-right text-zinc-900">
+                              {effectivePopup.targetTrack || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">priority</span>
+                            <span className="text-right text-zinc-900">
+                              {effectivePopup.priority ?? 999}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">posterImageUrl</span>
+                            <span className="text-right text-zinc-900">
+                              {hasPoster ? "있음" : "없음"}
+                            </span>
+                          </div>
+                          {visibilityStatus.hasDateFormatIssue ? (
+                            <p className="pt-1 text-[11px] font-black uppercase tracking-[0.14em] text-amber-700">
+                              날짜 형식 확인 필요
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -615,6 +816,14 @@ const JoinPopupManager = ({ db, appId }) => {
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => setPreviewPopup(effectivePopup)}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          팝업 미리보기
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleSave(popup)}
                           disabled={feedback?.state === "saving"}
                           className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
@@ -640,6 +849,8 @@ const JoinPopupManager = ({ db, appId }) => {
           })}
         </div>
       )}
+
+      <JoinPopupPreviewModal popup={previewPopup} onClose={() => setPreviewPopup(null)} />
     </section>
   );
 };

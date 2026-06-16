@@ -40,6 +40,7 @@ import EmailTestPanel from "./EmailTestPanel";
 import OpenCallManager from "./admin/OpenCallManager";
 import JoinTrackManager from "./admin/JoinTrackManager";
 import JoinPopupManager from "./admin/JoinPopupManager";
+import { isEmailAdmin } from "../constants/admin";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -257,7 +258,82 @@ const AdminNotice = ({ title, body, tone = "blue" }) => {
   );
 };
 
-const AdminDashboard = ({ applications, reservations, db, appId }) => {
+const AdminAuthDebug = ({ user, isAdmin }) => {
+  const providerIds = Array.from(
+    new Set(
+      (user?.providerData || [])
+        .map((provider) => provider?.providerId)
+        .filter(Boolean)
+    )
+  );
+  const providerLabel =
+    providerIds.length > 0
+      ? providerIds.join(", ")
+      : user?.providerId || (user?.isAnonymous ? "anonymous" : "-");
+
+  return (
+    <div className="rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad]">
+            Admin Auth Debug
+          </p>
+          <h4 className="mt-2 text-lg font-black text-zinc-900">현재 로그인 정보</h4>
+        </div>
+
+        <div
+          className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+            isAdmin
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          관리자 권한 예상 여부: {isAdmin ? "YES" : "NO"}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-[22px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            현재 로그인 이메일
+          </p>
+          <p className="mt-2 break-all text-sm font-bold text-zinc-900">
+            {user?.email || "-"}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            현재 uid
+          </p>
+          <p className="mt-2 break-all text-sm font-bold text-zinc-900">
+            {user?.uid || "-"}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            Provider
+          </p>
+          <p className="mt-2 break-all text-sm font-bold text-zinc-900">
+            {providerLabel}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            관리자 이메일 목록 포함
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-900">
+            {isEmailAdmin(user?.email) ? "YES" : "NO"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }) => {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedId, setExpandedId] = useState(null);
@@ -950,11 +1026,13 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-          <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
-          <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
-          <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+        <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
+        <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
+        <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
+      </div>
+
+      <AdminAuthDebug user={user} isAdmin={isAdmin} />
       </div>
 
       <div className="mb-20">
@@ -962,8 +1040,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       </div>
 
       <OpenCallManager db={db} appId={appId} applications={applications} />
-      <JoinTrackManager db={db} appId={appId} />
-      <JoinPopupManager db={db} appId={appId} />
+      <JoinTrackManager db={db} appId={appId} currentUser={user} />
+      <JoinPopupManager db={db} appId={appId} currentUser={user} />
 
       <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
