@@ -154,7 +154,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
       <div className="absolute inset-y-0 -right-10 w-24 skew-x-[-8deg] bg-white/18 opacity-45 mix-blend-overlay transition-opacity duration-500 group-hover:opacity-70" />
       <div className="absolute inset-y-0 right-0 w-px bg-white/25" />
 
-      <div className="relative z-30 flex h-full min-h-[620px] flex-col justify-between p-6 text-white md:p-8 lg:p-10">
+      <div className="relative z-30 flex h-full min-h-[420px] flex-col justify-between p-6 text-white md:min-h-[480px] md:p-8 lg:min-h-[520px] lg:p-10">
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
@@ -258,6 +258,303 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
     </button>
   );
 };
+
+const FeaturedProjectCard = ({ popup, onCta }) => {
+  const poster = popup?.posterImageUrl?.trim();
+  const targetTrack = popup?.targetTrack || "open-call";
+  const targetLabel = getEntryLabel(targetTrack);
+  const ctaLabel = popup?.ctaLabel?.trim() || "자세히 보기";
+
+  return (
+    <section className="overflow-hidden rounded-[32px] border border-zinc-950/10 bg-white/78 shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
+      <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="flex flex-col justify-between p-6 md:p-8 lg:p-10">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
+              <CircleDot size={11} />
+              CURRENT PROGRAM
+            </div>
+
+            {popup ? (
+              <>
+                <h2 className="mt-5 max-w-3xl text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.8rem] lg:text-[3.4rem]">
+                  {popup.title || "현재 대표 공지"}
+                </h2>
+                <p className="mt-4 max-w-2xl text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                  {popup.subtitle || "활성화된 공지와 프로젝트를 이 영역에서 함께 보여줍니다."}
+                </p>
+                <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                  {popup.body || ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-5 max-w-3xl text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.8rem] lg:text-[3.4rem]">
+                  현재 대표 공지가 없습니다.
+                </h2>
+                <p className="mt-4 max-w-2xl text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                  관리자에서 joinPopups를 활성화하면 이 영역이 대표 프로젝트 카드로 채워집니다.
+                </p>
+                <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                  UNFRAME JOIN의 현재 입구와 공지를 한눈에 보여주는 자리입니다.
+                </p>
+              </>
+            )}
+
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/90 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-600">
+                {targetLabel}
+              </span>
+              {popup?.priority != null ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
+                  priority {popup.priority}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+            {popup ? (
+              <button
+                type="button"
+                onClick={onCta}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-zinc-950/10 transition-opacity hover:opacity-90"
+              >
+                {ctaLabel}
+                <ArrowRight size={14} />
+              </button>
+            ) : null}
+
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400">
+              Featured from joinPopups
+            </p>
+          </div>
+        </div>
+
+        <div className="relative min-h-[18rem] overflow-hidden border-t border-zinc-950/10 bg-[#F6F4EE] lg:min-h-[24rem] lg:border-t-0 lg:border-l">
+          {poster ? (
+            <img
+              src={poster}
+              alt={popup?.title || "Featured project"}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-[linear-gradient(135deg,#004AAD_0%,#AAD004_48%,#F6F4EE_100%)]" />
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/35 via-zinc-950/8 to-white/10" />
+          <div className="absolute inset-y-0 right-0 w-20 skew-x-[-8deg] bg-white/20 opacity-45 mix-blend-overlay" />
+
+          <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+            FEATURED PROJECT
+          </div>
+
+          {!poster ? (
+            <div className="absolute bottom-5 left-5 right-5 rounded-[24px] border border-white/18 bg-white/10 p-4 text-white backdrop-blur-md">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/80">
+                UNFRAME JOIN
+              </p>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-white/90 break-keep">
+                포스터가 없어도 대표 공지의 분위기를 유지할 수 있도록 그래픽 대체 화면을 보여줍니다.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const BrandHero = () => (
+  <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
+    <div className="max-w-4xl">
+      <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
+          <Sparkles size={15} />
+        </span>
+        <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
+          UNFRAME JOIN
+        </span>
+      </div>
+
+      <h1 className="mt-6 max-w-4xl text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
+        하나의 방식으로만
+        <br />
+        연결되지 않습니다.
+      </h1>
+
+      <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
+        공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다. 각 트랙은
+        열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
+      </p>
+
+      <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+        <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
+          <CircleDot size={11} />
+          SELECT YOUR ENTRY POINT
+        </span>
+        <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
+          Live Tracks
+        </span>
+      </div>
+    </div>
+
+    <div className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-5 shadow-sm md:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+            Brand Note
+          </p>
+          <p className="mt-2 text-lg font-black tracking-tight text-zinc-950">
+            UNFRAME의 입구는 하나가 아닙니다.
+          </p>
+        </div>
+
+        <div className="rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
+          LIVE
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-[24px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Entry</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+            신청 트랙은 살아 있고, 필요한 입구만 선택하면 됩니다.
+          </p>
+        </div>
+
+        <div className="rounded-[24px] border border-white/80 bg-white p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Notice</p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+            현재 노출 중인 공지와 대표 프로젝트는 아래 영역에서 이어집니다.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+const EntryPanel = ({
+  loading,
+  visibleTracks,
+  primaryTracks,
+  auxiliaryTracks,
+  hoveredTrackId,
+  setHoveredTrackId,
+  handleTrackClick,
+}) => (
+  <section className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-4 shadow-sm md:p-6">
+    <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+          WAYS TO JOIN
+        </p>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-950 md:text-3xl">
+          필요한 방식에 맞는 입구를 선택해 주세요.
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+          enabled 상태의 트랙만 보여집니다. rental과 open-call은 실제 진입되고, salon과
+          collaboration은 준비 중 안내를 띄웁니다.
+        </p>
+      </div>
+
+      <div className="rounded-full border border-zinc-950/10 bg-white/85 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+        {loading ? "SYNCING" : `${visibleTracks.length} TRACKS ACTIVE`}
+      </div>
+    </div>
+
+    {primaryTracks.length > 0 ? (
+      <>
+        <div
+          className="hidden overflow-hidden rounded-[30px] border border-zinc-950/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] md:flex"
+          style={{ minHeight: "clamp(26rem, 48vh, 32rem)" }}
+          onMouseLeave={() => setHoveredTrackId(null)}
+        >
+          {primaryTracks.map((track) => (
+            <TrackSlice
+              key={track.id}
+              track={track}
+              count={primaryTracks.length}
+              hoveredTrackId={hoveredTrackId}
+              onHover={() => setHoveredTrackId(track.id)}
+              onClick={() => handleTrackClick(track)}
+            />
+          ))}
+        </div>
+
+        <div className="grid gap-4 md:hidden">
+          {primaryTracks.map((track, index) => (
+            <button
+              key={track.id}
+              type="button"
+              onClick={() => handleTrackClick(track)}
+              className="group relative min-h-[16rem] overflow-hidden rounded-[30px] border border-zinc-950/10 bg-white text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)]"
+            >
+              <div className="absolute inset-0" style={buildTrackBackgroundStyle(track, true)} />
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-zinc-950/5 to-white/15" />
+              <div className="absolute inset-y-0 -right-8 w-16 skew-x-[-8deg] bg-white/18 opacity-50 mix-blend-overlay" />
+
+              <div className="relative z-30 flex min-h-[16rem] flex-col justify-between p-5 text-white">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
+                    {String(index + 1).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
+                  </div>
+                  <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
+                    {track.badgeText || "OPEN"}
+                  </div>
+                </div>
+
+                <div className="max-w-[18rem]">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
+                    {track.eyebrow || "UNFRAME JOIN"}
+                  </p>
+                  <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
+                    {track.title}
+                  </h3>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-white/82 break-keep">
+                    {track.description}
+                  </p>
+                  <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
+                    {getCtaLabel(track.routeTrack)}
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </>
+    ) : (
+      <div className="flex h-full min-h-[24rem] items-center justify-center rounded-[34px] border border-dashed border-zinc-950/10 bg-white/80 px-6 text-center">
+        <div>
+          <p className="text-lg font-black text-zinc-950">노출 중인 트랙이 없습니다</p>
+          <p className="mt-2 text-sm font-medium text-zinc-700 break-keep">
+            관리자에서 joinTracks를 활성화하면 이 허브가 열립니다.
+          </p>
+        </div>
+      </div>
+    )}
+
+    {auxiliaryTracks.length > 0 ? (
+      <div className="mt-5 rounded-[28px] border border-zinc-950/10 bg-white/80 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.06)] md:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+            Auxiliary entry points
+          </p>
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
+            more than four tracks
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {auxiliaryTracks.map((track) => (
+            <AuxiliaryTrackItem key={track.id} track={track} onClick={() => handleTrackClick(track)} />
+          ))}
+        </div>
+      </div>
+    ) : null}
+  </section>
+);
 
 const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
   if (!popup) return null;
@@ -449,8 +746,9 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     [eligiblePopups]
   );
 
-  // Debug-only logs for popup visibility investigation.
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
     console.log("JOIN_POPUPS_RAW", joinPopupDocs);
     console.log("JOIN_POPUPS_STATUS", popupStatuses);
     console.log("JOIN_ACTIVE_POPUP", activePopup);
@@ -490,12 +788,17 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   };
 
   const popupToShow = popupLoading ? null : activePopup;
+  const featuredPopup = activePopup;
   const handlePopupClose = () => dismissPopupForSession(popupToShow);
   const handlePopupHideToday = () => hidePopupForToday(popupToShow);
   const handlePopupCta = () => {
     if (!popupToShow) return;
     dismissPopupForSession(popupToShow);
     handleTrackSelect(popupToShow.targetTrack);
+  };
+  const handleFeaturedProjectCta = () => {
+    if (!featuredPopup) return;
+    handleTrackSelect(featuredPopup.targetTrack);
   };
 
   useEffect(() => {
@@ -522,162 +825,37 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   };
 
   return (
-    <section className="min-h-[calc(100vh-7rem)] bg-[#F6F4EE] text-zinc-950">
-      <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-[1600px] flex-col px-4 py-4 md:px-6 md:py-6">
-        <header className="grid gap-5 border-b border-zinc-950/10 pb-5 md:grid-cols-[1.1fr_0.9fr] md:items-end">
-          <div>
-            <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
-                <Sparkles size={15} />
-              </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
-                UNFRAME JOIN
-              </span>
-            </div>
+    <main className="min-h-screen bg-[#F6F4EE] text-zinc-950">
+      <div className="mx-auto max-w-7xl px-5 pt-10 pb-8 md:px-6 md:pt-16 md:pb-10">
+        <BrandHero />
+      </div>
 
-            <h1 className="mt-5 max-w-4xl text-[2.8rem] font-black tracking-tighter leading-[0.9] break-keep text-zinc-950 md:text-6xl lg:text-[5.2rem]">
-              하나의 방식으로만
-              <br />
-              연결되지 않습니다.
-            </h1>
-          </div>
+      <div className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
+        <FeaturedProjectCard popup={featuredPopup} onCta={handleFeaturedProjectCta} />
+      </div>
 
-          <div className="max-w-xl justify-self-start md:justify-self-end">
-            <p className="text-sm font-medium leading-relaxed text-zinc-700 break-keep md:text-base">
-              공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다.
-              각 트랙은 열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
-            </p>
+      <div className="mx-auto max-w-7xl px-5 pb-14 md:px-6 md:pb-20">
+        <EntryPanel
+          loading={loading}
+          visibleTracks={visibleTracks}
+          primaryTracks={primaryTracks}
+          auxiliaryTracks={auxiliaryTracks}
+          hoveredTrackId={hoveredTrackId}
+          setHoveredTrackId={setHoveredTrackId}
+          handleTrackClick={handleTrackClick}
+        />
+      </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
-                <CircleDot size={11} />
-                Select your entry point
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
-                Live Tracks
-              </span>
-            </div>
-          </div>
-        </header>
-
-        <div className="mt-4 flex items-center justify-between gap-3">
+      <footer className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
+        <div className="flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
           <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
-            Select your entry point — UNFRAME JOIN SYSTEM
-          </p>
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-400">
-            {loading ? "SYNCING" : `${visibleTracks.length} TRACKS ACTIVE`}
-          </p>
-        </div>
-
-        <div className="mt-4 flex-1">
-          {primaryTracks.length > 0 ? (
-            <>
-              <div
-                className="hidden overflow-hidden rounded-[36px] border border-zinc-950/10 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] md:flex"
-                style={{ minHeight: "clamp(32rem, 72vh, 52rem)" }}
-                onMouseLeave={() => setHoveredTrackId(null)}
-              >
-                {primaryTracks.map((track) => (
-                  <TrackSlice
-                    key={track.id}
-                    track={track}
-                    count={primaryTracks.length}
-                    hoveredTrackId={hoveredTrackId}
-                    onHover={() => setHoveredTrackId(track.id)}
-                    onClick={() => handleTrackClick(track)}
-                  />
-                ))}
-              </div>
-
-              <div className="grid gap-4 md:hidden">
-                {primaryTracks.map((track, index) => (
-                  <button
-                    key={track.id}
-                    type="button"
-                    onClick={() => handleTrackClick(track)}
-                    className="group relative min-h-[18rem] overflow-hidden rounded-[30px] border border-zinc-950/10 bg-white text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)]"
-                  >
-                    <div
-                      className="absolute inset-0"
-                      style={buildTrackBackgroundStyle(track, true)}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-zinc-950/5 to-white/15" />
-                    <div className="absolute inset-y-0 -right-8 w-16 skew-x-[-8deg] bg-white/18 opacity-50 mix-blend-overlay" />
-
-                    <div className="relative z-30 flex min-h-[18rem] flex-col justify-between p-5 text-white">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
-                          {String(index + 1).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
-                        </div>
-                        <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
-                          {track.badgeText || "OPEN"}
-                        </div>
-                      </div>
-
-                      <div className="max-w-[18rem]">
-                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
-                          {track.eyebrow || "UNFRAME JOIN"}
-                        </p>
-                        <h2 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
-                          {track.title}
-                        </h2>
-                        <p className="mt-3 text-sm font-medium leading-relaxed text-white/82 break-keep">
-                          {track.description}
-                        </p>
-                        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
-                          {getCtaLabel(track.routeTrack)}
-                          <ArrowRight size={14} />
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="flex h-full min-h-[26rem] items-center justify-center rounded-[34px] border border-dashed border-zinc-950/10 bg-white/80 px-6 text-center">
-              <div>
-                <p className="text-lg font-black text-zinc-950">노출 중인 트랙이 없습니다</p>
-                <p className="mt-2 text-sm font-medium text-zinc-700 break-keep">
-                  관리자에서 joinTracks를 활성화하면 이 허브가 열립니다.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {auxiliaryTracks.length > 0 ? (
-            <div className="mt-5 rounded-[30px] border border-zinc-950/10 bg-white/80 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.06)] md:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-                  Auxiliary entry points
-                </p>
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
-                  more than four tracks
-                </p>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {auxiliaryTracks.map((track) => (
-                  <AuxiliaryTrackItem
-                    key={track.id}
-                    track={track}
-                    onClick={() => handleTrackClick(track)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <footer className="mt-4 flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
-            Select your entry point — UNFRAME JOIN SYSTEM
+            SELECT YOUR ENTRY POINT — UNFRAME JOIN SYSTEM
           </p>
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
             BASE STRUCTURE {DEFAULT_JOIN_TRACKS.length} TRACKS
           </p>
-        </footer>
-      </div>
+        </div>
+      </footer>
 
       <JoinPopupModal
         popup={popupToShow}
@@ -685,7 +863,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
         onHideToday={handlePopupHideToday}
         onCta={handlePopupCta}
       />
-    </section>
+    </main>
   );
 };
 
