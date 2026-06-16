@@ -1031,49 +1031,100 @@ const handleAction = async (appDoc, date, status, reason = "") => {
     });
   }, [filteredApplications, sortOrder]);
 
+  const activeTab = ADMIN_TABS.find((tab) => tab.id === activeAdminTab) || ADMIN_TABS[0];
+
   return (
-    <section className="animate-in fade-in py-20 text-zinc-900 min-h-screen relative z-10 text-left px-4">
-      <div className="mb-20 space-y-12 text-left">
-        <div className="flex items-center gap-4 text-left">
-          <div className="p-4 bg-[#004aad] rounded-3xl text-white shadow-xl shadow-[#004aad]/20">
-            <Activity size={32} />
+    <section className="min-h-screen bg-[#F6F4EE] py-10 text-zinc-900 md:py-14">
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="mb-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
+                  <Activity size={15} />
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
+                  UNFRAME JOIN ADMIN
+                </span>
+              </div>
+
+              <div>
+                <h2 className="text-4xl font-black tracking-tighter text-zinc-950 md:text-6xl">
+                  Control Center
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-base">
+                  운영자는 탭 하나씩만 집중해서 작업할 수 있습니다. 신청 현황, 오픈콜, 메인 입구,
+                  팝업, 시스템 도구를 목적별로 분리해 정리했습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="inline-flex items-center gap-3 rounded-[24px] border border-zinc-950/10 bg-white/80 px-4 py-3 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#004AAD]/10 text-[#004AAD]">
+                <Users size={18} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+                  Current Login
+                </p>
+                <p className="mt-1 text-sm font-black text-zinc-900">
+                  {user?.email || "anonymous"}
+                </p>
+              </div>
+            </div>
           </div>
-          <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none text-left">
-            Control Center
-          </h2>
-        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-        <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
-        <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
-        <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
-      </div>
-
-      <AdminAuthDebug user={user} isAdmin={isAdmin} />
-      </div>
-
-      <div className="mt-10 overflow-x-auto pb-2">
-        <div className="inline-flex min-w-max gap-2 rounded-[28px] border border-zinc-100 bg-white/80 p-2 shadow-sm">
-          {ADMIN_TABS.map((tab) => {
-            const isActive = activeAdminTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveAdminTab(tab.id)}
-                className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
-                  isActive
-                    ? "bg-[#004aad] text-white shadow-lg shadow-[#004aad]/15"
-                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
+            <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
+            <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
+          </div>
         </div>
       </div>
+
+      <div className="sticky top-0 z-30 border-y border-zinc-950/10 bg-[#F6F4EE]/92 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-4">
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {ADMIN_TABS.map((tab) => {
+              const isActive = activeAdminTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveAdminTab(tab.id)}
+                  className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] transition-all ${
+                    isActive
+                      ? "border-zinc-950 bg-zinc-950 text-white shadow-lg shadow-zinc-950/10"
+                      : "border-zinc-950/10 bg-white/75 text-zinc-500 hover:border-zinc-950/30 hover:text-zinc-950"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+              Admin Console
+            </p>
+            <h3 className="mt-2 text-3xl font-black tracking-tight text-zinc-950">
+              {activeTab.label}
+            </h3>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+              {activeTab.description}
+            </p>
+          </div>
+
+          <div className="rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm">
+            {activeAdminTab}
+          </div>
+        </div>
 
       {activeAdminTab === "system" ? (
         <div className="mt-6">
@@ -1126,7 +1177,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       ) : null}
 
       {activeAdminTab === "applications" ? (
-        <>
+        <DashboardPanel className="space-y-8">
           <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
           <div className="flex items-center justify-between gap-3 mb-8">
@@ -1979,8 +2030,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           </div>
         )}
       </div>
-        </>
+        </DashboardPanel>
       ) : null}
+      </div>
     </section>
   );
 };
