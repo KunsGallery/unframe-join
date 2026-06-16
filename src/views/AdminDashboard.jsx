@@ -42,6 +42,22 @@ import JoinTrackManager from "./admin/JoinTrackManager";
 import JoinPopupManager from "./admin/JoinPopupManager";
 import { isAdminEmail } from "../constants/admin";
 
+const ADMIN_TABS = [
+  { id: "applications", label: "신청 현황" },
+  { id: "openCalls", label: "오픈콜 관리" },
+  { id: "joinTracks", label: "메인 입구 관리" },
+  { id: "popups", label: "팝업 관리" },
+  { id: "system", label: "시스템" },
+];
+
+const DashboardPanel = ({ children, className = "" }) => (
+  <section
+    className={`rounded-[28px] border border-zinc-950/10 bg-white/70 p-4 md:p-6 shadow-sm ${className}`}
+  >
+    {children}
+  </section>
+);
+
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
 const DEFAULT_MANUAL_BLOCK = {
@@ -337,6 +353,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [activeAdminTab, setActiveAdminTab] = useState("applications");
 
   const [manualBlock, setManualBlock] = useState(DEFAULT_MANUAL_BLOCK);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
@@ -1035,15 +1052,82 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       <AdminAuthDebug user={user} isAdmin={isAdmin} />
       </div>
 
-      <div className="mb-20">
-      <EmailTestPanel />
+      <div className="mt-10 overflow-x-auto pb-2">
+        <div className="inline-flex min-w-max gap-2 rounded-[28px] border border-zinc-100 bg-white/80 p-2 shadow-sm">
+          {ADMIN_TABS.map((tab) => {
+            const isActive = activeAdminTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveAdminTab(tab.id)}
+                className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
+                  isActive
+                    ? "bg-[#004aad] text-white shadow-lg shadow-[#004aad]/15"
+                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <OpenCallManager db={db} appId={appId} applications={applications} />
-      <JoinTrackManager db={db} appId={appId} currentUser={user} />
-      <JoinPopupManager db={db} appId={appId} currentUser={user} />
+      {activeAdminTab === "system" ? (
+        <div className="mt-6">
+          <DashboardPanel className="space-y-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-400">
+                  System
+                </p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900">
+                  관리자 진단 / 도구
+                </h3>
+                <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
+                  로그인 상태, 이메일 테스트, 권한 안내를 한곳에서 확인합니다.
+                </p>
+              </div>
 
-      <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
+              <div className="rounded-full border border-zinc-100 bg-zinc-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                {user?.email || "anonymous"}
+              </div>
+            </div>
+
+            <AdminAuthDebug user={user} isAdmin={isAdmin} />
+            <EmailTestPanel />
+
+            <div className="rounded-[24px] border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-4 text-sm font-bold leading-relaxed text-[#004aad] break-keep">
+              Firebase Console &gt; Firestore Rules에 joinTracks / joinPopups 권한이 추가되어야
+              합니다.
+            </div>
+          </DashboardPanel>
+        </div>
+      ) : null}
+
+      {activeAdminTab === "openCalls" ? (
+        <div className="mt-6">
+          <OpenCallManager db={db} appId={appId} applications={applications} />
+        </div>
+      ) : null}
+
+      {activeAdminTab === "joinTracks" ? (
+        <div className="mt-6">
+          <JoinTrackManager db={db} appId={appId} currentUser={user} />
+        </div>
+      ) : null}
+
+      {activeAdminTab === "popups" ? (
+        <div className="mt-6">
+          <JoinPopupManager db={db} appId={appId} currentUser={user} />
+        </div>
+      ) : null}
+
+      {activeAdminTab === "applications" ? (
+        <>
+          <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
           <div className="flex items-center justify-between gap-3 mb-8">
             <div className="flex items-center gap-3">
@@ -1895,6 +1979,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           </div>
         )}
       </div>
+        </>
+      ) : null}
     </section>
   );
 };

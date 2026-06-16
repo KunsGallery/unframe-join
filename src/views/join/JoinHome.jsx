@@ -17,9 +17,10 @@ import {
 } from "../../constants/joinTracks";
 import {
   JOIN_POPUP_COLLECTION,
-  JOIN_POPUP_DISMISS_PREFIX,
+  getPopupHideTodayKey,
   getPopupVisibilityStatus,
-  isPopupDismissed,
+  isPopupHiddenToday,
+  getTodayKey,
   sortJoinPopups,
 } from "../../constants/joinPopups";
 
@@ -258,7 +259,7 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
   );
 };
 
-const JoinPopupModal = ({ popup, onClose, onCta }) => {
+const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
   if (!popup) return null;
 
   const poster = popup.posterImageUrl?.trim();
@@ -339,6 +340,14 @@ const JoinPopupModal = ({ popup, onClose, onCta }) => {
 
               <button
                 type="button"
+                onClick={onHideToday}
+                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+              >
+                오늘 하루 보지 않기
+              </button>
+
+              <button
+                type="button"
                 onClick={onClose}
                 className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
               >
@@ -358,7 +367,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   const [loading, setLoading] = useState(true);
   const [popupLoading, setPopupLoading] = useState(true);
   const [hoveredTrackId, setHoveredTrackId] = useState(null);
-  const [popupBlockedForVisit, setPopupBlockedForVisit] = useState(false);
+  const [dismissedPopupIdsThisSession, setDismissedPopupIdsThisSession] = useState([]);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -415,26 +424,30 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     () =>
       sortJoinPopups(joinPopupDocs).map((popup) => {
         const status = getPopupVisibilityStatus(popup, currentTime);
-        const dismissed = isPopupDismissed(popup.id);
+        const hiddenToday = isPopupHiddenToday(popup.id, currentTime);
+        const dismissedThisSession = dismissedPopupIdsThisSession.includes(popup.id);
 
         return {
           ...popup,
           status,
-          dismissed,
-          finalVisible: status.canShow && !dismissed,
+          hiddenToday,
+          dismissedThisSession,
+          finalVisible: status.canShow && !hiddenToday && !dismissedThisSession,
         };
       }),
-    [currentTime, joinPopupDocs]
+    [currentTime, dismissedPopupIdsThisSession, joinPopupDocs]
   );
   const eligiblePopups = useMemo(
-    () => popupStatuses.filter((popup) => popup.status.canShow),
+    () =>
+      popupStatuses.filter(
+        (popup) => popup.status.canShow && !popup.hiddenToday && !popup.dismissedThisSession
+      ),
     [popupStatuses]
   );
-  const activePopup = useMemo(() => {
-    if (popupBlockedForVisit) return null;
-
-    return eligiblePopups.find((popup) => !popup.dismissed) || null;
-  }, [eligiblePopups, popupBlockedForVisit]);
+  const activePopup = useMemo(
+    () => eligiblePopups.find((popup) => popup.finalVisible) || null,
+    [eligiblePopups]
+  );
 
   // Debug-only logs for popup visibility investigation.
   useEffect(() => {
@@ -457,23 +470,31 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     window.alert(TRACK_ALERT_MESSAGE);
   };
 
-  const dismissPopup = (popup) => {
+  const dismissPopupForSession = (popup) => {
+    if (!popup?.id) return;
+    setDismissedPopupIdsThisSession((prev) =>
+      prev.includes(popup.id) ? prev : [...prev, popup.id]
+    );
+  };
+
+  const hidePopupForToday = (popup) => {
     if (!popup?.id) return;
 
     try {
-      window.localStorage.setItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`, "true");
+      window.localStorage.setItem(getPopupHideTodayKey(popup.id), getTodayKey(currentTime));
     } catch (error) {
       console.error(error);
     }
 
-    setPopupBlockedForVisit(true);
+    dismissPopupForSession(popup);
   };
 
   const popupToShow = popupLoading ? null : activePopup;
-  const handlePopupClose = () => dismissPopup(popupToShow);
+  const handlePopupClose = () => dismissPopupForSession(popupToShow);
+  const handlePopupHideToday = () => hidePopupForToday(popupToShow);
   const handlePopupCta = () => {
     if (!popupToShow) return;
-    dismissPopup(popupToShow);
+    dismissPopupForSession(popupToShow);
     handleTrackSelect(popupToShow.targetTrack);
   };
 
@@ -482,7 +503,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
-        dismissPopup(popupToShow);
+        dismissPopupForSession(popupToShow);
       }
     };
 
@@ -661,6 +682,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
       <JoinPopupModal
         popup={popupToShow}
         onClose={handlePopupClose}
+        onHideToday={handlePopupHideToday}
         onCta={handlePopupCta}
       />
     </section>

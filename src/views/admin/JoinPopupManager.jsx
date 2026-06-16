@@ -13,9 +13,10 @@ import { collection, doc, onSnapshot, serverTimestamp, setDoc, deleteDoc } from 
 import {
   JOIN_POPUP_COLLECTION,
   JOIN_POPUP_DISMISS_PREFIX,
+  JOIN_POPUP_HIDE_TODAY_PREFIX,
   getPopupVisibilityStatus,
   parseJoinPopupDate,
-  isPopupDismissed,
+  isPopupHiddenToday,
   sortJoinPopups,
 } from "../../constants/joinPopups";
 
@@ -300,10 +301,10 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
 
   const clearPopupDismissHistory = () => {
     const keysToRemove = Object.keys(window.localStorage).filter((key) =>
-      key.includes(JOIN_POPUP_DISMISS_PREFIX)
+      key.includes(JOIN_POPUP_DISMISS_PREFIX) || key.includes(JOIN_POPUP_HIDE_TODAY_PREFIX)
     );
     keysToRemove.forEach((key) => window.localStorage.removeItem(key));
-    setManagerNotice("이 브라우저의 팝업 닫힘 기록을 초기화했습니다.");
+    setManagerNotice("이 브라우저의 팝업 숨김 기록을 초기화했습니다.");
     setManagerNoticeTone("blue");
   };
 
@@ -463,7 +464,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
             onClick={clearPopupDismissHistory}
             className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
           >
-            이 브라우저 팝업 닫힘 기록 초기화
+            이 브라우저 팝업 숨김 기록 초기화
           </button>
         </div>
       </div>
@@ -506,9 +507,9 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
               enabled: draft.enabled ?? popup.enabled,
             };
             const visibilityStatus = getPopupVisibilityStatus(effectivePopup, currentTime);
-            const isDismissed = isPopupDismissed(effectivePopup.id);
+            const hiddenToday = isPopupHiddenToday(effectivePopup.id, currentTime);
             const hasPoster = Boolean(effectivePopup.posterImageUrl?.trim());
-            const finalVisible = visibilityStatus.canShow && !isDismissed;
+            const finalVisible = visibilityStatus.canShow && !hiddenToday;
 
             return (
               <div
@@ -578,7 +579,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                                 : "border-red-200 bg-red-50 text-red-700"
                             }`}
                           >
-                            현재 JoinHome 노출 가능: {visibilityStatus.canShow ? "YES" : "NO"}
+                            현재 JoinHome 노출 조건: {visibilityStatus.canShow ? "YES" : "NO"}
                           </span>
                         </div>
 
@@ -626,9 +627,9 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                             </span>
                           </div>
                           <div className="flex items-start justify-between gap-4">
-                            <span className="text-zinc-400">이 브라우저 닫힘 기록</span>
+                            <span className="text-zinc-400">오늘 하루 숨김 기록</span>
                             <span className="text-right text-zinc-900">
-                              {isDismissed ? "YES" : "NO"}
+                              {hiddenToday ? "YES" : "NO"}
                             </span>
                           </div>
                           <div className="flex items-start justify-between gap-4">

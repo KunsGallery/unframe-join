@@ -1,5 +1,6 @@
 export const JOIN_POPUP_COLLECTION = "joinPopups";
 export const JOIN_POPUP_DISMISS_PREFIX = "unframe-join-popup-dismissed-";
+export const JOIN_POPUP_HIDE_TODAY_PREFIX = "unframe-join-popup-hide-today-";
 
 export const DEFAULT_JOIN_POPUPS = [];
 
@@ -14,6 +15,26 @@ const normalizeBoolean = (value, fallback = false) =>
 const normalizeNumber = (value, fallback = 999) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const pad2 = (value) => String(value).padStart(2, "0");
+
+export const getTodayKey = (now = new Date()) => {
+  const current = now instanceof Date ? now : new Date(now);
+  if (Number.isNaN(current.getTime())) {
+    return "";
+  }
+
+  return [
+    current.getFullYear(),
+    pad2(current.getMonth() + 1),
+    pad2(current.getDate()),
+  ].join("-");
+};
+
+export const getPopupHideTodayKey = (popupId) => {
+  if (!popupId) return "";
+  return `${JOIN_POPUP_HIDE_TODAY_PREFIX}${popupId}`;
 };
 
 export const parseJoinPopupDate = (value) => {
@@ -151,6 +172,17 @@ export const isPopupDismissed = (popupId) => {
 
   try {
     return !!window.localStorage.getItem(`${JOIN_POPUP_DISMISS_PREFIX}${popupId}`);
+  } catch {
+    return false;
+  }
+};
+
+export const isPopupHiddenToday = (popupId, now = new Date()) => {
+  if (typeof window === "undefined" || !popupId) return false;
+
+  try {
+    const storedValue = window.localStorage.getItem(getPopupHideTodayKey(popupId));
+    return storedValue === getTodayKey(now);
   } catch {
     return false;
   }
