@@ -42,6 +42,8 @@ const createBlankPopup = () => {
     dismissLabel: "닫기",
     startAt: "",
     endAt: "",
+    showAsPopup: true,
+    showAsFeatured: true,
   };
 };
 
@@ -59,6 +61,8 @@ const createExamplePopup = () => ({
   dismissLabel: "닫기",
   startAt: "",
   endAt: "",
+  showAsPopup: true,
+  showAsFeatured: true,
 });
 
 const toDatetimeLocalValue = (value) => {
@@ -261,6 +265,8 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
             dismissLabel: popup.dismissLabel || "",
             startAt: toDatetimeLocalValue(popup.startAt),
             endAt: toDatetimeLocalValue(popup.endAt),
+            showAsPopup: popup.showAsPopup !== false,
+            showAsFeatured: popup.showAsFeatured !== false,
           };
         }
       });
@@ -377,6 +383,8 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
       dismissLabel: normalizeText(draft.dismissLabel, popup.dismissLabel || "닫기"),
       startAt: normalizeText(draft.startAt, popup.startAt || ""),
       endAt: normalizeText(draft.endAt, popup.endAt || ""),
+      showAsPopup: (draft.showAsPopup ?? popup.showAsPopup) !== false,
+      showAsFeatured: (draft.showAsFeatured ?? popup.showAsFeatured) !== false,
       updatedAt: serverTimestamp(),
       createdAt: popup.createdAt || serverTimestamp(),
     };
@@ -506,10 +514,21 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
               id: popup.id,
               enabled: draft.enabled ?? popup.enabled,
             };
-            const visibilityStatus = getPopupVisibilityStatus(effectivePopup, currentTime);
+            const popupLocationEnabled = (draft.showAsPopup ?? popup.showAsPopup) !== false;
+            const featuredLocationEnabled =
+              (draft.showAsFeatured ?? popup.showAsFeatured) !== false;
+            const popupVisibilityStatus = getPopupVisibilityStatus(effectivePopup, currentTime);
             const hiddenToday = isPopupHiddenToday(effectivePopup.id, currentTime);
             const hasPoster = Boolean(effectivePopup.posterImageUrl?.trim());
-            const finalVisible = visibilityStatus.canShow && !hiddenToday;
+            const popupVisible = popupLocationEnabled && popupVisibilityStatus.canShow && !hiddenToday;
+            const featuredVisible =
+              featuredLocationEnabled && popupVisibilityStatus.canShow;
+            const popupReason = popupLocationEnabled
+              ? popupVisibilityStatus.reason
+              : "팝업 노출이 비활성화되어 있습니다.";
+            const featuredReason = featuredLocationEnabled
+              ? popupVisibilityStatus.reason
+              : "메인 피쳐 노출이 비활성화되어 있습니다.";
 
             return (
               <div
@@ -574,12 +593,12 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                           </p>
                           <span
                             className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                              visibilityStatus.canShow
+                              popupVisible || featuredVisible
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                 : "border-red-200 bg-red-50 text-red-700"
                             }`}
                           >
-                            현재 JoinHome 노출 조건: {visibilityStatus.canShow ? "YES" : "NO"}
+                            팝업/피쳐 노출 조건: {popupVisible || featuredVisible ? "YES" : "NO"}
                           </span>
                         </div>
 
@@ -609,6 +628,18 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                             </span>
                           </div>
                           <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">팝업 표시 가능</span>
+                            <span className="text-right text-zinc-900">
+                              {popupLocationEnabled ? "YES" : "NO"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">메인 피쳐 표시 가능</span>
+                            <span className="text-right text-zinc-900">
+                              {featuredLocationEnabled ? "YES" : "NO"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
                             <span className="text-zinc-400">targetTrack</span>
                             <span className="text-right text-zinc-900">
                               {effectivePopup.targetTrack || "-"}
@@ -633,17 +664,25 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                             </span>
                           </div>
                           <div className="flex items-start justify-between gap-4">
-                            <span className="text-zinc-400">최종 표시 여부</span>
+                            <span className="text-zinc-400">팝업 최종 표시</span>
                             <span className="text-right text-zinc-900">
-                              {finalVisible ? "YES" : "NO"}
+                              {popupVisible ? "YES" : "NO"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">피쳐 최종 표시</span>
+                            <span className="text-right text-zinc-900">
+                              {featuredVisible ? "YES" : "NO"}
                             </span>
                           </div>
                           <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-3 py-2">
                             <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">
                               사유
                             </p>
-                            <p className="mt-1 text-[11px] font-bold leading-relaxed text-zinc-700 break-keep">
-                              {visibilityStatus.reason}
+                            <p className="mt-1 whitespace-pre-line text-[11px] font-bold leading-relaxed text-zinc-700 break-keep">
+                              팝업: {popupReason}
+                              {"\n"}
+                              피쳐: {featuredReason}
                             </p>
                           </div>
                         </div>
@@ -769,6 +808,38 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                           ))}
                         </select>
                       </label>
+
+                      <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          노출 위치
+                        </span>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3">
+                            <span className="text-sm font-bold text-zinc-800">팝업에 노출</span>
+                            <input
+                              type="checkbox"
+                              checked={draft.showAsPopup ?? (popup.showAsPopup !== false)}
+                              onChange={(e) =>
+                                updateDraft(popup.id, "showAsPopup", e.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-zinc-300 text-[#004aad] focus:ring-[#004aad]"
+                            />
+                          </label>
+
+                          <label className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3">
+                            <span className="text-sm font-bold text-zinc-800">메인 피쳐 노출</span>
+                            <input
+                              type="checkbox"
+                              checked={draft.showAsFeatured ?? (popup.showAsFeatured !== false)}
+                              onChange={(e) =>
+                                updateDraft(popup.id, "showAsFeatured", e.target.checked)
+                              }
+                              className="h-4 w-4 rounded border-zinc-300 text-[#004aad] focus:ring-[#004aad]"
+                            />
+                          </label>
+                        </div>
+                      </div>
 
                       <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
                         <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">

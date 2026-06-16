@@ -365,6 +365,77 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
   );
 };
 
+const FeaturedProjectSlider = ({
+  items,
+  activeIndex,
+  onPrev,
+  onNext,
+  onSelect,
+  onJump,
+}) => {
+  if (!items.length) return null;
+
+  if (items.length === 1) {
+    return <FeaturedProjectCard popup={items[0]} onCta={() => onSelect(items[0])} />;
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="overflow-hidden rounded-[32px]">
+        <div
+          className="flex transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+          style={{ transform: `translateX(-${activeIndex * 100}%)` }}
+        >
+          {items.map((popup) => (
+            <div key={popup.id} className="w-full shrink-0">
+              <FeaturedProjectCard popup={popup} onCta={() => onSelect(popup)} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-[24px] border border-zinc-950/10 bg-white/78 px-4 py-4 shadow-[0_12px_36px_rgba(0,0,0,0.06)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onPrev}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-950/10 bg-white text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+            aria-label="이전 피쳐 프로젝트"
+          >
+            <ArrowRight size={16} className="rotate-180" />
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-950/10 bg-white text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+            aria-label="다음 피쳐 프로젝트"
+          >
+            <ArrowRight size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {items.map((popup, index) => (
+            <button
+              key={popup.id}
+              type="button"
+              onClick={() => onJump(index)}
+              className={`h-2.5 rounded-full transition-all ${
+                index === activeIndex ? "w-8 bg-[#004AAD]" : "w-2.5 bg-zinc-300"
+              }`}
+              aria-label={`피쳐 프로젝트 ${index + 1}로 이동`}
+            />
+          ))}
+        </div>
+
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+          {activeIndex + 1} / {items.length}
+        </p>
+      </div>
+    </section>
+  );
+};
+
 const BrandHero = () => (
   <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
     <div className="max-w-4xl">
@@ -665,6 +736,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   const [popupLoading, setPopupLoading] = useState(true);
   const [hoveredTrackId, setHoveredTrackId] = useState(null);
   const [dismissedPopupIdsThisSession, setDismissedPopupIdsThisSession] = useState([]);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -723,36 +795,54 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
         const status = getPopupVisibilityStatus(popup, currentTime);
         const hiddenToday = isPopupHiddenToday(popup.id, currentTime);
         const dismissedThisSession = dismissedPopupIdsThisSession.includes(popup.id);
+        const popupLocationEnabled = popup.showAsPopup !== false;
+        const featuredLocationEnabled = popup.showAsFeatured !== false;
+        const popupVisible = status.canShow && popupLocationEnabled && !hiddenToday && !dismissedThisSession;
+        const featuredVisible = status.canShow && featuredLocationEnabled;
 
         return {
           ...popup,
           status,
           hiddenToday,
           dismissedThisSession,
-          finalVisible: status.canShow && !hiddenToday && !dismissedThisSession,
+          popupLocationEnabled,
+          featuredLocationEnabled,
+          popupVisible,
+          featuredVisible,
         };
       }),
     [currentTime, dismissedPopupIdsThisSession, joinPopupDocs]
   );
-  const eligiblePopups = useMemo(
-    () =>
-      popupStatuses.filter(
-        (popup) => popup.status.canShow && !popup.hiddenToday && !popup.dismissedThisSession
-      ),
+  const popupCandidates = useMemo(
+    () => popupStatuses.filter((popup) => popup.popupVisible),
     [popupStatuses]
   );
-  const activePopup = useMemo(
-    () => eligiblePopups.find((popup) => popup.finalVisible) || null,
-    [eligiblePopups]
+  const featuredProjects = useMemo(
+    () => popupStatuses.filter((popup) => popup.featuredVisible),
+    [popupStatuses]
   );
+  const activePopup = useMemo(() => popupCandidates[0] || null, [popupCandidates]);
+
+  useEffect(() => {
+    if (featuredProjects.length === 0) {
+      if (featuredIndex !== 0) setFeaturedIndex(0);
+      return;
+    }
+
+    if (featuredIndex >= featuredProjects.length) {
+      setFeaturedIndex(featuredProjects.length - 1);
+    }
+  }, [featuredIndex, featuredProjects.length]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
 
     console.log("JOIN_POPUPS_RAW", joinPopupDocs);
     console.log("JOIN_POPUPS_STATUS", popupStatuses);
+    console.log("JOIN_POPUP_CANDIDATES", popupCandidates);
+    console.log("JOIN_FEATURED_PROJECTS", featuredProjects);
     console.log("JOIN_ACTIVE_POPUP", activePopup);
-  }, [activePopup, joinPopupDocs, popupStatuses]);
+  }, [activePopup, featuredProjects, joinPopupDocs, popupCandidates, popupStatuses]);
 
   const handleTrackSelect = (routeTrack) => {
     if (routeTrack === "rental") {
@@ -788,7 +878,20 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   };
 
   const popupToShow = popupLoading ? null : activePopup;
-  const featuredPopup = activePopup;
+  const handleFeaturedPrev = () => {
+    if (featuredProjects.length < 2) return;
+    setFeaturedIndex((current) =>
+      (current - 1 + featuredProjects.length) % featuredProjects.length
+    );
+  };
+  const handleFeaturedNext = () => {
+    if (featuredProjects.length < 2) return;
+    setFeaturedIndex((current) => (current + 1) % featuredProjects.length);
+  };
+  const handleFeaturedJump = (index) => {
+    if (index < 0 || index >= featuredProjects.length) return;
+    setFeaturedIndex(index);
+  };
   const handlePopupClose = () => dismissPopupForSession(popupToShow);
   const handlePopupHideToday = () => hidePopupForToday(popupToShow);
   const handlePopupCta = () => {
@@ -796,9 +899,9 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
     dismissPopupForSession(popupToShow);
     handleTrackSelect(popupToShow.targetTrack);
   };
-  const handleFeaturedProjectCta = () => {
-    if (!featuredPopup) return;
-    handleTrackSelect(featuredPopup.targetTrack);
+  const handleFeaturedProjectCta = (popup) => {
+    if (!popup) return;
+    handleTrackSelect(popup.targetTrack);
   };
 
   useEffect(() => {
@@ -831,7 +934,14 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
       </div>
 
       <div className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
-        <FeaturedProjectCard popup={featuredPopup} onCta={handleFeaturedProjectCta} />
+        <FeaturedProjectSlider
+          items={featuredProjects}
+          activeIndex={featuredProjects.length === 0 ? 0 : featuredIndex}
+          onPrev={handleFeaturedPrev}
+          onNext={handleFeaturedNext}
+          onSelect={handleFeaturedProjectCta}
+          onJump={handleFeaturedJump}
+        />
       </div>
 
       <div className="mx-auto max-w-7xl px-5 pb-14 md:px-6 md:pb-20">

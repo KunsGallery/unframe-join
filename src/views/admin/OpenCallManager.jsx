@@ -24,6 +24,7 @@ import {
 import {
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
+  normalizeOpenCallFormSettings,
 } from "../../constants/openCall";
 
 const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
@@ -151,6 +152,11 @@ const getOpenCallFileSlug = (call) => {
   return String(raw).toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 };
 
+const getOpenCallDraftFormSettings = (draft, call) =>
+  normalizeOpenCallFormSettings(
+    draft?.formSettings || call?.formSettings || OPEN_CALL_FALLBACK.formSettings
+  );
+
 const OpenCallManager = ({ db, appId, applications }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +224,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             isVisible: call.isVisible !== false,
             isFeatured: !!call.isFeatured,
             descriptionSections: normalizeSections(call.descriptionSections),
+            formSettings: normalizeOpenCallFormSettings(call.formSettings),
             mediumText: call.mediumText || "",
             eligibilityText: call.eligibilityText || "",
             benefitText: call.benefitText || "",
@@ -258,6 +265,52 @@ const OpenCallManager = ({ db, appId, applications }) => {
       [callId]: {
         ...(prev[callId] || {}),
         [key]: value,
+      },
+    }));
+  };
+
+  const updateFormSettings = (callId, mutate) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const normalized = getOpenCallDraftFormSettings(current, current);
+      const nextFormSettings = mutate(normalized);
+
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          formSettings: normalizeOpenCallFormSettings(nextFormSettings),
+        },
+      };
+    });
+  };
+
+  const updateFormSettingsSection = (callId, sectionKey, key, value) => {
+    updateFormSettings(callId, (current) => ({
+      ...current,
+      sections: {
+        ...current.sections,
+        [sectionKey]: {
+          ...current.sections[sectionKey],
+          [key]: value,
+        },
+      },
+    }));
+  };
+
+  const updateFormSettingsField = (callId, fieldKey, key, value) => {
+    updateFormSettings(callId, (current) => ({
+      ...current,
+      fields: {
+        ...current.fields,
+        [fieldKey]: {
+          ...current.fields[fieldKey],
+          [key]: value,
+        },
       },
     }));
   };
@@ -380,6 +433,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
         title: section.title || "",
         body: section.body || "",
       })),
+      formSettings: normalizeOpenCallFormSettings(
+        draft.formSettings || call.formSettings || OPEN_CALL_FALLBACK.formSettings
+      ),
       id: call.id,
       trackType: "open-call",
       updatedAt: serverTimestamp(),
@@ -687,6 +743,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const applicantCount = getApplicantItems(applications, call.id).length;
             const isSelected = selectedOpenCallId === call.id;
             const statusMeta = STATUS_META[draft.status || call.status || "draft"];
+            const formSettings = getOpenCallDraftFormSettings(draft, call);
 
             return (
               <div
@@ -996,7 +1053,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:opacity-60"
                           >
                             <Save size={14} />
-                            {saveFeedbacks[call.id]?.state === "saving" ? "저장 중..." : "공고 저장"}
+                            {saveFeedbacks[call.id]?.state === "saving" ? "저장 중..." : "설정 저장"}
                           </button>
                         </div>
                       </div>
@@ -1015,6 +1072,327 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             {saveFeedbacks[call.id].message}
                           </p>
                         ) : null}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                            신청 입력양식 설정
+                          </p>
+                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                            JoinHome 오픈콜 폼에서 보이는 항목을 조정합니다. 저장 구조는
+                            유지되지만, 비활성 항목은 화면과 검증에서 제외됩니다.
+                          </p>
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#004aad]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
+                          formSettings
+                        </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                                지원자 정보
+                              </p>
+                              <p className="mt-1 text-sm font-bold text-zinc-700 break-keep">
+                                이름, 연락처, 이메일은 기본값으로 유지됩니다.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {[
+                              ["birthYear", "출생연도"],
+                              ["address", "주소"],
+                              ["medium", "매체"],
+                              ["snsLink", "SNS / 웹사이트"],
+                            ].map(([fieldKey, label]) => {
+                              const field = formSettings.fields[fieldKey];
+                              return (
+                                <label
+                                  key={fieldKey}
+                                  className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3"
+                                >
+                                  <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                                    {label}
+                                  </span>
+                                  <div className="mt-2 flex items-center justify-between gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateFormSettingsField(
+                                          call.id,
+                                          fieldKey,
+                                          "enabled",
+                                          !field.enabled
+                                        )
+                                      }
+                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                        field.enabled
+                                          ? "bg-[#004AAD] text-white"
+                                          : "border border-zinc-200 bg-white text-zinc-500"
+                                      }`}
+                                    >
+                                      {field.enabled ? "사용" : "미사용"}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateFormSettingsField(
+                                          call.id,
+                                          fieldKey,
+                                          "required",
+                                          !field.required
+                                        )
+                                      }
+                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                        field.required
+                                          ? "bg-[#AAD004] text-white"
+                                          : "border border-zinc-200 bg-white text-zinc-500"
+                                      }`}
+                                    >
+                                      {field.required ? "필수" : "선택"}
+                                    </button>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                            작품 / 소개 / 포트폴리오
+                          </p>
+
+                          <div className="mt-4 grid gap-3">
+                            <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-zinc-800">대표 작품</p>
+                                  <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                    최대 3개까지 노출하고, 필요한 개수만 필수로 설정합니다.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateFormSettingsSection(
+                                      call.id,
+                                      "works",
+                                      "enabled",
+                                      !formSettings.sections.works.enabled
+                                    )
+                                  }
+                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    formSettings.sections.works.enabled
+                                      ? "bg-[#004AAD] text-white"
+                                      : "border border-zinc-200 bg-white text-zinc-500"
+                                  }`}
+                                >
+                                  {formSettings.sections.works.enabled ? "사용" : "미사용"}
+                                </button>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <label className="rounded-[18px] border border-white bg-white px-3 py-3">
+                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                    requiredCount
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="3"
+                                    value={formSettings.sections.works.requiredCount}
+                                    onChange={(e) =>
+                                      updateFormSettingsSection(
+                                        call.id,
+                                        "works",
+                                        "requiredCount",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                  />
+                                </label>
+
+                                <label className="rounded-[18px] border border-white bg-white px-3 py-3">
+                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                    maxCount
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="3"
+                                    value={formSettings.sections.works.maxCount}
+                                    onChange={(e) =>
+                                      updateFormSettingsSection(
+                                        call.id,
+                                        "works",
+                                        "maxCount",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-zinc-800">작업 소개</p>
+                                  <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                    최대 글자 수를 조정할 수 있습니다.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateFormSettingsSection(
+                                      call.id,
+                                      "statement",
+                                      "enabled",
+                                      !formSettings.sections.statement.enabled
+                                    )
+                                  }
+                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    formSettings.sections.statement.enabled
+                                      ? "bg-[#004AAD] text-white"
+                                      : "border border-zinc-200 bg-white text-zinc-500"
+                                  }`}
+                                >
+                                  {formSettings.sections.statement.enabled ? "사용" : "미사용"}
+                                </button>
+                              </div>
+
+                              <label className="mt-4 block rounded-[18px] border border-white bg-white px-3 py-3">
+                                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                  maxLength
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="50"
+                                  value={formSettings.sections.statement.maxLength}
+                                  onChange={(e) =>
+                                    updateFormSettingsSection(
+                                      call.id,
+                                      "statement",
+                                      "maxLength",
+                                      e.target.value
+                                    )
+                                  }
+                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                />
+                              </label>
+                            </div>
+
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-bold text-zinc-800">포트폴리오</p>
+                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                      업로드 노출 여부와 필수 여부를 분리합니다.
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateFormSettingsSection(
+                                        call.id,
+                                        "portfolio",
+                                        "enabled",
+                                        !formSettings.sections.portfolio.enabled
+                                      )
+                                    }
+                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      formSettings.sections.portfolio.enabled
+                                        ? "bg-[#004AAD] text-white"
+                                        : "border border-zinc-200 bg-white text-zinc-500"
+                                    }`}
+                                  >
+                                    {formSettings.sections.portfolio.enabled ? "사용" : "미사용"}
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateFormSettingsSection(
+                                      call.id,
+                                      "portfolio",
+                                      "required",
+                                      !formSettings.sections.portfolio.required
+                                    )
+                                  }
+                                  className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    formSettings.sections.portfolio.required
+                                      ? "bg-[#AAD004] text-white"
+                                      : "border border-zinc-200 bg-white text-zinc-500"
+                                  }`}
+                                >
+                                  {formSettings.sections.portfolio.required ? "필수" : "선택"}
+                                </button>
+                              </div>
+
+                              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-bold text-zinc-800">개인정보 동의</p>
+                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                      동의 섹션 노출 여부와 필수 여부를 조정합니다.
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateFormSettingsSection(
+                                        call.id,
+                                        "privacy",
+                                        "enabled",
+                                        !formSettings.sections.privacy.enabled
+                                      )
+                                    }
+                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      formSettings.sections.privacy.enabled
+                                        ? "bg-[#004AAD] text-white"
+                                        : "border border-zinc-200 bg-white text-zinc-500"
+                                    }`}
+                                  >
+                                    {formSettings.sections.privacy.enabled ? "사용" : "미사용"}
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateFormSettingsSection(
+                                      call.id,
+                                      "privacy",
+                                      "required",
+                                      !formSettings.sections.privacy.required
+                                    )
+                                  }
+                                  className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    formSettings.sections.privacy.required
+                                      ? "bg-[#AAD004] text-white"
+                                      : "border border-zinc-200 bg-white text-zinc-500"
+                                  }`}
+                                >
+                                  {formSettings.sections.privacy.required ? "필수" : "선택"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 

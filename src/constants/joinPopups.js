@@ -208,6 +208,8 @@ export const normalizeJoinPopup = (popup = {}) => {
     dismissLabel: normalizeString(popup.dismissLabel || "닫기"),
     startAt: normalizeString(popup.startAt || ""),
     endAt: normalizeString(popup.endAt || ""),
+    showAsPopup: normalizeBoolean(popup.showAsPopup, true),
+    showAsFeatured: normalizeBoolean(popup.showAsFeatured, true),
   };
 };
 

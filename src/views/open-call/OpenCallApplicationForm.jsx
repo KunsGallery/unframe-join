@@ -29,6 +29,7 @@ import {
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
+  normalizeOpenCallFormSettings,
 } from "../../constants/openCall";
 import { OPEN_CALL_PRIVACY_TEXT } from "../../constants/openCallPrivacy";
 
@@ -63,25 +64,64 @@ const isBirthYear = (value) => /^\d{4}$/.test(String(value || "").trim());
 
 const trimValue = (value) => String(value || "").trim();
 
-const getFilledRequiredCount = (data) => {
+const isSectionEnabled = (section) => section?.enabled !== false;
+const isFieldEnabled = (field) => field?.enabled !== false;
+const isFieldRequired = (field) => field?.required !== false;
+
+const getRequiredChecks = (data, works, formSettings) => {
+  const sections = formSettings?.sections || {};
+  const fields = formSettings?.fields || {};
+  const worksSectionEnabled = isSectionEnabled(sections.works);
   const requiredChecks = [
     data.name.trim(),
     data.phone.trim(),
     data.email.trim(),
-    data.birthYear.trim(),
-    data.addressMain.trim(),
-    data.medium.trim(),
-    data.works[0].imageUrl.trim(),
-    data.works[0].title.trim(),
-    data.works[0].material.trim(),
-    data.works[0].size.trim(),
-    data.works[0].year.trim(),
-    data.artistStatement.trim(),
-    data.portfolioUrl.trim(),
-    data.privacyAgreed,
   ];
 
-  return requiredChecks.filter(Boolean).length;
+  if (isFieldEnabled(fields.birthYear) && isFieldRequired(fields.birthYear)) {
+    requiredChecks.push(data.birthYear.trim());
+  }
+
+  if (isFieldEnabled(fields.address) && isFieldRequired(fields.address)) {
+    requiredChecks.push(data.addressMain.trim());
+  }
+
+  if (isFieldEnabled(fields.medium) && isFieldRequired(fields.medium)) {
+    requiredChecks.push(data.medium.trim());
+  }
+
+  if (isFieldEnabled(fields.snsLink) && isFieldRequired(fields.snsLink)) {
+    requiredChecks.push(data.snsLink.trim());
+  }
+
+  const requiredWorkCount = worksSectionEnabled
+    ? Math.min(works.length, Math.max(0, Number(sections.works?.requiredCount || 0)))
+    : 0;
+
+  for (let index = 0; index < requiredWorkCount; index += 1) {
+    const work = works[index] || {};
+    requiredChecks.push(
+      work.imageUrl.trim(),
+      work.title.trim(),
+      work.material.trim(),
+      work.size.trim(),
+      work.year.trim()
+    );
+  }
+
+  if (isSectionEnabled(sections.statement)) {
+    requiredChecks.push(data.artistStatement.trim());
+  }
+
+  if (isSectionEnabled(sections.portfolio) && sections.portfolio?.required !== false) {
+    requiredChecks.push(data.portfolioUrl.trim());
+  }
+
+  if (isSectionEnabled(sections.privacy) && sections.privacy?.required !== false) {
+    requiredChecks.push(data.privacyAgreed);
+  }
+
+  return requiredChecks;
 };
 
 const getWorkLabel = (index) => `대표 작품 ${index + 1}`;
@@ -131,6 +171,10 @@ const OpenCallApplicationForm = ({
     () => createFallbackOpenCall(openCall || OPEN_CALL_FALLBACK),
     [openCall]
   );
+  const formSettings = useMemo(
+    () => normalizeOpenCallFormSettings(currentOpenCall.formSettings),
+    [currentOpenCall.formSettings]
+  );
   const openCallStatus = useMemo(
     () => getOpenCallDisplayStatus(currentOpenCall),
     [currentOpenCall]
@@ -155,14 +199,39 @@ const OpenCallApplicationForm = ({
   }, [initialProfileData]);
 
   const progress = useMemo(() => {
-    const done = getFilledRequiredCount(formData);
-    const total = 14;
+    const works = formData.works.map(normalizeWork);
+    const requiredChecks = getRequiredChecks(formData, works, formSettings);
+    const done = requiredChecks.filter(Boolean).length;
+    const total = requiredChecks.length;
     return {
       done,
       total,
-      percent: Math.round((done / total) * 100),
+      percent: total === 0 ? 100 : Math.round((done / total) * 100),
     };
-  }, [formData]);
+  }, [formData, formSettings]);
+
+  const worksSectionEnabled = isSectionEnabled(formSettings.sections.works);
+  const requiredWorkCount = worksSectionEnabled
+    ? Math.min(
+        formData.works.length,
+        Math.max(0, Number(formSettings.sections.works?.requiredCount || 0))
+      )
+    : 0;
+  const visibleWorkCount = worksSectionEnabled
+    ? Math.min(
+        formData.works.length,
+        Math.max(0, Number(formSettings.sections.works?.maxCount || 0))
+      )
+    : 0;
+  const visibleWorks = formData.works.slice(0, visibleWorkCount);
+  const showBirthYearField = isFieldEnabled(formSettings.fields.birthYear);
+  const showAddressField = isFieldEnabled(formSettings.fields.address);
+  const showMediumField = isFieldEnabled(formSettings.fields.medium);
+  const showSnsField = isFieldEnabled(formSettings.fields.snsLink);
+  const showStatementSection = isSectionEnabled(formSettings.sections.statement);
+  const statementMaxLength = Math.max(0, Number(formSettings.sections.statement?.maxLength || 0));
+  const showPortfolioSection = isSectionEnabled(formSettings.sections.portfolio);
+  const showPrivacySection = isSectionEnabled(formSettings.sections.privacy);
 
   const clearFieldError = (key) => {
     setFieldErrors((prev) => {
@@ -179,16 +248,14 @@ const OpenCallApplicationForm = ({
   };
 
   const setWorkField = (index, key, value) => {
-    if (index === 0) {
-      const errorKeys = {
-        title: "work1Title",
-        material: "work1Material",
-        size: "work1Size",
-        year: "work1Year",
-        imageUrl: "work1Image",
-      };
-      clearFieldError(errorKeys[key]);
-    }
+    const errorKeys = {
+      title: `work${index + 1}Title`,
+      material: `work${index + 1}Material`,
+      size: `work${index + 1}Size`,
+      year: `work${index + 1}Year`,
+      imageUrl: `work${index + 1}Image`,
+    };
+    clearFieldError(errorKeys[key]);
 
     setFormData((prev) => {
       const nextWorks = prev.works.map((work, workIndex) =>
@@ -206,9 +273,13 @@ const OpenCallApplicationForm = ({
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const getValidationErrors = (data, works) => {
+  const getValidationErrors = (data, works, settings) => {
     const nextErrors = {};
-    const firstWork = works?.[0] || {};
+    const sections = settings?.sections || {};
+    const fields = settings?.fields || {};
+    const requiredWorkCount = isSectionEnabled(sections.works)
+      ? Math.min(works.length, Math.max(0, Number(sections.works?.requiredCount || 0)))
+      : 0;
 
     if (!data.name?.trim()) nextErrors.name = "이름을 입력해 주세요.";
     if (!data.phone?.trim()) nextErrors.phone = "연락처를 입력해 주세요.";
@@ -219,24 +290,53 @@ const OpenCallApplicationForm = ({
     if (data.email?.trim() && !isEmail(data.email)) {
       nextErrors.email = "이메일 형식을 확인해 주세요.";
     }
-    if (!data.birthYear?.trim()) {
-      nextErrors.birthYear = "출생연도를 입력해 주세요.";
-    } else if (!isBirthYear(data.birthYear)) {
-      nextErrors.birthYear = "출생연도는 4자리 숫자로 입력해 주세요.";
+
+    if (isFieldEnabled(fields.birthYear) && isFieldRequired(fields.birthYear)) {
+      if (!data.birthYear?.trim()) {
+        nextErrors.birthYear = "출생연도를 입력해 주세요.";
+      } else if (!isBirthYear(data.birthYear)) {
+        nextErrors.birthYear = "출생연도는 4자리 숫자로 입력해 주세요.";
+      }
     }
-    if (!data.addressMain?.trim()) nextErrors.addressMain = "주소를 입력해 주세요.";
-    if (!data.medium?.trim()) nextErrors.medium = "매체를 입력해 주세요.";
-    if (!firstWork.imageUrl?.trim()) nextErrors.work1Image = "대표 작품 1 이미지를 업로드해 주세요.";
-    if (!firstWork.title?.trim()) nextErrors.work1Title = "대표 작품 1 제목을 입력해 주세요.";
-    if (!firstWork.material?.trim()) nextErrors.work1Material = "대표 작품 1 재료를 입력해 주세요.";
-    if (!firstWork.size?.trim()) nextErrors.work1Size = "대표 작품 1 크기를 입력해 주세요.";
-    if (!firstWork.year?.trim()) nextErrors.work1Year = "대표 작품 1 제작연도를 입력해 주세요.";
-    if (!data.artistStatement?.trim()) nextErrors.artistStatement = "작업 소개를 입력해 주세요.";
-    if ((data.artistStatement || "").trim().length > 500) {
-      nextErrors.artistStatement = "작업 소개는 500자 이내로 입력해 주세요.";
+
+    if (isFieldEnabled(fields.address) && isFieldRequired(fields.address)) {
+      if (!data.addressMain?.trim()) nextErrors.addressMain = "주소를 입력해 주세요.";
     }
-    if (!data.portfolioUrl?.trim()) nextErrors.portfolioUrl = "포트폴리오 PDF를 업로드해 주세요.";
-    if (!data.privacyAgreed) nextErrors.privacyAgreed = "개인정보 수집 및 이용에 동의해 주세요.";
+
+    if (isFieldEnabled(fields.medium) && isFieldRequired(fields.medium)) {
+      if (!data.medium?.trim()) nextErrors.medium = "매체를 입력해 주세요.";
+    }
+
+    if (isFieldEnabled(fields.snsLink) && isFieldRequired(fields.snsLink)) {
+      if (!data.snsLink?.trim()) nextErrors.snsLink = "SNS / 웹사이트 링크를 입력해 주세요.";
+    }
+
+    for (let index = 0; index < requiredWorkCount; index += 1) {
+      const work = works[index] || {};
+      const workLabel = `대표 작품 ${index + 1}`;
+      if (!work.imageUrl?.trim()) nextErrors[`work${index + 1}Image`] = `${workLabel} 이미지를 업로드해 주세요.`;
+      if (!work.title?.trim()) nextErrors[`work${index + 1}Title`] = `${workLabel} 제목을 입력해 주세요.`;
+      if (!work.material?.trim()) nextErrors[`work${index + 1}Material`] = `${workLabel} 재료를 입력해 주세요.`;
+      if (!work.size?.trim()) nextErrors[`work${index + 1}Size`] = `${workLabel} 크기를 입력해 주세요.`;
+      if (!work.year?.trim()) nextErrors[`work${index + 1}Year`] = `${workLabel} 제작연도를 입력해 주세요.`;
+    }
+
+    if (isSectionEnabled(sections.statement)) {
+      const maxLength = Math.max(0, Number(sections.statement?.maxLength || 0));
+      if (!data.artistStatement?.trim()) {
+        nextErrors.artistStatement = "작업 소개를 입력해 주세요.";
+      } else if (maxLength > 0 && (data.artistStatement || "").trim().length > maxLength) {
+        nextErrors.artistStatement = `작업 소개는 ${maxLength}자 이내로 입력해 주세요.`;
+      }
+    }
+
+    if (isSectionEnabled(sections.portfolio) && sections.portfolio?.required !== false) {
+      if (!data.portfolioUrl?.trim()) nextErrors.portfolioUrl = "포트폴리오 PDF를 업로드해 주세요.";
+    }
+
+    if (isSectionEnabled(sections.privacy) && sections.privacy?.required !== false) {
+      if (!data.privacyAgreed) nextErrors.privacyAgreed = "개인정보 수집 및 이용에 동의해 주세요.";
+    }
 
     return nextErrors;
   };
@@ -292,7 +392,7 @@ const OpenCallApplicationForm = ({
       const result = await uploadImageToImgbb(file);
       const uploadedUrl = result?.url || result?.publicUrl || "";
       console.log("WORK_IMAGE_UPLOADED", { index, url: uploadedUrl, result });
-      if (index === 0) clearFieldError("work1Image");
+      clearFieldError(`work${index + 1}Image`);
       setWorkField(index, "imageUrl", uploadedUrl);
     } catch (err) {
       setErrors((prev) => ({
@@ -352,7 +452,7 @@ const OpenCallApplicationForm = ({
     }
 
     const works = formData.works.map(normalizeWork);
-    const nextErrors = getValidationErrors(formData, works);
+    const nextErrors = getValidationErrors(formData, works, formSettings);
     setFieldErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -388,15 +488,31 @@ const OpenCallApplicationForm = ({
         name: trimValue(formData.name),
         phone: normalizePhone(formData.phone),
         email: trimValue(formData.email),
-        birthYear: trimValue(formData.birthYear),
-        addressMain: trimValue(formData.addressMain),
-        addressDetail: trimValue(formData.addressDetail),
-        medium: trimValue(formData.medium),
-        snsLink: trimValue(formData.snsLink),
-        artistStatement: trimValue(formData.artistStatement),
+        birthYear: isFieldEnabled(formSettings.fields.birthYear)
+          ? trimValue(formData.birthYear)
+          : "",
+        addressMain: isFieldEnabled(formSettings.fields.address)
+          ? trimValue(formData.addressMain)
+          : "",
+        addressDetail: isFieldEnabled(formSettings.fields.address)
+          ? trimValue(formData.addressDetail)
+          : "",
+        medium: isFieldEnabled(formSettings.fields.medium)
+          ? trimValue(formData.medium)
+          : "",
+        snsLink: isFieldEnabled(formSettings.fields.snsLink)
+          ? trimValue(formData.snsLink)
+          : "",
+        artistStatement: isSectionEnabled(formSettings.sections.statement)
+          ? trimValue(formData.artistStatement)
+          : "",
         works,
-        portfolioUrl: trimValue(formData.portfolioUrl),
-        privacyAgreed: true,
+        portfolioUrl: isSectionEnabled(formSettings.sections.portfolio)
+          ? trimValue(formData.portfolioUrl)
+          : "",
+        privacyAgreed: isSectionEnabled(formSettings.sections.privacy)
+          ? formData.privacyAgreed
+          : false,
         submittedAt: serverTimestamp(),
       });
 
@@ -410,9 +526,10 @@ const OpenCallApplicationForm = ({
   };
 
   const renderWorkCard = (work, index) => {
-    const isPrimary = index === 0;
+    const isRequiredWork = index < requiredWorkCount;
     const fileKey = `work-${index}-image`;
     const loading = !!uploadingMap[fileKey];
+    const workNumber = index + 1;
 
     return (
       <div
@@ -425,7 +542,7 @@ const OpenCallApplicationForm = ({
               {getWorkLabel(index)}
             </p>
             <h3 className="text-lg font-black text-zinc-900 break-keep">
-              {isPrimary ? "필수" : "선택"}
+              {isRequiredWork ? "필수" : "선택"}
             </h3>
           </div>
 
@@ -433,7 +550,7 @@ const OpenCallApplicationForm = ({
             type="button"
             onClick={() => workImageRefs[index].current?.click()}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
-              isPrimary
+              isRequiredWork
                 ? "bg-[#004AAD] text-white"
                 : "border border-zinc-200 bg-zinc-50 text-zinc-600"
             }`}
@@ -461,57 +578,65 @@ const OpenCallApplicationForm = ({
           </div>
         ) : (
           <div className="mt-4 rounded-[22px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm font-bold text-zinc-400">
-            {isPrimary ? "대표 작품 1 이미지를 업로드해 주세요." : "이미지 업로드 후 선택 정보를 입력해 주세요."}
+            {isRequiredWork
+              ? `${getWorkLabel(index)} 이미지를 업로드해 주세요.`
+              : "이미지 업로드 후 선택 정보를 입력해 주세요."}
           </div>
         )}
 
-        <FieldError
-          message={index === 0 ? errors[fileKey] || fieldErrors.work1Image : errors[fileKey]}
-        />
+        <FieldError message={errors[fileKey] || fieldErrors[`work${workNumber}Image`]} />
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div>
             <InputBlock
               label={`${getWorkLabel(index)} 제목`}
-              required={isPrimary}
+              required={isRequiredWork}
               value={work.title}
               onChange={(e) => setWorkField(index, "title", e.target.value)}
               placeholder="작품명을 입력해 주세요"
             />
-            {index === 0 ? <FieldError message={fieldErrors.work1Title} /> : null}
+            {fieldErrors[`work${workNumber}Title`] ? (
+              <FieldError message={fieldErrors[`work${workNumber}Title`]} />
+            ) : null}
           </div>
 
           <div>
             <InputBlock
               label={`${getWorkLabel(index)} 재료`}
-              required={isPrimary}
+              required={isRequiredWork}
               value={work.material}
               onChange={(e) => setWorkField(index, "material", e.target.value)}
               placeholder="예: 캔버스에 아크릴"
             />
-            {index === 0 ? <FieldError message={fieldErrors.work1Material} /> : null}
+            {fieldErrors[`work${workNumber}Material`] ? (
+              <FieldError message={fieldErrors[`work${workNumber}Material`]} />
+            ) : null}
           </div>
 
           <div>
             <InputBlock
               label={`${getWorkLabel(index)} 크기`}
-              required={isPrimary}
+              required={isRequiredWork}
               value={work.size}
               onChange={(e) => setWorkField(index, "size", e.target.value)}
               placeholder="예: 91 x 116 cm"
             />
-            {index === 0 ? <FieldError message={fieldErrors.work1Size} /> : null}
+            {fieldErrors[`work${workNumber}Size`] ? (
+              <FieldError message={fieldErrors[`work${workNumber}Size`]} />
+            ) : null}
           </div>
 
           <div>
             <InputBlock
               label={`${getWorkLabel(index)} 제작연도`}
-              required={isPrimary}
+              required={isRequiredWork}
               value={work.year}
               onChange={(e) => setWorkField(index, "year", e.target.value)}
               placeholder="예: 2026"
             />
-            {index === 0 ? <FieldError message={fieldErrors.work1Year} /> : null}
+            {fieldErrors[`work${workNumber}Year`] ? (
+              <FieldError message={fieldErrors[`work${workNumber}Year`]} />
+            ) : null}
           </div>
         </div>
       </div>
@@ -659,162 +784,188 @@ const OpenCallApplicationForm = ({
                 <FieldError message={fieldErrors.email} />
               </div>
 
-              <div>
-                <InputBlock
-                  label="출생연도"
-                  required
-                  value={formData.birthYear}
-                  onChange={(e) => setField("birthYear", e.target.value)}
-                  placeholder="예: 1994"
-                />
-                <FieldError message={fieldErrors.birthYear} />
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <div>
-                <InputBlock
-                  label="주소"
-                  required
-                  value={formData.addressMain}
-                  onChange={(e) => setField("addressMain", e.target.value)}
-                  placeholder="기본 주소를 입력해 주세요"
-                />
-                <FieldError message={fieldErrors.addressMain} />
-              </div>
-
-              <div>
-                <InputBlock
-                  label="상세주소"
-                  value={formData.addressDetail}
-                  onChange={(e) => setField("addressDetail", e.target.value)}
-                  placeholder="동, 호수 등 상세 주소"
-                />
-              </div>
-
-              <div>
-                <InputBlock
-                  label="매체"
-                  required
-                  value={formData.medium}
-                  onChange={(e) => setField("medium", e.target.value)}
-                  placeholder="예: 회화 / 설치 / 사진"
-                />
-                <FieldError message={fieldErrors.medium} />
-              </div>
-
-              <div>
-                <InputBlock
-                  label="SNS 또는 웹사이트 링크"
-                  value={formData.snsLink}
-                  onChange={(e) => setField("snsLink", e.target.value)}
-                  placeholder="@instagram / https://"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            <div className="flex items-center gap-3">
-              <Palette size={18} className="text-[#004AAD]" />
-              <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                대표 작품
-              </h2>
-            </div>
-
-            {formData.works.map((work, index) => renderWorkCard(work, index))}
-          </div>
-
-          <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
-            <div className="mb-5 flex items-center gap-3">
-              <FileText size={18} className="text-[#004AAD]" />
-              <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                작업 소개
-              </h2>
-              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                500자 이내
-              </span>
-            </div>
-
-            <textarea
-              value={formData.artistStatement}
-              onChange={(e) => setField("artistStatement", e.target.value)}
-              placeholder="작업 소개를 500자 이내로 작성해 주세요."
-              rows={8}
-              maxLength={500}
-              className="w-full rounded-[24px] border border-zinc-100 bg-zinc-50 px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
-            />
-            <div className="mt-3 flex items-center justify-between gap-4 text-[11px] font-black">
-              <span className="text-zinc-400">
-                현재 {formData.artistStatement.length} / 500자
-              </span>
-              <span
-                className={`${
-                  formData.artistStatement.length > 500 ? "text-red-500" : "text-[#004AAD]"
-                }`}
-              >
-                500자 이내
-              </span>
-            </div>
-            <FieldError message={fieldErrors.artistStatement} />
-          </div>
-
-          <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
-            <div className="mb-5 flex items-center gap-3">
-              <ImageIcon size={18} className="text-[#004AAD]" />
-              <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                포트폴리오
-              </h2>
-            </div>
-
-            <input
-              ref={portfolioRef}
-              type="file"
-              accept=".pdf,application/pdf"
-              className="hidden"
-              onChange={handlePortfolioUpload}
-            />
-
-            <div className="rounded-[24px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 md:px-5 md:py-6">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {showBirthYearField ? (
                 <div>
-                  <p className="text-sm font-black text-zinc-900 break-keep">
-                    포트폴리오 PDF 업로드
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-zinc-500 break-keep">
-                    PDF 형식으로 업로드해 주세요. 기존 R2 업로드를 재사용합니다.
-                  </p>
+                  <InputBlock
+                    label="출생연도"
+                    required={isFieldRequired(formSettings.fields.birthYear)}
+                    value={formData.birthYear}
+                    onChange={(e) => setField("birthYear", e.target.value)}
+                    placeholder="예: 1994"
+                  />
+                  <FieldError message={fieldErrors.birthYear} />
+                </div>
+              ) : null}
+            </div>
+
+            {showAddressField || showMediumField || showSnsField ? (
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                {showAddressField ? (
+                  <>
+                    <div>
+                      <InputBlock
+                        label="주소"
+                        required={isFieldRequired(formSettings.fields.address)}
+                        value={formData.addressMain}
+                        onChange={(e) => setField("addressMain", e.target.value)}
+                        placeholder="기본 주소를 입력해 주세요"
+                      />
+                      <FieldError message={fieldErrors.addressMain} />
+                    </div>
+
+                    <div>
+                      <InputBlock
+                        label="상세주소"
+                        value={formData.addressDetail}
+                        onChange={(e) => setField("addressDetail", e.target.value)}
+                        placeholder="동, 호수 등 상세 주소"
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                {showMediumField ? (
+                  <div>
+                    <InputBlock
+                      label="매체"
+                      required={isFieldRequired(formSettings.fields.medium)}
+                      value={formData.medium}
+                      onChange={(e) => setField("medium", e.target.value)}
+                      placeholder="예: 회화 / 설치 / 사진"
+                    />
+                    <FieldError message={fieldErrors.medium} />
+                  </div>
+                ) : null}
+
+                {showSnsField ? (
+                  <div>
+                    <InputBlock
+                      label="SNS 또는 웹사이트 링크"
+                      required={isFieldRequired(formSettings.fields.snsLink)}
+                      value={formData.snsLink}
+                      onChange={(e) => setField("snsLink", e.target.value)}
+                      placeholder="@instagram / https://"
+                    />
+                    <FieldError message={fieldErrors.snsLink} />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {worksSectionEnabled ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <Palette size={18} className="text-[#004AAD]" />
+                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                  대표 작품
+                </h2>
+              </div>
+
+              {visibleWorks.map((work, index) => renderWorkCard(work, index))}
+            </div>
+          ) : null}
+
+          {showStatementSection ? (
+            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+              <div className="mb-5 flex items-center gap-3">
+                <FileText size={18} className="text-[#004AAD]" />
+                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                  작업 소개
+                </h2>
+                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                  {statementMaxLength || 0}자 이내
+                </span>
+              </div>
+
+              <textarea
+                value={formData.artistStatement}
+                onChange={(e) => setField("artistStatement", e.target.value)}
+                placeholder={`작업 소개를 ${statementMaxLength || 0}자 이내로 작성해 주세요.`}
+                rows={8}
+                maxLength={statementMaxLength || undefined}
+                className="w-full rounded-[24px] border border-zinc-100 bg-zinc-50 px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
+              />
+              <div className="mt-3 flex items-center justify-between gap-4 text-[11px] font-black">
+                <span className="text-zinc-400">
+                  현재 {formData.artistStatement.length} / {statementMaxLength || 0}자
+                </span>
+                <span
+                  className={`${
+                    statementMaxLength > 0 && formData.artistStatement.length > statementMaxLength
+                      ? "text-red-500"
+                      : "text-[#004AAD]"
+                  }`}
+                >
+                  {statementMaxLength || 0}자 이내
+                </span>
+              </div>
+              <FieldError message={fieldErrors.artistStatement} />
+            </div>
+          ) : null}
+
+          {showPortfolioSection ? (
+            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+              <div className="mb-5 flex items-center gap-3">
+                <ImageIcon size={18} className="text-[#004AAD]" />
+                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                  포트폴리오
+                </h2>
+              </div>
+
+              <input
+                ref={portfolioRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={handlePortfolioUpload}
+              />
+
+              <div className="rounded-[24px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 md:px-5 md:py-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-black text-zinc-900 break-keep">
+                      포트폴리오 PDF 업로드
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-zinc-500 break-keep">
+                      PDF 형식으로 업로드해 주세요. 기존 R2 업로드를 재사용합니다.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => portfolioRef.current?.click()}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-all hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+                  >
+                    {uploadingMap.portfolioUrl ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Upload size={14} />
+                    )}
+                    {formData.portfolioUrl ? "업로드 변경" : "업로드"}
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => portfolioRef.current?.click()}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-all hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-                >
-                  {uploadingMap.portfolioUrl ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                  {formData.portfolioUrl ? "업로드 변경" : "업로드"}
-                </button>
+                {formData.portfolioUrl ? (
+                  <a
+                    href={formData.portfolioUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#004AAD]"
+                  >
+                    <FileText size={13} />
+                    업로드된 포트폴리오 보기
+                  </a>
+                ) : (
+                  <p className="mt-4 text-xs font-black text-zinc-400">
+                    업로드된 파일이 아직 없습니다.
+                  </p>
+                )}
+
+                <FieldError message={errors.portfolioUrl || fieldErrors.portfolioUrl} />
               </div>
-
-              {formData.portfolioUrl ? (
-                <a
-                  href={formData.portfolioUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#004AAD]"
-                >
-                  <FileText size={13} />
-                  업로드된 포트폴리오 보기
-                </a>
-              ) : (
-                <p className="mt-4 text-xs font-black text-zinc-400">
-                  업로드된 파일이 아직 없습니다.
-                </p>
-              )}
-
-              <FieldError message={errors.portfolioUrl || fieldErrors.portfolioUrl} />
             </div>
-          </div>
+          ) : null}
 
           {Object.keys(fieldErrors).length > 0 ? (
             <div
@@ -837,44 +988,46 @@ const OpenCallApplicationForm = ({
             </div>
           ) : null}
 
-          <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
-            <div className="mb-4 flex items-center gap-3">
-              <AlertCircle size={18} className="text-[#004AAD]" />
-              <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                개인정보 수집 및 이용 동의
-              </h2>
-            </div>
-
-            <label className="flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4">
-              <input
-                type="checkbox"
-                checked={formData.privacyAgreed}
-                onChange={(e) => setField("privacyAgreed", e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
-              />
-              <span className="text-sm font-bold text-zinc-700 break-keep">
-                개인정보 수집 및 이용에 동의합니다.
-              </span>
-            </label>
-            <FieldError message={fieldErrors.privacyAgreed} />
-
-            <button
-              type="button"
-              onClick={() => setShowPrivacy((prev) => !prev)}
-              className="mt-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-            >
-              {showPrivacy ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-              자세히 보기
-            </button>
-
-            {showPrivacy && (
-              <div className="mt-4 max-h-72 overflow-y-auto rounded-[24px] border border-zinc-100 bg-zinc-50 p-4">
-                <pre className="whitespace-pre-wrap break-keep text-[12px] font-medium leading-6 text-zinc-600">
-                  {OPEN_CALL_PRIVACY_TEXT}
-                </pre>
+          {showPrivacySection ? (
+            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+              <div className="mb-4 flex items-center gap-3">
+                <AlertCircle size={18} className="text-[#004AAD]" />
+                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                  개인정보 수집 및 이용 동의
+                </h2>
               </div>
-            )}
-          </div>
+
+              <label className="flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4">
+                <input
+                  type="checkbox"
+                  checked={formData.privacyAgreed}
+                  onChange={(e) => setField("privacyAgreed", e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
+                />
+                <span className="text-sm font-bold text-zinc-700 break-keep">
+                  개인정보 수집 및 이용에 동의합니다.
+                </span>
+              </label>
+              <FieldError message={fieldErrors.privacyAgreed} />
+
+              <button
+                type="button"
+                onClick={() => setShowPrivacy((prev) => !prev)}
+                className="mt-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+              >
+                {showPrivacy ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                자세히 보기
+              </button>
+
+              {showPrivacy && (
+                <div className="mt-4 max-h-72 overflow-y-auto rounded-[24px] border border-zinc-100 bg-zinc-50 p-4">
+                  <pre className="whitespace-pre-wrap break-keep text-[12px] font-medium leading-6 text-zinc-600">
+                    {OPEN_CALL_PRIVACY_TEXT}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-7 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
