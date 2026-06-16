@@ -5,16 +5,20 @@ import {
   CircleDot,
   Loader2,
   Megaphone,
+  Minus,
+  Plus,
   Sparkles,
   Telescope,
 } from "lucide-react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { appId, db } from "../../lib/firebase";
 import {
+  DEFAULT_OPEN_CALL_FAQS,
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
   parseOpenCallDate,
+  normalizeOpenCallFaqs,
 } from "../../constants/openCall";
 
 const Section = ({ index, title, children, accent = false }) => (
@@ -102,6 +106,7 @@ const STATUS_DISABLED_BUTTON_TEXTS = {
 const OpenCallLanding = ({ onBack, onApply }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openFaqIndex, setOpenFaqIndex] = useState(null);
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", "openCalls");
@@ -145,6 +150,24 @@ const OpenCallLanding = ({ onBack, onApply }) => {
     ? openCall.descriptionSections
     : OPEN_CALL_FALLBACK.descriptionSections
   ).filter((section) => section?.title?.trim() || section?.body?.trim());
+  const faqs = useMemo(() => {
+    const source = Array.isArray(openCall?.faqs) ? openCall.faqs : DEFAULT_OPEN_CALL_FAQS;
+    return normalizeOpenCallFaqs(source)
+      .filter((faq) => faq?.isVisible !== false)
+      .filter((faq) => faq?.question?.trim() && faq?.answer?.trim())
+      .sort((a, b) => (a.order || 999) - (b.order || 999));
+  }, [openCall?.faqs]);
+
+  useEffect(() => {
+    if (openFaqIndex == null) return;
+    if (faqs.length === 0) {
+      setOpenFaqIndex(null);
+      return;
+    }
+    if (openFaqIndex >= faqs.length) {
+      setOpenFaqIndex(null);
+    }
+  }, [faqs.length, openFaqIndex]);
 
   const dateEntries = [
     ["접수 시작", openCall.applicationStartAt],
@@ -161,7 +184,11 @@ const OpenCallLanding = ({ onBack, onApply }) => {
       ? "공고 준비 중입니다."
       : displayStatus.key === "archived"
       ? "아카이브된 공고입니다."
-      : "";
+    : "";
+
+  const toggleFaq = (index) => {
+    setOpenFaqIndex((current) => (current === index ? null : index));
+  };
 
   return (
     <section className="relative overflow-hidden py-4 md:py-8">
@@ -308,6 +335,63 @@ const OpenCallLanding = ({ onBack, onApply }) => {
             </Section>
           ))}
         </div>
+
+        {faqs.length > 0 ? (
+          <div className="mt-6 md:mt-8 rounded-[32px] border border-zinc-950/10 bg-white/70 px-5 py-6 md:px-7 md:py-7 shadow-[0_20px_60px_rgba(0,0,0,0.05)]">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+                  Q&amp;A
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-950 md:text-3xl">
+                  자주 묻는 질문
+                </h2>
+              </div>
+              <p className="text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                공고마다 자주 묻는 내용을 먼저 확인할 수 있도록 정리했습니다.
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {faqs.map((faq, index) => {
+                const isOpen = openFaqIndex === index;
+                return (
+                  <div
+                    key={`${faq.question}-${faq.order || index}`}
+                    className="overflow-hidden rounded-[28px] border border-zinc-950/10 bg-white/90"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleFaq(index)}
+                      aria-expanded={isOpen}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-[#004AAD]/4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#004AAD]/30"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
+                          FAQ {String(index + 1).padStart(2, "0")}
+                        </p>
+                        <p className="mt-2 text-base font-black leading-relaxed text-zinc-950 break-keep md:text-lg">
+                          {faq.question}
+                        </p>
+                      </div>
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-950/10 bg-[#F6F4EE] text-zinc-950">
+                        {isOpen ? <Minus size={16} /> : <Plus size={16} />}
+                      </span>
+                    </button>
+
+                    {isOpen ? (
+                      <div className="border-t border-zinc-950/10 px-5 py-4">
+                        <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                          {faq.answer}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-6 md:mt-8 rounded-[32px] border border-[#004AAD]/15 bg-[#004AAD]/5 px-5 py-6 md:px-7 md:py-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

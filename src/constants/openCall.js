@@ -61,9 +61,47 @@ export const DEFAULT_OPEN_CALL_FORM_FIELDS = {
   },
 };
 
+export const DEFAULT_OPEN_CALL_FAQS = [
+  {
+    question: "지원 가능한 작품 분야에 제한이 있나요?",
+    answer:
+      "회화, 드로잉, 사진, 오브제, 조각, 설치, 공예, 영상 등 매체와 장르는 제한하지 않습니다.",
+    isVisible: true,
+    order: 1,
+  },
+  {
+    question: "미완성 작업도 지원할 수 있나요?",
+    answer:
+      "이번 오픈콜은 전시 또는 온라인 공개가 가능한 독립적인 완성작을 대상으로 합니다. 미완성 아이디어나 과정 기록만으로는 지원이 어렵습니다.",
+    isVisible: true,
+    order: 2,
+  },
+  {
+    question: "포트폴리오는 꼭 제출해야 하나요?",
+    answer:
+      "기본적으로 PDF 포트폴리오 제출을 권장합니다. 단, 관리자 입력양식 설정에서 포트폴리오 필수 여부가 변경될 수 있습니다.",
+    isVisible: true,
+    order: 3,
+  },
+  {
+    question: "선정 이후에는 어떤 방식으로 소개되나요?",
+    answer:
+      "1차 선정 일부 작업은 UNFRAME 공식 홈페이지 온라인 쇼케이스에 공개될 수 있으며, 좋은 반응을 얻은 창작자는 U# 매거진 비대면 인터뷰 대상으로 검토될 수 있습니다.",
+    isVisible: true,
+    order: 4,
+  },
+];
+
 const cloneFormSection = (section = {}, fallback = {}) => ({
   ...fallback,
   ...section,
+});
+
+const cloneFaq = (faq = {}, fallbackOrder = 999) => ({
+  question: typeof faq?.question === "string" ? faq.question : "",
+  answer: typeof faq?.answer === "string" ? faq.answer : "",
+  isVisible: typeof faq?.isVisible === "boolean" ? faq.isVisible : true,
+  order: Number.isFinite(Number(faq?.order)) ? Number(faq.order) : fallbackOrder,
 });
 
 const toBoolean = (value, fallback = false) =>
@@ -146,6 +184,14 @@ export const normalizeOpenCallFormSettings = (formSettings = {}) => {
   };
 };
 
+export const normalizeOpenCallFaqs = (faqs = DEFAULT_OPEN_CALL_FAQS) => {
+  if (!Array.isArray(faqs)) {
+    return DEFAULT_OPEN_CALL_FAQS.map((faq, index) => cloneFaq(faq, index + 1));
+  }
+
+  return faqs.map((faq, index) => cloneFaq(faq, index + 1));
+};
+
 export const OPEN_CALL_FALLBACK = {
   id: OPEN_CALL_ID,
   trackType: "open-call",
@@ -199,6 +245,7 @@ export const OPEN_CALL_FALLBACK = {
   isFeatured: true,
   isVisible: true,
   formSettings: normalizeOpenCallFormSettings(),
+  faqs: DEFAULT_OPEN_CALL_FAQS,
 };
 
 export const parseOpenCallDate = (value) => {
@@ -246,6 +293,11 @@ export const createFallbackOpenCall = (overrides = {}) => ({
   descriptionSections: Array.isArray(overrides.descriptionSections)
     ? overrides.descriptionSections
     : OPEN_CALL_FALLBACK.descriptionSections,
+  faqs: normalizeOpenCallFaqs(
+    Object.prototype.hasOwnProperty.call(overrides, "faqs")
+      ? overrides.faqs
+      : OPEN_CALL_FALLBACK.faqs
+  ),
   formSettings: normalizeOpenCallFormSettings(
     overrides.formSettings || OPEN_CALL_FALLBACK.formSettings
   ),

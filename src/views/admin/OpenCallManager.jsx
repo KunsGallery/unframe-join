@@ -25,6 +25,7 @@ import {
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
   normalizeOpenCallFormSettings,
+  normalizeOpenCallFaqs,
 } from "../../constants/openCall";
 
 const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
@@ -157,6 +158,37 @@ const getOpenCallDraftFormSettings = (draft, call) =>
     draft?.formSettings || call?.formSettings || OPEN_CALL_FALLBACK.formSettings
   );
 
+const createEmptyFaq = (order = 1) => ({
+  question: "",
+  answer: "",
+  isVisible: true,
+  order,
+});
+
+const normalizeFaqDrafts = (faqs) => {
+  const list = Array.isArray(faqs) ? faqs : [];
+  if (list.length === 0) {
+    return [createEmptyFaq(1)];
+  }
+
+  return normalizeOpenCallFaqs(list).map((faq, index) => ({
+    question: faq.question || "",
+    answer: faq.answer || "",
+    isVisible: faq.isVisible !== false,
+    order: faq.order ?? index + 1,
+  }));
+};
+
+const normalizeFaqPayload = (faqs) =>
+  normalizeOpenCallFaqs(Array.isArray(faqs) ? faqs : [])
+    .map((faq, index) => ({
+      question: (faq.question || "").trim(),
+      answer: (faq.answer || "").trim(),
+      isVisible: faq.isVisible !== false,
+      order: Number.isFinite(Number(faq.order)) ? Number(faq.order) : index + 1,
+    }))
+    .filter((faq) => faq.question || faq.answer);
+
 const OpenCallManager = ({ db, appId, applications }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -230,6 +262,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             benefitText: call.benefitText || "",
             magazineText: call.magazineText || "",
             applyButtonText: call.applyButtonText || "",
+            faqs: normalizeFaqDrafts(call.faqs),
             applicationStartAt: toDatetimeLocalValue(call.applicationStartAt),
             applicationEndAt: toDatetimeLocalValue(call.applicationEndAt),
             announcementAt: toDatetimeLocalValue(call.announcementAt),
@@ -376,6 +409,62 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
   };
 
+  const updateFaqItem = (callId, index, key, value) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const faqs = normalizeFaqDrafts(current.faqs);
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          faqs: faqs.map((faq, faqIndex) =>
+            faqIndex === index ? { ...faq, [key]: value } : faq
+          ),
+        },
+      };
+    });
+  };
+
+  const addFaqItem = (callId) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const faqs = normalizeFaqDrafts(current.faqs);
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          faqs: [...faqs, createEmptyFaq(faqs.length + 1)],
+        },
+      };
+    });
+  };
+
+  const removeFaqItem = (callId, index) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const faqs = normalizeFaqDrafts(current.faqs).filter((_, faqIndex) => faqIndex !== index);
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          faqs: faqs.length > 0 ? faqs : [createEmptyFaq(1)],
+        },
+      };
+    });
+  };
+
   const handleSeedDefault = async () => {
     const fallback = createFallbackOpenCall();
     const existing = sortedCalls.find((call) => call.id === fallback.id);
@@ -433,6 +522,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
         title: section.title || "",
         body: section.body || "",
       })),
+      faqs: normalizeFaqPayload(draft.faqs),
       formSettings: normalizeOpenCallFormSettings(
         draft.formSettings || call.formSettings || OPEN_CALL_FALLBACK.formSettings
       ),
@@ -744,6 +834,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const isSelected = selectedOpenCallId === call.id;
             const statusMeta = STATUS_META[draft.status || call.status || "draft"];
             const formSettings = getOpenCallDraftFormSettings(draft, call);
+            const faqItems = normalizeFaqDrafts(draft.faqs);
 
             return (
               <div
@@ -1393,6 +1484,110 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             </div>
                           </div>
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
+                            Q&amp;A 설정
+                          </p>
+                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                            오픈콜별로 자주 묻는 질문과 답변을 편집합니다. 질문과 답변이 모두
+                            비어 있는 항목은 저장되지 않습니다.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addFaqItem(call.id)}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]"
+                        >
+                          <Plus size={14} />
+                          Q&amp;A 추가
+                        </button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {faqItems.map((faq, index) => (
+                          <div
+                            key={`${call.id}-faq-${index}`}
+                            className="rounded-[24px] border border-white bg-white p-4 shadow-sm"
+                          >
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between gap-3">
+                                  <label className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                    question
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateFaqItem(call.id, index, "isVisible", !faq.isVisible)
+                                    }
+                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      faq.isVisible
+                                        ? "bg-[#004AAD] text-white"
+                                        : "border border-zinc-200 bg-white text-zinc-500"
+                                    }`}
+                                  >
+                                    {faq.isVisible ? "노출" : "숨김"}
+                                  </button>
+                                </div>
+                                <input
+                                  value={faq.question || ""}
+                                  onChange={(e) =>
+                                    updateFaqItem(call.id, index, "question", e.target.value)
+                                  }
+                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                  placeholder="질문을 입력해 주세요"
+                                />
+                              </div>
+
+                              <div className="grid gap-3 sm:grid-cols-[120px_auto] lg:min-w-[18rem] lg:max-w-[18rem]">
+                                <label className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                    order
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={faq.order ?? index + 1}
+                                    onChange={(e) =>
+                                      updateFaqItem(call.id, index, "order", e.target.value)
+                                    }
+                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                  />
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => removeFaqItem(call.id, index)}
+                                  className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-red-600"
+                                >
+                                  <Trash2 size={14} />
+                                  삭제
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-4">
+                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                answer
+                              </label>
+                              <textarea
+                                rows={4}
+                                value={faq.answer || ""}
+                                onChange={(e) =>
+                                  updateFaqItem(call.id, index, "answer", e.target.value)
+                                }
+                                placeholder="답변을 입력해 주세요"
+                                className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
