@@ -12,8 +12,10 @@ import {
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, deleteDoc } from "firebase/firestore";
 import {
   JOIN_POPUP_COLLECTION,
-  getJoinPopupWindowStatus,
+  JOIN_POPUP_DISMISS_PREFIX,
+  getPopupVisibilityStatus,
   parseJoinPopupDate,
+  isPopupDismissed,
   sortJoinPopups,
 } from "../../constants/joinPopups";
 
@@ -298,7 +300,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
 
   const clearPopupDismissHistory = () => {
     const keysToRemove = Object.keys(window.localStorage).filter((key) =>
-      key.includes("unframe-join-popup")
+      key.includes(JOIN_POPUP_DISMISS_PREFIX)
     );
     keysToRemove.forEach((key) => window.localStorage.removeItem(key));
     setManagerNotice("이 브라우저의 팝업 닫힘 기록을 초기화했습니다.");
@@ -365,7 +367,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
       subtitle: normalizeText(draft.subtitle, popup.subtitle || ""),
       body: normalizeText(draft.body, popup.body || ""),
       posterImageUrl: normalizeText(draft.posterImageUrl, popup.posterImageUrl || ""),
-      enabled: draft.enabled !== false,
+      enabled: (draft.enabled ?? popup.enabled) === true,
       priority: normalizeNumber(draft.priority, popup.priority ?? 999),
       targetTrack: ["rental", "open-call", "salon", "collaboration"].includes(draft.targetTrack)
         ? draft.targetTrack
@@ -497,11 +499,16 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
           {sortedPopups.map((popup) => {
             const draft = drafts[popup.id] || {};
             const feedback = saveFeedbacks[popup.id];
-            const effectivePopup = { ...popup, ...draft, id: popup.id };
-            const visibilityStatus = getJoinPopupWindowStatus(effectivePopup, currentTime);
+            const effectivePopup = {
+              ...popup,
+              ...draft,
+              id: popup.id,
+              enabled: draft.enabled ?? popup.enabled,
+            };
+            const visibilityStatus = getPopupVisibilityStatus(effectivePopup, currentTime);
+            const isDismissed = isPopupDismissed(effectivePopup.id);
             const hasPoster = Boolean(effectivePopup.posterImageUrl?.trim());
-            const canShowOnJoinHome =
-              effectivePopup.enabled !== false && visibilityStatus.withinRange;
+            const finalVisible = visibilityStatus.canShow && !isDismissed;
 
             return (
               <div
@@ -566,12 +573,12 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                           </p>
                           <span
                             className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                              canShowOnJoinHome
+                              visibilityStatus.canShow
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                 : "border-red-200 bg-red-50 text-red-700"
                             }`}
                           >
-                            현재 JoinHome 노출 가능: {canShowOnJoinHome ? "YES" : "NO"}
+                            현재 JoinHome 노출 가능: {visibilityStatus.canShow ? "YES" : "NO"}
                           </span>
                         </div>
 
@@ -585,7 +592,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                           <div className="flex items-start justify-between gap-4">
                             <span className="text-zinc-400">enabled</span>
                             <span className="text-right text-zinc-900">
-                              {effectivePopup.enabled !== false ? "true" : "false"}
+                              {effectivePopup.enabled === true ? "true" : "false"}
                             </span>
                           </div>
                           <div className="flex items-start justify-between gap-4">
@@ -618,11 +625,26 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                               {hasPoster ? "있음" : "없음"}
                             </span>
                           </div>
-                          {visibilityStatus.hasDateFormatIssue ? (
-                            <p className="pt-1 text-[11px] font-black uppercase tracking-[0.14em] text-amber-700">
-                              날짜 형식 확인 필요
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">이 브라우저 닫힘 기록</span>
+                            <span className="text-right text-zinc-900">
+                              {isDismissed ? "YES" : "NO"}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-4">
+                            <span className="text-zinc-400">최종 표시 여부</span>
+                            <span className="text-right text-zinc-900">
+                              {finalVisible ? "YES" : "NO"}
+                            </span>
+                          </div>
+                          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white px-3 py-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-400">
+                              사유
                             </p>
-                          ) : null}
+                            <p className="mt-1 text-[11px] font-bold leading-relaxed text-zinc-700 break-keep">
+                              {visibilityStatus.reason}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>

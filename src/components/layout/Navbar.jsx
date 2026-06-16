@@ -19,13 +19,37 @@ const Navbar = ({
     </div>
 
     <div className="flex items-center gap-2 md:gap-4">
-      {isAdmin && (
+      {user && !user.isAnonymous && (
         <button
-          onClick={() => setViewMode(viewMode === "admin" ? "user" : "admin")}
-          className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.12em] md:tracking-widest bg-black text-white px-3 md:px-4 py-2 rounded-full hover:bg-[#004aad] transition-all shadow-lg whitespace-nowrap"
+          type="button"
+          onClick={() => {
+            if (!isAdmin) {
+              window.alert(
+                `관리자 권한이 없습니다.\n현재 로그인 이메일: ${user?.email || "없음"}\nAdmin 판별: NO`
+              );
+              return;
+            }
+
+            setViewMode(viewMode === "admin" ? "user" : "admin");
+          }}
+          className={`text-[8px] md:text-[9px] font-black uppercase tracking-[0.12em] md:tracking-widest px-3 md:px-4 py-2 rounded-full transition-all shadow-lg whitespace-nowrap ${
+            isAdmin
+              ? "bg-black text-white hover:bg-[#004aad]"
+              : "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+          }`}
         >
-          {viewMode === "admin" ? "Exit Admin" : "Admin Console"}
+          {isAdmin
+            ? viewMode === "admin"
+              ? "Exit Admin"
+              : "Admin Console"
+            : "관리자 확인"}
         </button>
+      )}
+
+      {user && !user.isAnonymous && (
+        <span className="max-w-[13rem] truncate rounded-full border border-zinc-200 bg-white/80 px-3 py-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-500 shadow-sm backdrop-blur-sm md:max-w-[18rem]">
+          로그인: {user.email || "-"} · Admin: {isAdmin ? "YES" : "NO"}
+        </span>
       )}
 
       {user && !user.isAnonymous && (

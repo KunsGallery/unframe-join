@@ -17,7 +17,9 @@ import {
 } from "../../constants/joinTracks";
 import {
   JOIN_POPUP_COLLECTION,
-  isJoinPopupWithinRange,
+  JOIN_POPUP_DISMISS_PREFIX,
+  getPopupVisibilityStatus,
+  isPopupDismissed,
   sortJoinPopups,
 } from "../../constants/joinPopups";
 
@@ -29,7 +31,6 @@ const TRACK_ICON_MAP = {
 };
 
 const TRACK_ALERT_MESSAGE = "준비 중입니다.";
-const JOIN_POPUP_DISMISS_PREFIX = "unframe-join-popup-dismissed-";
 
 const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(0, 74, 173, ${alpha})`;
@@ -410,28 +411,37 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
   );
   const primaryTracks = visibleTracks.slice(0, 4);
   const auxiliaryTracks = visibleTracks.slice(4);
-  const eligiblePopups = useMemo(
+  const popupStatuses = useMemo(
     () =>
-      sortJoinPopups(joinPopupDocs).filter(
-        (popup) => popup.enabled !== false && isJoinPopupWithinRange(popup, currentTime)
-      ),
+      sortJoinPopups(joinPopupDocs).map((popup) => {
+        const status = getPopupVisibilityStatus(popup, currentTime);
+        const dismissed = isPopupDismissed(popup.id);
+
+        return {
+          ...popup,
+          status,
+          dismissed,
+          finalVisible: status.canShow && !dismissed,
+        };
+      }),
     [currentTime, joinPopupDocs]
+  );
+  const eligiblePopups = useMemo(
+    () => popupStatuses.filter((popup) => popup.status.canShow),
+    [popupStatuses]
   );
   const activePopup = useMemo(() => {
     if (popupBlockedForVisit) return null;
 
-    return (
-      eligiblePopups.find(
-        (popup) => !window.localStorage.getItem(`${JOIN_POPUP_DISMISS_PREFIX}${popup.id}`)
-      ) || null
-    );
+    return eligiblePopups.find((popup) => !popup.dismissed) || null;
   }, [eligiblePopups, popupBlockedForVisit]);
 
+  // Debug-only logs for popup visibility investigation.
   useEffect(() => {
     console.log("JOIN_POPUPS_RAW", joinPopupDocs);
-    console.log("JOIN_POPUPS_ELIGIBLE", eligiblePopups);
+    console.log("JOIN_POPUPS_STATUS", popupStatuses);
     console.log("JOIN_ACTIVE_POPUP", activePopup);
-  }, [activePopup, eligiblePopups, joinPopupDocs]);
+  }, [activePopup, joinPopupDocs, popupStatuses]);
 
   const handleTrackSelect = (routeTrack) => {
     if (routeTrack === "rental") {

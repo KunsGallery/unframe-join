@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { collection, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
 
-import { isEmailAdmin } from "./constants/admin";
+import { isAdminEmail } from "./constants/admin";
 import { auth, db, googleProvider, appId } from "./lib/firebase";
 import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ParticleBackground from "./components/ui/ParticleBackground";
@@ -126,7 +126,7 @@ const App = () => {
         }
       } else {
         setUser(u);
-        setIsAdmin(isEmailAdmin(u.email));
+        setIsAdmin(isAdminEmail(u.email));
         setLoading(false);
       }
     });

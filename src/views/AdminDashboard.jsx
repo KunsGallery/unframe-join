@@ -40,7 +40,7 @@ import EmailTestPanel from "./EmailTestPanel";
 import OpenCallManager from "./admin/OpenCallManager";
 import JoinTrackManager from "./admin/JoinTrackManager";
 import JoinPopupManager from "./admin/JoinPopupManager";
-import { isEmailAdmin } from "../constants/admin";
+import { isAdminEmail } from "../constants/admin";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
 
@@ -325,7 +325,7 @@ const AdminAuthDebug = ({ user, isAdmin }) => {
             관리자 이메일 목록 포함
           </p>
           <p className="mt-2 text-sm font-bold text-zinc-900">
-            {isEmailAdmin(user?.email) ? "YES" : "NO"}
+            {isAdminEmail(user?.email) ? "YES" : "NO"}
           </p>
         </div>
       </div>

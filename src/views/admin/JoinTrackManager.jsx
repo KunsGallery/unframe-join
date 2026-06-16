@@ -227,7 +227,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       accentColor: normalizeText(draft.accentColor, track.accentColor || "#004AAD"),
       backgroundImageUrl: normalizeText(draft.backgroundImageUrl, track.backgroundImageUrl || ""),
       order: normalizeOrderValue(draft.order, track.order || 0),
-      enabled: draft.enabled !== false,
+      enabled: (draft.enabled ?? track.enabled) === true,
       routeTrack: track.routeTrack || track.id,
       trackType: "join-track",
       updatedAt: serverTimestamp(),
