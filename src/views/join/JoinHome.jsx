@@ -64,11 +64,26 @@ const getEntryLabel = (routeTrack) => {
   return "ENTRY";
 };
 
-const getCtaLabel = (routeTrack) => {
+const getDefaultCtaLabel = (routeTrack) => {
   if (routeTrack === "rental") return "신청 시작하기";
   if (routeTrack === "open-call") return "공개모집 보기";
   return "준비 중";
 };
+
+const getTrackShortLabel = (track) =>
+  track?.shortLabel?.trim() || getEntryLabel(track?.routeTrack);
+
+const getTrackStatusLabel = (track) =>
+  track?.statusLabel?.trim() ||
+  track?.badgeText?.trim() ||
+  (track?.routeTrack === "rental"
+    ? "신청하기"
+    : track?.routeTrack === "open-call"
+    ? "공모보기"
+    : "PREPARING");
+
+const getTrackCtaLabel = (track) =>
+  track?.ctaLabel?.trim() || getDefaultCtaLabel(track?.routeTrack);
 
 const getPanelBasis = (track, hoveredTrackId, trackCount) => {
   if (trackCount <= 1 || !hoveredTrackId) {
@@ -93,7 +108,6 @@ const getTrackTone = (track) => {
     badgeClass: brightImage || darkAccent
       ? "border-zinc-950/10 bg-white/72 text-zinc-900"
       : "border-white/12 bg-white/70 text-zinc-900",
-    ctaClass: "border-zinc-950/10 bg-white/85 text-zinc-950",
     accentClass: brightImage ? "text-white" : "text-zinc-950",
   };
 };
@@ -158,13 +172,13 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
-            {String(track.order || 0).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
+            {String(track.order || 0).padStart(2, "0")} / {getTrackShortLabel(track)}
           </div>
 
           <div
             className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md ${tone.badgeClass}`}
           >
-            {track.badgeText || "OPEN"}
+            {getTrackStatusLabel(track)}
           </div>
         </div>
 
@@ -176,9 +190,6 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
             <div>
               <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${tone.metaClass}`}>
                 {track.eyebrow || "UNFRAME JOIN"}
-              </p>
-              <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500/90">
-                {track.routeTrack}
               </p>
             </div>
           </div>
@@ -192,7 +203,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
           </h2>
 
           <p
-            className={`mt-4 max-w-[30rem] text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${tone.descriptionClass} ${
+            className={`mt-4 max-w-[30rem] whitespace-pre-line text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${tone.descriptionClass} ${
               isHovered ? "opacity-100" : "opacity-92"
             }`}
           >
@@ -200,29 +211,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
           </p>
 
           <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 shadow-[0_12px_30px_rgba(0,0,0,0.08)] backdrop-blur-sm transition-transform duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
-            <span>{getCtaLabel(track.routeTrack)}</span>
-            <ArrowRight size={14} />
-          </div>
-        </div>
-
-        <div className="flex items-end justify-between gap-4">
-          <div className="max-w-[18rem]">
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-zinc-500/90">
-              {isHovered ? "ENTER" : "SELECT ENTRY POINT"}
-            </p>
-            <p className="mt-2 text-xs font-medium leading-relaxed text-zinc-700/85 break-keep">
-              {isHovered
-                ? "Hover active track for entry actions and extended copy."
-                : "Hover to expand the panel and reveal the full route."}
-            </p>
-          </div>
-
-          <div
-            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-              isHovered ? tone.ctaClass : "border-zinc-950/10 bg-white/80 text-zinc-950"
-            }`}
-          >
-            <span>{getCtaLabel(track.routeTrack)}</span>
+            <span>{getTrackCtaLabel(track)}</span>
             <ArrowRight size={14} />
           </div>
         </div>
@@ -280,10 +269,10 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
                 <h2 className="mt-5 max-w-3xl text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.8rem] lg:text-[3.4rem]">
                   {popup.title || "현재 대표 공지"}
                 </h2>
-                <p className="mt-4 max-w-2xl text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                <p className="mt-4 max-w-2xl whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
                   {popup.subtitle || "활성화된 공지와 프로젝트를 이 영역에서 함께 보여줍니다."}
                 </p>
-                <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                <p className="mt-5 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
                   {popup.body || ""}
                 </p>
               </>
@@ -292,10 +281,10 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
                 <h2 className="mt-5 max-w-3xl text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.8rem] lg:text-[3.4rem]">
                   현재 대표 공지가 없습니다.
                 </h2>
-                <p className="mt-4 max-w-2xl text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+                <p className="mt-4 max-w-2xl whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
                   관리자에서 joinPopups를 활성화하면 이 영역이 대표 프로젝트 카드로 채워집니다.
                 </p>
-                <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+                <p className="mt-5 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
                   UNFRAME JOIN의 현재 입구와 공지를 한눈에 보여주는 자리입니다.
                 </p>
               </>
@@ -354,7 +343,7 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
               <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/80">
                 UNFRAME JOIN
               </p>
-              <p className="mt-2 text-sm font-bold leading-relaxed text-white/90 break-keep">
+              <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-white/90 break-keep">
                 포스터가 없어도 대표 공지의 분위기를 유지할 수 있도록 그래픽 대체 화면을 보여줍니다.
               </p>
             </div>
@@ -454,7 +443,7 @@ const BrandHero = () => (
         연결되지 않습니다.
       </h1>
 
-      <p className="mt-5 max-w-2xl text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
+      <p className="mt-5 max-w-2xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
         공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다. 각 트랙은
         열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
       </p>
@@ -462,7 +451,7 @@ const BrandHero = () => (
       <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
         <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
           <CircleDot size={11} />
-          SELECT YOUR ENTRY POINT
+          입구 선택
         </span>
         <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
           Live Tracks
@@ -489,14 +478,14 @@ const BrandHero = () => (
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-[24px] border border-white/80 bg-white p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Entry</p>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+          <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
             신청 트랙은 살아 있고, 필요한 입구만 선택하면 됩니다.
           </p>
         </div>
 
         <div className="rounded-[24px] border border-white/80 bg-white p-4">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Notice</p>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+          <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
             현재 노출 중인 공지와 대표 프로젝트는 아래 영역에서 이어집니다.
           </p>
         </div>
@@ -568,10 +557,10 @@ const EntryPanel = ({
               <div className="relative z-30 flex min-h-[16rem] flex-col justify-between p-5 text-white">
                 <div className="flex items-start justify-between gap-3">
                   <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
-                    {String(index + 1).padStart(2, "0")} / {getEntryLabel(track.routeTrack)}
+                    {String(index + 1).padStart(2, "0")} / {getTrackShortLabel(track)}
                   </div>
                   <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
-                    {track.badgeText || "OPEN"}
+                    {getTrackStatusLabel(track)}
                   </div>
                 </div>
 
@@ -582,11 +571,11 @@ const EntryPanel = ({
                   <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
                     {track.title}
                   </h3>
-                  <p className="mt-3 text-sm font-medium leading-relaxed text-white/82 break-keep">
+                  <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-white/82 break-keep">
                     {track.description}
                   </p>
                   <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
-                    {getCtaLabel(track.routeTrack)}
+                    {getTrackCtaLabel(track)}
                     <ArrowRight size={14} />
                   </div>
                 </div>
@@ -678,10 +667,10 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
               <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
                 {popup.title || "공지"}
               </h2>
-              <p className="mt-4 text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+              <p className="mt-4 whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
                 {popup.subtitle || ""}
               </p>
-              <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+              <p className="mt-5 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
                 {popup.body || ""}
               </p>
 
@@ -959,10 +948,10 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
       <footer className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
         <div className="flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
           <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
-            SELECT YOUR ENTRY POINT — UNFRAME JOIN SYSTEM
+            활성 트랙 {DEFAULT_JOIN_TRACKS.length}개
           </p>
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
-            BASE STRUCTURE {DEFAULT_JOIN_TRACKS.length} TRACKS
+            관리자 설정에 따라 입구가 달라집니다
           </p>
         </div>
       </footer>

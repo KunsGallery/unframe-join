@@ -35,7 +35,7 @@ const Section = ({ index, title, children, accent = false }) => (
         {title}
       </h3>
     </div>
-    <div className="text-sm font-medium leading-relaxed text-zinc-600 break-keep whitespace-pre-wrap md:text-base">
+    <div className="text-sm font-medium leading-relaxed text-zinc-600 break-keep whitespace-pre-line md:text-base">
       {children}
     </div>
   </div>
@@ -241,11 +241,11 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                 {textOrFallback(openCall.heroAccent, "잔상")}
               </h1>
 
-              <p className="mt-4 text-lg font-black text-[#004AAD] break-keep md:text-xl">
+              <p className="mt-4 whitespace-pre-line text-lg font-black text-[#004AAD] break-keep md:text-xl">
                 {textOrFallback(openCall.subtitle, OPEN_CALL_FALLBACK.subtitle)}
               </p>
 
-              <p className="mt-5 max-w-3xl text-base font-medium leading-relaxed text-zinc-600 break-keep md:text-lg">
+              <p className="mt-5 max-w-3xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-600 break-keep md:text-lg">
                 {textOrFallback(openCall.introText, OPEN_CALL_FALLBACK.introText)}
               </p>
 
@@ -284,7 +284,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                     지원 대상
                   </p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-700 break-keep whitespace-pre-wrap">
+                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
                     {textOrFallback(
                       openCall.eligibilityText,
                       OPEN_CALL_FALLBACK.eligibilityText
@@ -296,7 +296,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                     선정 이후
                   </p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-700 break-keep whitespace-pre-wrap">
+                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
                     {textOrFallback(openCall.benefitText, OPEN_CALL_FALLBACK.benefitText)}
                   </p>
                 </div>
@@ -305,7 +305,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                     U# 매거진
                   </p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-700 break-keep whitespace-pre-wrap">
+                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
                     {textOrFallback(openCall.magazineText, OPEN_CALL_FALLBACK.magazineText)}
                   </p>
                 </div>

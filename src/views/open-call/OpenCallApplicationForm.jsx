@@ -792,7 +792,7 @@ const OpenCallApplicationForm = ({
           <h1 className="text-2xl md:text-4xl font-black tracking-tight text-zinc-900 break-keep">
             {currentOpenCall.title || OPEN_CALL_TITLE}
           </h1>
-          <p className="mt-3 text-sm md:text-base font-medium leading-relaxed text-zinc-600 break-keep">
+          <p className="mt-3 whitespace-pre-line text-sm md:text-base font-medium leading-relaxed text-zinc-600 break-keep">
             {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
           </p>
           {!canSubmitOpenCall ? (
@@ -1144,7 +1144,7 @@ const OpenCallApplicationForm = ({
 
               {showPrivacy && (
                 <div className="mt-4 max-h-72 overflow-y-auto rounded-[24px] border border-zinc-100 bg-zinc-50 p-4">
-                  <pre className="whitespace-pre-wrap break-keep text-[12px] font-medium leading-6 text-zinc-600">
+                  <pre className="whitespace-pre-line break-keep text-[12px] font-medium leading-6 text-zinc-600">
                     {OPEN_CALL_PRIVACY_TEXT}
                   </pre>
                 </div>

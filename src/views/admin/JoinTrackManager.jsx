@@ -137,6 +137,9 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
             title: track.title || "",
             eyebrow: track.eyebrow || "",
             description: track.description || "",
+            ctaLabel: track.ctaLabel || "",
+            statusLabel: track.statusLabel || track.badgeText || "",
+            shortLabel: track.shortLabel || "",
             badgeText: track.badgeText || "",
             accentColor: track.accentColor || "#004AAD",
             backgroundImageUrl: track.backgroundImageUrl || "",
@@ -223,9 +226,21 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       title: normalizeText(draft.title, track.title || ""),
       eyebrow: normalizeText(draft.eyebrow, track.eyebrow || ""),
       description: normalizeText(draft.description, track.description || ""),
-      badgeText: normalizeText(draft.badgeText, track.badgeText || ""),
+      ctaLabel: normalizeText(draft.ctaLabel, track.ctaLabel || ""),
+      statusLabel: normalizeText(
+        draft.statusLabel,
+        track.statusLabel || track.badgeText || ""
+      ),
+      shortLabel: normalizeText(draft.shortLabel, track.shortLabel || ""),
+      badgeText: normalizeText(
+        draft.statusLabel || draft.badgeText,
+        track.badgeText || track.statusLabel || ""
+      ),
       accentColor: normalizeText(draft.accentColor, track.accentColor || "#004AAD"),
-      backgroundImageUrl: normalizeText(draft.backgroundImageUrl, track.backgroundImageUrl || ""),
+      backgroundImageUrl: normalizeText(
+        draft.backgroundImageUrl,
+        track.backgroundImageUrl || ""
+      ),
       order: normalizeOrderValue(draft.order, track.order || 0),
       enabled: (draft.enabled ?? track.enabled) === true,
       routeTrack: track.routeTrack || track.id,
@@ -335,44 +350,52 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
               >
                 <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[0.95fr_1.05fr]">
                   <div className="space-y-4">
-                    <div
-                      className="relative overflow-hidden rounded-[28px] border border-white/70 p-5"
-                      style={previewStyle}
-                    >
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,12,16,0.06),rgba(12,12,16,0.72))]" />
-                      <div className="relative flex min-h-[18rem] flex-col justify-between">
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                            {track.routeTrack || track.id}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                            {draft.enabled ?? track.enabled ? (
-                              <>
-                                <Eye size={12} />
-                                visible
-                              </>
-                            ) : (
-                              <>
-                                <EyeOff size={12} />
-                                hidden
-                              </>
-                            )}
-                          </span>
-                        </div>
+                            <div
+                              className="relative overflow-hidden rounded-[28px] border border-white/70 p-5"
+                              style={previewStyle}
+                            >
+                              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,12,16,0.06),rgba(12,12,16,0.72))]" />
+                              <div className="relative flex min-h-[18rem] flex-col justify-between">
+                                <div className="flex items-start justify-between gap-3">
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
+                                    {draft.shortLabel || track.shortLabel || track.routeTrack || track.id}
+                                  </span>
+                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
+                                    {draft.enabled ?? track.enabled ? (
+                                      <>
+                                        <Eye size={12} />
+                                        visible
+                                      </>
+                                    ) : (
+                                      <>
+                                        <EyeOff size={12} />
+                                        hidden
+                                      </>
+                                    )}
+                                  </span>
+                                </div>
 
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70">
-                            {draft.eyebrow || track.eyebrow || "UNFRAME"}
-                          </p>
-                          <h4 className="mt-3 text-3xl font-black tracking-tighter text-white break-keep">
-                            {draft.title || track.title}
-                          </h4>
-                          <p className="mt-3 max-w-md text-sm font-medium leading-relaxed text-white/80 break-keep">
-                            {draft.description || track.description}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                                <div>
+                                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70">
+                                    {draft.eyebrow || track.eyebrow || "UNFRAME"}
+                                  </p>
+                                  <h4 className="mt-3 text-3xl font-black tracking-tighter text-white break-keep">
+                                    {draft.title || track.title}
+                                  </h4>
+                                  <p className="mt-3 max-w-md whitespace-pre-line text-sm font-medium leading-relaxed text-white/80 break-keep">
+                                    {draft.description || track.description}
+                                  </p>
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
+                                      {draft.statusLabel || draft.badgeText || track.statusLabel || track.badgeText || "OPEN"}
+                                    </span>
+                                    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
+                                      {draft.ctaLabel || track.ctaLabel || "신청 시작하기"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
@@ -428,11 +451,33 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
 
                       <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
                         <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          badgeText
+                          shortLabel
                         </span>
                         <input
-                          value={draft.badgeText || ""}
-                          onChange={(e) => updateDraft(track.id, "badgeText", e.target.value)}
+                          value={draft.shortLabel || ""}
+                          onChange={(e) => updateDraft(track.id, "shortLabel", e.target.value)}
+                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                        />
+                      </label>
+
+                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          statusLabel
+                        </span>
+                        <input
+                          value={draft.statusLabel || ""}
+                          onChange={(e) => updateDraft(track.id, "statusLabel", e.target.value)}
+                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                        />
+                      </label>
+
+                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          ctaLabel
+                        </span>
+                        <input
+                          value={draft.ctaLabel || ""}
+                          onChange={(e) => updateDraft(track.id, "ctaLabel", e.target.value)}
                           className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                         />
                       </label>
@@ -458,6 +503,9 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                           onChange={(e) => updateDraft(track.id, "description", e.target.value)}
                           className="w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                         />
+                        <p className="mt-2 text-[11px] font-semibold leading-relaxed text-zinc-400 break-keep">
+                          줄바꿈은 실제 JoinHome 화면에 반영됩니다.
+                        </p>
                       </label>
 
                       <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
@@ -525,6 +573,18 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                         </p>
                         <p className="mt-2 text-sm font-black text-zinc-900 break-all">
                           {track.routeTrack || track.id}
+                        </p>
+                      </div>
+                      <div className="rounded-[22px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          preview labels
+                        </p>
+                        <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                          {draft.shortLabel || track.shortLabel || track.routeTrack || track.id}
+                          {"\n"}
+                          {draft.statusLabel || draft.badgeText || track.statusLabel || track.badgeText || "OPEN"}
+                          {"\n"}
+                          {draft.ctaLabel || track.ctaLabel || "신청 시작하기"}
                         </p>
                       </div>
 

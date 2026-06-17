@@ -154,10 +154,10 @@ const JoinPopupPreviewModal = ({ popup, onClose }) => {
               <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
                 {popup.title || "공지"}
               </h2>
-              <p className="mt-4 text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
+              <p className="mt-4 whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
                 {popup.subtitle || ""}
               </p>
-              <p className="mt-5 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
+              <p className="mt-5 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
                 {popup.body || ""}
               </p>
 
@@ -560,7 +560,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                             <h4 className="mt-3 text-3xl font-black tracking-tighter text-zinc-950 break-keep">
                               {draft.title || popup.title || "팝업 제목"}
                             </h4>
-                            <p className="mt-3 max-w-md text-sm font-medium leading-relaxed text-zinc-700/90 break-keep">
+                            <p className="mt-3 max-w-md whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700/90 break-keep">
                               {draft.subtitle || popup.subtitle || "팝업 서브타이틀"}
                             </p>
                           </div>
