@@ -796,6 +796,50 @@ const OpenCallManager = ({ db, appId, applications }) => {
     return "저장 중 오류가 발생했습니다.";
   };
 
+  const getSaveFeedbackClassName = (state) => {
+    if (state === "error") return "text-red-600";
+    if (state === "saved") return "text-emerald-600";
+    return "text-zinc-500";
+  };
+
+  const SaveSettingsButton = ({ call, className = "" }) => {
+    const feedback = saveFeedbacks[call.id];
+
+    return (
+      <button
+        type="button"
+        onClick={() => handleSave(call)}
+        disabled={feedback?.state === "saving"}
+        className={`inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+      >
+        <Save size={14} />
+        {feedback?.state === "saving" ? "저장 중..." : "설정 저장"}
+      </button>
+    );
+  };
+
+  const SaveStatusRow = ({ call, sticky = false, className = "" }) => {
+    const feedback = saveFeedbacks[call.id];
+    return (
+      <div
+        className={`flex flex-col gap-3 md:flex-row md:items-center md:justify-between ${
+          sticky
+            ? "sticky bottom-4 z-20 mt-8 rounded-[24px] border border-zinc-950/10 bg-white/90 p-3 shadow-xl backdrop-blur"
+            : "mt-6 border-t border-zinc-950/10 pt-4"
+        } ${className}`}
+      >
+        <p
+          className={`text-xs font-bold break-keep whitespace-pre-wrap ${getSaveFeedbackClassName(
+            feedback?.state
+          )}`}
+        >
+          {feedback?.message || "오픈콜 설정을 수정한 뒤에는 반드시 저장해 주세요."}
+        </p>
+        <SaveSettingsButton call={call} className="w-full md:w-auto" />
+      </div>
+    );
+  };
+
   const updateApplicationDoc = async (appIdToUpdate, data) => {
     await updateDoc(
       doc(db, "artifacts", appId, "public", "data", "applications", appIdToUpdate),
@@ -1599,6 +1643,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
+                    <SaveStatusRow call={call} />
+
                     <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -1919,6 +1965,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         </div>
                       </div>
                     </div>
+
+                    <SaveStatusRow call={call} />
 
                     <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2313,6 +2361,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
+                    <SaveStatusRow call={call} />
+
                     <div className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2">
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -2417,6 +2467,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
+                    <SaveStatusRow call={call} />
+
                     <div className="rounded-[28px] border border-zinc-100 bg-white p-4 xl:col-span-2">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
@@ -2496,6 +2548,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
                   </div>
                 </div>
+
+                <SaveStatusRow call={call} sticky />
 
                 {isSelected ? (
                   <div className="border-t border-zinc-200 bg-white p-5 md:p-6">
