@@ -23,6 +23,7 @@ import SuccessView from "./views/SuccessView";
 import JoinHome from "./views/join/JoinHome";
 import OpenCallLanding from "./views/open-call/OpenCallLanding";
 import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
+import SalonLanding from "./views/salon/SalonLanding";
 import { createFallbackOpenCall } from "./constants/openCall";
 
 const EMPTY_FORM_DATA = {
@@ -61,32 +62,41 @@ const EMPTY_PROFILE_DATA = {
   snsLink: "",
 };
 
+const getSelectedTrackFromPathname = (pathname) => {
+  if (pathname === "/opencall") return "open-call";
+  if (pathname === "/salon") return "salon";
+  return null;
+};
+
+const getPathnameForSelectedTrack = (selectedTrack) => {
+  if (selectedTrack === "open-call") return "/opencall";
+  if (selectedTrack === "salon") return "/salon";
+  return "/";
+};
+
 const getUrlState = () => {
   const params = new URLSearchParams(window.location.search);
   return {
+    selectedTrack: getSelectedTrackFromPathname(window.location.pathname),
     view: params.get("view") || "user",
     app: params.get("app") || "",
   };
 };
 
-const setUrlState = ({ view = "user", app = "" }) => {
-  const params = new URLSearchParams(window.location.search);
+const buildUrl = ({ selectedTrack, view = "user", app = "" }) => {
+  const pathname = getPathnameForSelectedTrack(selectedTrack);
+  const params = new URLSearchParams();
 
   if (view && view !== "user") {
     params.set("view", view);
-  } else {
-    params.delete("view");
   }
 
   if (app) {
     params.set("app", app);
-  } else {
-    params.delete("app");
   }
 
   const query = params.toString();
-  const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
-  window.history.pushState({}, "", nextUrl);
+  return query ? `${pathname}?${query}` : pathname;
 };
 
 const App = () => {
@@ -94,9 +104,9 @@ const App = () => {
 
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [selectedTrack, setSelectedTrack] = useState(initialUrlState.selectedTrack);
   const [viewMode, setViewMode] = useState(initialUrlState.view);
   const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
-  const [selectedTrack, setSelectedTrack] = useState(null);
   const [openCallMode, setOpenCallMode] = useState("landing");
   const [selectedOpenCall, setSelectedOpenCall] = useState(null);
   const [currentStep, setCurrentStep] = useState(1);
@@ -144,6 +154,7 @@ const App = () => {
   useEffect(() => {
     const handlePopState = () => {
       const next = getUrlState();
+      setSelectedTrack(next.selectedTrack);
       setViewMode(next.view);
       setFocusedApplicationId(next.app);
     };
@@ -151,6 +162,19 @@ const App = () => {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    const nextUrl = buildUrl({
+      selectedTrack,
+      view: viewMode,
+      app: focusedApplicationId,
+    });
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      window.history.pushState({}, "", nextUrl);
+    }
+  }, [focusedApplicationId, selectedTrack, viewMode]);
 
   useEffect(() => {
     if (!user || user.isAnonymous) {
@@ -235,22 +259,6 @@ const App = () => {
     };
   }, [user, isAdmin, viewMode]);
 
-  useEffect(() => {
-    if (viewMode === "user") {
-      setUrlState({ view: "user", app: "" });
-      return;
-    }
-
-    if (viewMode === "my-page") {
-      setUrlState({ view: "my-page", app: focusedApplicationId });
-      return;
-    }
-
-    if (viewMode === "admin") {
-      setUrlState({ view: "admin", app: "" });
-    }
-  }, [viewMode, focusedApplicationId]);
-
   const handleStepTransition = (step) => {
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -271,6 +279,20 @@ const App = () => {
 
   const handleSelectOpenCallTrack = () => {
     setSelectedTrack("open-call");
+    setOpenCallMode("landing");
+    setSelectedOpenCall(null);
+    setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
+    setSelectedDate(null);
+    setSelectedProgram(null);
+    setPartnerType("");
+    setCurrentStep(1);
+    setFormData(EMPTY_FORM_DATA);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSelectSalonTrack = () => {
+    setSelectedTrack("salon");
     setOpenCallMode("landing");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
@@ -319,7 +341,6 @@ const App = () => {
     setFormData(EMPTY_FORM_DATA);
     setFocusedApplicationId("");
     setViewMode("user");
-    setUrlState({ view: "user", app: "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -400,6 +421,7 @@ const App = () => {
               <JoinHome
                 onSelectRental={() => handleSelectRentalTrack()}
                 onSelectOpenCall={() => handleSelectOpenCallTrack()}
+                onSelectSalon={() => handleSelectSalonTrack()}
               />
             ) : selectedTrack === "open-call" ? (
               openCallMode === "landing" ? (
@@ -426,6 +448,8 @@ const App = () => {
                   }}
                 />
               )
+            ) : selectedTrack === "salon" ? (
+              <SalonLanding onBack={handleReturnToJoinHome} />
             ) : (
               <>
                 <div className="mb-4 md:mb-6 flex justify-start">

@@ -718,7 +718,7 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
   );
 };
 
-const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
+const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
   const [joinPopupDocs, setJoinPopupDocs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -841,6 +841,11 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall }) => {
 
     if (routeTrack === "open-call") {
       onSelectOpenCall?.();
+      return;
+    }
+
+    if (routeTrack === "salon") {
+      onSelectSalon?.();
       return;
     }
 
