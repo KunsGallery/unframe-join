@@ -8,8 +8,12 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { appId, db } from "../../lib/firebase";
+import {
+  DEFAULT_JOIN_HOME_CONTENT,
+  mergeJoinHomeContent,
+} from "../../constants/joinHome";
 import {
   DEFAULT_JOIN_TRACKS,
   JOIN_TRACK_COLLECTION,
@@ -425,7 +429,7 @@ const FeaturedProjectSlider = ({
   );
 };
 
-const BrandHero = () => (
+const BrandHero = ({ content }) => (
   <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
     <div className="max-w-4xl">
       <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
@@ -433,28 +437,25 @@ const BrandHero = () => (
           <Sparkles size={15} />
         </span>
         <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
-          UNFRAME JOIN
+          {content.heroBadgeText}
         </span>
       </div>
 
-      <h1 className="mt-6 max-w-4xl text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
-        하나의 방식으로만
-        <br />
-        연결되지 않습니다.
+      <h1 className="mt-6 max-w-4xl whitespace-pre-line text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
+        {content.heroTitle}
       </h1>
 
       <p className="mt-5 max-w-2xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
-        공간을 제안할 수도, 전시에 지원할 수도, 프로그램에 참여할 수도 있습니다. 각 트랙은
-        열리는 방식이 다르고, 그 입구를 선택하는 순간부터 여정이 시작됩니다.
+        {content.heroDescription}
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
         <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
           <CircleDot size={11} />
-          입구 선택
+          {content.heroPrimaryChip}
         </span>
         <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
-          Live Tracks
+          {content.heroSecondaryChip}
         </span>
       </div>
     </div>
@@ -463,30 +464,34 @@ const BrandHero = () => (
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-            Brand Note
+            {content.brandNoteLabel}
           </p>
           <p className="mt-2 text-lg font-black tracking-tight text-zinc-950">
-            UNFRAME의 입구는 하나가 아닙니다.
+            {content.brandNoteTitle}
           </p>
         </div>
 
         <div className="rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
-          LIVE
+          {content.brandNoteLiveLabel}
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <div className="rounded-[24px] border border-white/80 bg-white p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Entry</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            {content.entryCardLabel}
+          </p>
           <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-            신청 트랙은 살아 있고, 필요한 입구만 선택하면 됩니다.
+            {content.entryCardText}
           </p>
         </div>
 
         <div className="rounded-[24px] border border-white/80 bg-white p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Notice</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            {content.noticeCardLabel}
+          </p>
           <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-            현재 노출 중인 공지와 대표 프로젝트는 아래 영역에서 이어집니다.
+            {content.noticeCardText}
           </p>
         </div>
       </div>
@@ -620,8 +625,9 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
   if (!popup) return null;
 
   const poster = popup.posterImageUrl?.trim();
-  const ctaLabel = popup.ctaLabel?.trim() || "신청하러 가기";
-  const dismissLabel = popup.dismissLabel?.trim() || "닫기";
+  const ctaLabel =
+    popup.ctaLabel?.trim() ||
+    (popup.targetTrack === "open-call" ? "오픈콜 신청하러 가기" : "신청하러 가기");
 
   return (
     <div
@@ -653,18 +659,11 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
 
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/55 via-zinc-950/10 to-white/10" />
             <div className="absolute inset-y-0 right-0 w-16 skew-x-[-8deg] bg-white/20 opacity-40 mix-blend-overlay" />
-            <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
-              <Sparkles size={11} />
-              UNFRAME NOTICE
-            </div>
           </div>
 
           <div className="flex flex-col justify-between p-6 text-zinc-950 md:p-8 lg:p-10">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#004AAD]">
-                UNFRAME NOTICE
-              </p>
-              <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
+              <h2 className="mt-4 whitespace-pre-line break-keep text-[2rem] font-black tracking-tighter text-zinc-950 leading-tight md:text-[2.6rem]">
                 {popup.title || "공지"}
               </h2>
               <p className="mt-4 whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
@@ -689,7 +688,7 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
               <button
                 type="button"
                 onClick={onCta}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
+                className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
               >
                 {ctaLabel}
                 <ArrowRight size={14} />
@@ -698,17 +697,9 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
               <button
                 type="button"
                 onClick={onHideToday}
-                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+                className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
               >
                 오늘 하루 보지 않기
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-              >
-                {dismissLabel}
               </button>
             </div>
           </div>
@@ -721,6 +712,9 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
 const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
   const [joinPopupDocs, setJoinPopupDocs] = useState([]);
+  const [joinHomeContent, setJoinHomeContent] = useState(
+    DEFAULT_JOIN_HOME_CONTENT
+  );
   const [loading, setLoading] = useState(true);
   const [popupLoading, setPopupLoading] = useState(true);
   const [hoveredTrackId, setHoveredTrackId] = useState(null);
@@ -756,6 +750,26 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       (error) => {
         console.error(error);
         setPopupLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [appId, db]);
+
+  useEffect(() => {
+    const ref = doc(db, "artifacts", appId, "public", "data", "joinHome", "settings");
+    const unsubscribe = onSnapshot(
+      ref,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setJoinHomeContent(DEFAULT_JOIN_HOME_CONTENT);
+        } else {
+          setJoinHomeContent(mergeJoinHomeContent(snapshot.data()));
+        }
+      },
+      (error) => {
+        console.error(error);
+        setJoinHomeContent(DEFAULT_JOIN_HOME_CONTENT);
       }
     );
 
@@ -924,7 +938,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   return (
     <main className="min-h-screen bg-[#F6F4EE] text-zinc-950">
       <div className="mx-auto max-w-7xl px-5 pt-10 pb-8 md:px-6 md:pt-16 md:pb-10">
-        <BrandHero />
+        <BrandHero content={joinHomeContent} />
       </div>
 
       <div className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">

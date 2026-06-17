@@ -38,8 +38,8 @@ const createBlankPopup = () => {
     enabled: false,
     priority: 999,
     targetTrack: "open-call",
-    ctaLabel: "신청하러 가기",
-    dismissLabel: "닫기",
+    ctaLabel: "오픈콜 신청하러 가기",
+    dismissLabel: "오늘 하루 보지 않기",
     startAt: "",
     endAt: "",
     showAsPopup: true,
@@ -49,16 +49,16 @@ const createBlankPopup = () => {
 
 const createExamplePopup = () => ({
   id: "open-call-afterimage-2026",
-  title: "2026 UNFRAME OPEN CALL 01. 잔상",
+  title: "2026 UNFRAME\nOPEN CALL 001. 잔상",
   subtitle: "설명보다 먼저 마음에 남는 작품을 찾습니다.",
   body:
-    "UNFRAME의 첫 번째 오픈콜이 진행 중입니다. 작품 자체의 힘으로 시선을 붙잡는 창작자를 기다립니다.",
+    "UNFRAME의 첫 번째 오픈콜이 진행 중입니다.\n작품 자체의 힘으로 시선을 붙잡는 창작자를 기다립니다.",
   posterImageUrl: "",
   enabled: false,
   priority: 1,
   targetTrack: "open-call",
   ctaLabel: "오픈콜 신청하러 가기",
-  dismissLabel: "닫기",
+  dismissLabel: "오늘 하루 보지 않기",
   startAt: "",
   endAt: "",
   showAsPopup: true,
@@ -107,8 +107,9 @@ const JoinPopupPreviewModal = ({ popup, onClose }) => {
   if (!popup) return null;
 
   const poster = popup.posterImageUrl?.trim();
-  const ctaLabel = popup.ctaLabel?.trim() || "신청하러 가기";
-  const dismissLabel = popup.dismissLabel?.trim() || "닫기";
+  const ctaLabel =
+    popup.ctaLabel?.trim() ||
+    (popup.targetTrack === "open-call" ? "오픈콜 신청하러 가기" : "신청하러 가기");
 
   return (
     <div
@@ -140,18 +141,11 @@ const JoinPopupPreviewModal = ({ popup, onClose }) => {
 
             <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/55 via-zinc-950/10 to-white/10" />
             <div className="absolute inset-y-0 right-0 w-16 skew-x-[-8deg] bg-white/20 opacity-40 mix-blend-overlay" />
-            <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-white/90 backdrop-blur-md">
-              <Sparkles size={11} />
-              JOIN POPUP PREVIEW
-            </div>
           </div>
 
           <div className="flex flex-col justify-between p-6 text-zinc-950 md:p-8 lg:p-10">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#004AAD]">
-                PREVIEW ONLY
-              </p>
-              <h2 className="mt-4 text-[2rem] font-black tracking-tighter text-zinc-950 break-keep md:text-[2.6rem]">
+              <h2 className="mt-4 whitespace-pre-line break-keep text-[2rem] font-black tracking-tighter text-zinc-950 leading-tight md:text-[2.6rem]">
                 {popup.title || "공지"}
               </h2>
               <p className="mt-4 whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
@@ -175,7 +169,7 @@ const JoinPopupPreviewModal = ({ popup, onClose }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
+                className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-zinc-950 px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg transition-opacity hover:opacity-90"
               >
                 {ctaLabel}
               </button>
@@ -183,9 +177,9 @@ const JoinPopupPreviewModal = ({ popup, onClose }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center justify-center rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+                className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border border-zinc-950/10 bg-white px-5 py-4 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-700 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
               >
-                {dismissLabel}
+                오늘 하루 보지 않기
               </button>
             </div>
 
@@ -554,10 +548,7 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                       ) : (
                         <div className="flex h-[22rem] items-end rounded-[22px] border border-zinc-950/10 bg-[linear-gradient(135deg,#004AAD_0%,#F6F4EE_58%,#ffffff_100%)] p-5">
                           <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700/75">
-                              UNFRAME NOTICE
-                            </p>
-                            <h4 className="mt-3 text-3xl font-black tracking-tighter text-zinc-950 break-keep">
+                            <h4 className="mt-3 whitespace-pre-line text-3xl font-black tracking-tighter text-zinc-950 break-keep leading-tight">
                               {draft.title || popup.title || "팝업 제목"}
                             </h4>
                             <p className="mt-3 max-w-md whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700/90 break-keep">
@@ -749,10 +740,14 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                         <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
                           title
                         </span>
-                        <input
+                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                          줄바꿈은 실제 팝업 제목에 반영됩니다. OPEN CALL처럼 붙어야 하는 단어는 한 줄에 입력해 주세요.
+                        </p>
+                        <textarea
+                          rows={3}
                           value={draft.title || ""}
                           onChange={(e) => updateDraft(popup.id, "title", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                          className="mt-3 w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                         />
                       </label>
 
@@ -772,11 +767,14 @@ const JoinPopupManager = ({ db, appId, currentUser }) => {
                         <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
                           body
                         </span>
+                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                          줄바꿈은 실제 팝업 본문에 반영됩니다.
+                        </p>
                         <textarea
-                          rows={5}
+                          rows={6}
                           value={draft.body || ""}
                           onChange={(e) => updateDraft(popup.id, "body", e.target.value)}
-                          className="w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                          className="mt-3 w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                         />
                       </label>
 

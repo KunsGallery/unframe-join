@@ -41,17 +41,19 @@ import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
 import { sendApplicationStatusEmail } from "../lib/uploads";
 import EmailTestPanel from "./EmailTestPanel";
+import JoinHomeContentManager from "./admin/JoinHomeContentManager";
 import OpenCallManager from "./admin/OpenCallManager";
 import JoinTrackManager from "./admin/JoinTrackManager";
 import JoinPopupManager from "./admin/JoinPopupManager";
 import { isAdminEmail } from "../constants/admin";
 
 const ADMIN_TABS = [
-  { id: "applications", label: "신청 현황" },
-  { id: "openCalls", label: "오픈콜 관리" },
-  { id: "joinTracks", label: "메인 입구 관리" },
-  { id: "popups", label: "팝업 관리" },
-  { id: "system", label: "시스템" },
+  { id: "applications", label: "신청 현황", description: "전체 신청서를 확인하고 심사 상태를 관리합니다." },
+  { id: "openCalls", label: "오픈콜 관리", description: "오픈콜 공고, 양식, 알림, 완료 화면을 관리합니다." },
+  { id: "joinHome", label: "메인 문구 관리", description: "JoinHome 상단의 히어로와 브랜드 노트를 수정합니다." },
+  { id: "joinTracks", label: "메인 입구 관리", description: "JoinHome에서 보여줄 트랙의 문구와 상태를 조정합니다." },
+  { id: "popups", label: "팝업 관리", description: "JoinHome 팝업과 피쳐드 공지를 관리합니다." },
+  { id: "system", label: "시스템", description: "로그인 상태와 진단 도구를 확인합니다." },
 ];
 
 const getCustomFieldAnswersList = (answers) =>
@@ -1075,8 +1077,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                   Control Center
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-base">
-                  운영자는 탭 하나씩만 집중해서 작업할 수 있습니다. 신청 현황, 오픈콜, 메인 입구,
-                  팝업, 시스템 도구를 목적별로 분리해 정리했습니다.
+                  운영자는 탭 하나씩만 집중해서 작업할 수 있습니다. 신청 현황, 오픈콜, 메인 문구,
+                  메인 입구, 팝업, 시스템 도구를 목적별로 분리해 정리했습니다.
                 </p>
               </div>
             </div>
@@ -1173,8 +1175,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
             <EmailTestPanel />
 
             <div className="rounded-[24px] border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-4 text-sm font-bold leading-relaxed text-[#004aad] break-keep">
-              Firebase Console &gt; Firestore Rules에 joinTracks / joinPopups 권한이 추가되어야
-              합니다.
+              Firebase Console &gt; Firestore Rules에 joinHome / joinTracks / joinPopups 권한이
+              추가되어야 합니다.
             </div>
           </DashboardPanel>
         </div>
@@ -1183,6 +1185,12 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       {activeAdminTab === "openCalls" ? (
         <div className="mt-6">
           <OpenCallManager db={db} appId={appId} applications={applications} />
+        </div>
+      ) : null}
+
+      {activeAdminTab === "joinHome" ? (
+        <div className="mt-6">
+          <JoinHomeContentManager db={db} appId={appId} currentUser={user} />
         </div>
       ) : null}
 
