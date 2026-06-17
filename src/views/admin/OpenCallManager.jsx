@@ -773,7 +773,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       );
       setTimedSaveFeedback(call.id, {
         state: "saved",
-        message: "저장되었습니다.",
+        message: "저장되었습니다. /opencall 페이지에 반영됩니다.",
       });
     } catch (error) {
       console.error(error);
@@ -1150,6 +1150,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </h4>
                       <p className="mt-2 text-sm font-bold text-zinc-500 break-keep">
                         {draft.subtitle || call.subtitle || OPEN_CALL_FALLBACK.subtitle}
+                      </p>
+                      <p className="mt-3 font-mono text-[11px] text-zinc-400 break-all">
+                        openCallId: {call.id}
                       </p>
                     </div>
 

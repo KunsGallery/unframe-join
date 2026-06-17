@@ -47,21 +47,51 @@ const normalizeOpenCall = (openCall) =>
     id: openCall?.id || OPEN_CALL_FALLBACK.id,
   });
 
+const getOpenCallSortTimestamp = (call) => {
+  const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
+  if (applicationStartAt) return applicationStartAt.getTime();
+
+  const createdAt = parseOpenCallDate(call?.createdAt);
+  if (createdAt) return createdAt.getTime();
+
+  const updatedAt = parseOpenCallDate(call?.updatedAt);
+  if (updatedAt) return updatedAt.getTime();
+
+  return 0;
+};
+
+const sortByLatestOpenCall = (calls) =>
+  [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
+
 const pickActiveOpenCall = (calls) => {
   const normalized = (calls || [])
     .map(normalizeOpenCall)
     .filter((call) => call.isVisible !== false && call.status !== "archived");
 
-  const featured = normalized.filter((call) => call.isFeatured);
-  const candidateStatuses = ["open", "upcoming", "closed", "draft"];
-  const candidates = candidateStatuses
-    .flatMap((status) => [
-      featured.find((call) => getOpenCallDisplayStatus(call).key === status),
-      normalized.find((call) => getOpenCallDisplayStatus(call).key === status),
-    ])
-    .filter(Boolean);
+  if (normalized.length === 0) {
+    return createFallbackOpenCall();
+  }
 
-  return candidates[0] || createFallbackOpenCall();
+  const featuredVisible = normalized.filter((call) => call.isFeatured);
+  const featuredActive = featuredVisible.filter((call) => {
+    const displayStatus = getOpenCallDisplayStatus(call);
+    return displayStatus.key === "open" || displayStatus.key === "upcoming";
+  });
+  const activeVisible = normalized.filter((call) => {
+    const displayStatus = getOpenCallDisplayStatus(call);
+    return displayStatus.key === "open" || displayStatus.key === "upcoming";
+  });
+
+  const candidatePool =
+    featuredActive.length > 0
+      ? featuredActive
+      : activeVisible.length > 0
+      ? activeVisible
+      : featuredVisible.length > 0
+      ? featuredVisible
+      : normalized;
+
+  return sortByLatestOpenCall(candidatePool)[0] || createFallbackOpenCall();
 };
 
 const formatDateTime = (value) => {
@@ -126,6 +156,13 @@ const OpenCallLanding = ({ onBack, onApply }) => {
   }, []);
 
   const openCall = useMemo(() => pickActiveOpenCall(openCalls), [openCalls]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("ACTIVE_OPEN_CALL_FOR_LANDING", openCall);
+    }
+  }, [openCall]);
+
   const displayStatus = useMemo(
     () => getOpenCallDisplayStatus(openCall),
     [openCall]
@@ -319,6 +356,12 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   {statusHelpText}
                 </p>
               </div>
+
+              {import.meta.env.DEV ? (
+                <p className="mt-3 text-[11px] font-mono text-zinc-400 break-all">
+                  activeOpenCallId: {openCall.id}
+                </p>
+              ) : null}
             </>
           )}
         </div>
