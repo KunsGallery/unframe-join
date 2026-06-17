@@ -29,6 +29,10 @@ import {
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
+import {
+  getSnsOrWebsiteLinkLabel,
+  normalizeSnsOrWebsiteUrl,
+} from "../lib/links";
 import StatCard from "../components/ui/StatCard";
 import CheckCard from "../components/ui/CheckCard";
 import AdminLink from "../components/ui/AdminLink";
@@ -49,6 +53,24 @@ const ADMIN_TABS = [
   { id: "popups", label: "팝업 관리" },
   { id: "system", label: "시스템" },
 ];
+
+const getCustomFieldAnswersList = (answers) =>
+  Object.entries(answers || {}).map(([fieldId, answer]) => ({
+    fieldId,
+    label: answer?.label || fieldId,
+    type: answer?.type || "text",
+    value: answer?.value,
+  }));
+
+const getCustomFieldAnswerDisplayValue = (answer) => {
+  if (!answer) return "-";
+  if (answer.type === "checkbox") {
+    return answer.value === true ? "예" : "아니오";
+  }
+
+  const text = String(answer.value ?? "").trim();
+  return text || "-";
+};
 
 const DashboardPanel = ({ children, className = "" }) => (
   <section
@@ -1669,12 +1691,12 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   <div className="flex flex-col gap-4 text-left">
                                     {app.snsLink && (
                                       <a
-                                        href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                        href={normalizeSnsOrWebsiteUrl(app.snsLink)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
                                       >
-                                        <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                        <Globe size={18} /> {getSnsOrWebsiteLinkLabel(app.snsLink)}
                                       </a>
                                     )}
 
@@ -1688,17 +1710,43 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                         <FileText size={18} /> 포트폴리오 링크 바로가기
                                       </a>
                                     )}
+
+                                    {getCustomFieldAnswersList(app.customFieldAnswers).length > 0 && (
+                                      <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                                          추가 입력 답변
+                                        </p>
+                                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                          {getCustomFieldAnswersList(app.customFieldAnswers).map((answer) => (
+                                            <div
+                                              key={`${app.id}-${answer.fieldId}`}
+                                              className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-4"
+                                            >
+                                              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                                                {answer.label}
+                                              </p>
+                                              <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                                                {getCustomFieldAnswerDisplayValue(answer)}
+                                              </p>
+                                              <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">
+                                                {answer.type}
+                                              </p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="flex flex-col gap-4 text-left">
                                     {app.snsLink && (
                                       <a
-                                        href={app.snsLink?.startsWith("http") ? app.snsLink : `https://${app.snsLink}`}
+                                        href={normalizeSnsOrWebsiteUrl(app.snsLink)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
                                       >
-                                        <Globe size={18} /> 공식 SNS / 웹사이트 링크 바로가기
+                                        <Globe size={18} /> {getSnsOrWebsiteLinkLabel(app.snsLink)}
                                       </a>
                                     )}
 

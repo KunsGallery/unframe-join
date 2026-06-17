@@ -31,6 +31,7 @@ import {
 import {
   OPEN_CALL_FALLBACK,
   OPEN_CALL_ID,
+  OPEN_CALL_CUSTOM_FIELD_TYPES,
   OPEN_CALL_SUBTITLE,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
@@ -76,7 +77,33 @@ const isSectionEnabled = (section) => section?.enabled !== false;
 const isFieldEnabled = (field) => field?.enabled !== false;
 const isFieldRequired = (field) => field?.required !== false;
 
-const getRequiredChecks = (data, works, formSettings) => {
+const getCustomFieldInputType = (fieldType) =>
+  OPEN_CALL_CUSTOM_FIELD_TYPES.includes(fieldType) ? fieldType : "text";
+
+const getCustomFieldValue = (field, values) => {
+  if (field?.type === "checkbox") {
+    return values?.[field.id] === true;
+  }
+
+  return trimValue(values?.[field.id]);
+};
+
+const getCustomFieldErrorMessage = (field) => {
+  const label = field?.label?.trim() || "추가 입력 항목";
+  return field?.type === "checkbox"
+    ? `'${label}' 항목을 확인해 주세요.`
+    : `'${label}' 항목을 입력해 주세요.`;
+};
+
+const normalizeCustomFieldAnswer = (field, value) => {
+  if (field?.type === "checkbox") {
+    return value === true;
+  }
+
+  return trimValue(value);
+};
+
+const getRequiredChecks = (data, works, formSettings, customFieldValues, customFields) => {
   const sections = formSettings?.sections || {};
   const fields = formSettings?.fields || {};
   const worksSectionEnabled = isSectionEnabled(sections.works);
@@ -128,6 +155,11 @@ const getRequiredChecks = (data, works, formSettings) => {
   if (isSectionEnabled(sections.privacy) && sections.privacy?.required !== false) {
     requiredChecks.push(data.privacyAgreed);
   }
+
+  (Array.isArray(customFields) ? customFields : []).forEach((field) => {
+    if (field?.enabled === false || !field?.required) return;
+    requiredChecks.push(getCustomFieldValue(field, customFieldValues));
+  });
 
   return requiredChecks;
 };
@@ -213,9 +245,25 @@ const OpenCallApplicationForm = ({
     );
   }, [initialProfileData]);
 
+  const customFields = useMemo(
+    () =>
+      (Array.isArray(formSettings.customFields) ? formSettings.customFields : [])
+        .filter((field) => field?.enabled !== false)
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0)),
+    [formSettings.customFields]
+  );
+
+  const [customFieldValues, setCustomFieldValues] = useState({});
+
   const progress = useMemo(() => {
     const works = formData.works.map(normalizeWork);
-    const requiredChecks = getRequiredChecks(formData, works, formSettings);
+    const requiredChecks = getRequiredChecks(
+      formData,
+      works,
+      formSettings,
+      customFieldValues,
+      customFields
+    );
     const done = requiredChecks.filter(Boolean).length;
     const total = requiredChecks.length;
     return {
@@ -223,7 +271,7 @@ const OpenCallApplicationForm = ({
       total,
       percent: total === 0 ? 100 : Math.round((done / total) * 100),
     };
-  }, [formData, formSettings]);
+  }, [customFieldValues, customFields, formData, formSettings]);
 
   const worksSectionEnabled = isSectionEnabled(formSettings.sections.works);
   const requiredWorkCount = worksSectionEnabled
@@ -262,6 +310,14 @@ const OpenCallApplicationForm = ({
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
+  const setCustomFieldValue = (field, value) => {
+    clearFieldError(field.id);
+    setCustomFieldValues((prev) => ({
+      ...prev,
+      [field.id]: value,
+    }));
+  };
+
   const setWorkField = (index, key, value) => {
     const errorKeys = {
       title: `work${index + 1}Title`,
@@ -288,7 +344,7 @@ const OpenCallApplicationForm = ({
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const getValidationErrors = (data, works, settings) => {
+  const getValidationErrors = (data, works, settings, customFieldValuesToValidate, customFieldsToValidate) => {
     const nextErrors = {};
     const sections = settings?.sections || {};
     const fields = settings?.fields || {};
@@ -352,6 +408,20 @@ const OpenCallApplicationForm = ({
     if (isSectionEnabled(sections.privacy) && sections.privacy?.required !== false) {
       if (!data.privacyAgreed) nextErrors.privacyAgreed = "개인정보 수집 및 이용에 동의해 주세요.";
     }
+
+    (Array.isArray(customFieldsToValidate) ? customFieldsToValidate : []).forEach((field) => {
+      if (field?.enabled === false || !field?.required) return;
+
+      const fieldValue = getCustomFieldValue(field, customFieldValuesToValidate);
+      const isMissing =
+        field.type === "checkbox"
+          ? fieldValue !== true
+          : !String(fieldValue || "").trim();
+
+      if (isMissing) {
+        nextErrors[field.id] = getCustomFieldErrorMessage(field);
+      }
+    });
 
     return nextErrors;
   };
@@ -467,7 +537,13 @@ const OpenCallApplicationForm = ({
     }
 
     const works = formData.works.map(normalizeWork);
-    const nextErrors = getValidationErrors(formData, works, formSettings);
+    const nextErrors = getValidationErrors(
+      formData,
+      works,
+      formSettings,
+      customFieldValues,
+      customFields
+    );
     setFieldErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
@@ -493,6 +569,15 @@ const OpenCallApplicationForm = ({
     setIsSubmitting(true);
 
     try {
+      const customFieldAnswers = customFields.reduce((acc, field) => {
+        acc[field.id] = {
+          label: field.label || field.id,
+          type: field.type || "text",
+          value: normalizeCustomFieldAnswer(field, customFieldValues[field.id]),
+        };
+        return acc;
+      }, {});
+
       const appDocRef = await addDoc(
         collection(db, "artifacts", appId, "public", "data", "applications"),
         {
@@ -530,6 +615,7 @@ const OpenCallApplicationForm = ({
           privacyAgreed: isSectionEnabled(formSettings.sections.privacy)
             ? formData.privacyAgreed
             : false,
+          customFieldAnswers,
           submittedAt: serverTimestamp(),
         }
       );
@@ -975,6 +1061,134 @@ const OpenCallApplicationForm = ({
               </div>
             ) : null}
           </div>
+
+          {customFields.length > 0 ? (
+            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+              <div className="mb-5 flex items-center gap-3">
+                <Sparkles size={18} className="text-[#004AAD]" />
+                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                  추가 입력 항목
+                </h2>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                {customFields.map((field) => {
+                  const fieldValue = getCustomFieldValue(field, customFieldValues);
+                  const fieldError = fieldErrors[field.id];
+                  const description = field.description || "";
+                  const baseLabel = (
+                    <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
+                      {field.label || "추가 입력 항목"}
+                      {field.required ? <span className="text-red-500">*</span> : null}
+                    </span>
+                  );
+
+                  if (field.type === "checkbox") {
+                    return (
+                      <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+                        {baseLabel}
+                        {description ? (
+                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                            {description}
+                          </p>
+                        ) : null}
+                        <label className="mt-4 flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
+                          <input
+                            type="checkbox"
+                            checked={fieldValue === true}
+                            onChange={(e) => setCustomFieldValue(field, e.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
+                          />
+                          <span className="text-sm font-bold text-zinc-700 break-keep">
+                            {field.placeholder || "동의 또는 확인 항목입니다."}
+                          </span>
+                        </label>
+                        <FieldError message={fieldError} />
+                      </div>
+                    );
+                  }
+
+                  if (field.type === "textarea") {
+                    return (
+                      <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+                        {baseLabel}
+                        {description ? (
+                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                            {description}
+                          </p>
+                        ) : null}
+                        <textarea
+                          value={String(fieldValue || "")}
+                          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+                          placeholder={field.placeholder || "답변을 입력해 주세요."}
+                          rows={5}
+                          className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
+                        />
+                        <FieldError message={fieldError} />
+                      </div>
+                    );
+                  }
+
+                  if (field.type === "select") {
+                    return (
+                      <div key={field.id} className="rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+                        <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
+                          {field.label || "추가 입력 항목"}
+                          {field.required ? <span className="text-red-500">*</span> : null}
+                        </span>
+                        {description ? (
+                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                            {description}
+                          </p>
+                        ) : null}
+                        <select
+                          value={String(fieldValue || "")}
+                          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+                          className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white"
+                        >
+                          <option value="">{field.placeholder || "선택해 주세요."}</option>
+                          {(Array.isArray(field.options) ? field.options : []).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <FieldError message={fieldError} />
+                      </div>
+                    );
+                  }
+
+                  const inputType =
+                    getCustomFieldInputType(field.type) === "url"
+                      ? "url"
+                      : getCustomFieldInputType(field.type) === "email"
+                      ? "email"
+                      : getCustomFieldInputType(field.type) === "phone"
+                      ? "tel"
+                      : "text";
+
+                  return (
+                    <div key={field.id}>
+                      <InputBlock
+                        label={field.label || "추가 입력 항목"}
+                        required={field.required}
+                        type={inputType}
+                        value={String(fieldValue || "")}
+                        onChange={(e) => setCustomFieldValue(field, e.target.value)}
+                        placeholder={field.placeholder || "답변을 입력해 주세요."}
+                      />
+                      {description ? (
+                        <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                          {description}
+                        </p>
+                      ) : null}
+                      <FieldError message={fieldError} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           {worksSectionEnabled ? (
             <div className="space-y-5">

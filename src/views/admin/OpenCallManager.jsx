@@ -24,6 +24,7 @@ import {
 } from "firebase/firestore";
 import {
   OPEN_CALL_FALLBACK,
+  OPEN_CALL_CUSTOM_FIELD_TYPES,
   OPEN_CALL_TEMPLATE_VARIABLES,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
@@ -221,6 +222,109 @@ const normalizeFaqPayload = (faqs) =>
     }))
     .filter((faq) => faq.question || faq.answer);
 
+const CUSTOM_FIELD_TYPE_LABELS = {
+  text: "text",
+  textarea: "textarea",
+  url: "url",
+  email: "email",
+  phone: "phone",
+  select: "select",
+  checkbox: "checkbox",
+};
+
+const createCustomFieldId = () =>
+  `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const createEmptyCustomField = (order = 1) => ({
+  id: createCustomFieldId(),
+  label: "추가 질문",
+  type: "text",
+  placeholder: "답변을 입력해 주세요.",
+  description: "",
+  required: false,
+  enabled: true,
+  order,
+  options: [],
+});
+
+const normalizeCustomFieldDrafts = (customFields) =>
+  (Array.isArray(customFields) ? customFields : []).map((field, index) => ({
+    id: field?.id || createCustomFieldId(),
+    label: field?.label || "",
+    type: OPEN_CALL_CUSTOM_FIELD_TYPES.includes(field?.type) ? field.type : "text",
+    placeholder: field?.placeholder || "",
+    description: field?.description || "",
+    required: field?.required === true,
+    enabled: field?.enabled !== false,
+    order: Number.isFinite(Number(field?.order)) ? Number(field.order) : index + 1,
+    options: Array.isArray(field?.options)
+      ? field.options.map((option) => String(option || "").trim()).filter(Boolean)
+      : [],
+  }));
+
+const parseCustomFieldOptions = (value) =>
+  String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const getCustomFieldTypeLabel = (type) => CUSTOM_FIELD_TYPE_LABELS[type] || type || "text";
+
+const getCustomFieldAnswerDisplayValue = (answer) => {
+  if (!answer) return "-";
+  if (answer.type === "checkbox") {
+    return answer.value ? "예" : "아니오";
+  }
+
+  const text = String(answer.value ?? "").trim();
+  return text || "-";
+};
+
+const getCustomFieldAnswersList = (answers) =>
+  Object.entries(answers || {})
+    .map(([fieldId, answer]) => ({
+      fieldId,
+      label: answer?.label || fieldId,
+      type: answer?.type || "text",
+      value: answer?.value,
+    }));
+
+const buildCustomFieldCsvColumns = (call, rows) => {
+  const columns = [];
+  const usedHeaders = new Set();
+  const customFields = normalizeCustomFieldDrafts(call?.formSettings?.customFields);
+
+  const addColumn = (fieldId, label) => {
+    const baseLabel = String(label || fieldId || "추가 질문").trim() || "추가 질문";
+    let header = `추가질문_${baseLabel}`;
+    if (usedHeaders.has(header)) {
+      header = `추가질문_${baseLabel}_${String(fieldId || "field").slice(-4)}`;
+    }
+    usedHeaders.add(header);
+    columns.push({ fieldId, header });
+  };
+
+  customFields.forEach((field) => addColumn(field.id, field.label || field.id));
+
+  (Array.isArray(rows) ? rows : []).forEach((app) => {
+    Object.entries(app?.customFieldAnswers || {}).forEach(([fieldId, answer]) => {
+      if (columns.some((column) => column.fieldId === fieldId)) return;
+      addColumn(fieldId, answer?.label || fieldId);
+    });
+  });
+
+  return columns;
+};
+
+const getCustomFieldCsvValue = (answer) => {
+  if (!answer) return "";
+  if (answer.type === "checkbox") {
+    return answer.value === true ? "true" : "false";
+  }
+
+  return String(answer.value ?? "");
+};
+
 const OpenCallManager = ({ db, appId, applications }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -384,6 +488,34 @@ const OpenCallManager = ({ db, appId, applications }) => {
         },
       },
     }));
+  };
+
+  const updateCustomFields = (callId, mutate) => {
+    updateFormSettings(callId, (current) => ({
+      ...current,
+      customFields: mutate(normalizeCustomFieldDrafts(current.customFields)),
+    }));
+  };
+
+  const updateCustomField = (callId, index, key, value) => {
+    updateCustomFields(callId, (list) =>
+      list.map((field, fieldIndex) =>
+        fieldIndex === index ? { ...field, [key]: value } : field
+      )
+    );
+  };
+
+  const addCustomField = (callId) => {
+    updateCustomFields(callId, (list) => [...list, createEmptyCustomField(list.length + 1)]);
+  };
+
+  const removeCustomField = (callId, index) => {
+    const ok = window.confirm("이 추가 입력 항목을 삭제할까요?");
+    if (!ok) return;
+
+    updateCustomFields(callId, (list) =>
+      list.filter((_, fieldIndex) => fieldIndex !== index)
+    );
   };
 
   const updateCompletionSettings = (callId, key, value) => {
@@ -763,11 +895,15 @@ const OpenCallManager = ({ db, appId, applications }) => {
       "관리자메모",
       "제출일",
     ];
+    const customFieldColumns = buildCustomFieldCsvColumns(call, rows);
 
     const csvRows = [
-      headers.map(escapeCsv).join(","),
+      [...headers, ...customFieldColumns.map((column) => column.header)]
+        .map(escapeCsv)
+        .join(","),
       ...rows.map((app) => {
         const works = Array.isArray(app.works) ? app.works : [];
+        const customFieldAnswers = app.customFieldAnswers || {};
         return [
           call.id,
           call.title || OPEN_CALL_FALLBACK.title,
@@ -799,6 +935,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
           app.portfolioUrl || "",
           app.openCallAdminMemo || "",
           formatDate(app.submittedAt),
+          ...customFieldColumns.map((column) =>
+            getCustomFieldCsvValue(customFieldAnswers[column.fieldId])
+          ),
         ]
           .map(escapeCsv)
           .join(",");
@@ -932,6 +1071,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const formSettings = getOpenCallDraftFormSettings(draft, call);
             const completionSettings = getOpenCallDraftCompletionSettings(draft, call);
             const notificationSettings = getOpenCallDraftNotificationSettings(draft, call);
+            const customFields = normalizeCustomFieldDrafts(formSettings.customFields);
             const faqItems = normalizeFaqDrafts(draft.faqs);
             const previewContext = buildOpenCallPreviewContext(call, draft);
 
@@ -1262,6 +1402,200 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             {saveFeedbacks[call.id].message}
                           </p>
                         ) : null}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                            추가 입력 항목
+                          </p>
+                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+                            기본 필드는 유지하고, 커스텀 질문은 이곳에서 추가하거나 삭제합니다.
+                            저장된 값은 applications 문서의 customFieldAnswers로 함께 보관됩니다.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addCustomField(call.id)}
+                          className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]"
+                        >
+                          <Plus size={14} />
+                          입력 항목 추가
+                        </button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {customFields.length === 0 ? (
+                          <div className="rounded-[24px] border border-dashed border-zinc-200 bg-white px-5 py-8 text-center">
+                            <p className="text-sm font-bold text-zinc-400">
+                              아직 추가 입력 항목이 없습니다.
+                            </p>
+                          </div>
+                        ) : (
+                          customFields.map((field, index) => (
+                            <div
+                              key={field.id}
+                              className="rounded-[24px] border border-white bg-white p-4 shadow-sm"
+                            >
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                                      field {index + 1}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCustomField(call.id, index, "enabled", !field.enabled)
+                                        }
+                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                          field.enabled
+                                            ? "bg-[#004AAD] text-white"
+                                            : "border border-zinc-200 bg-white text-zinc-500"
+                                        }`}
+                                      >
+                                        {field.enabled ? "사용" : "미사용"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateCustomField(call.id, index, "required", !field.required)
+                                        }
+                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                          field.required
+                                            ? "bg-[#AAD004] text-white"
+                                            : "border border-zinc-200 bg-white text-zinc-500"
+                                        }`}
+                                      >
+                                        {field.required ? "필수" : "선택"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeCustomField(call.id, index)}
+                                        className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-600"
+                                      >
+                                        <Trash2 size={14} />
+                                        삭제
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        label
+                                      </span>
+                                      <input
+                                        value={field.label || ""}
+                                        onChange={(e) =>
+                                          updateCustomField(call.id, index, "label", e.target.value)
+                                        }
+                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                      />
+                                    </label>
+
+                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        type
+                                      </span>
+                                      <select
+                                        value={field.type || "text"}
+                                        onChange={(e) =>
+                                          updateCustomField(call.id, index, "type", e.target.value)
+                                        }
+                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                      >
+                                        {OPEN_CALL_CUSTOM_FIELD_TYPES.map((type) => (
+                                          <option key={type} value={type}>
+                                            {getCustomFieldTypeLabel(type)}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+
+                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        placeholder
+                                      </span>
+                                      <input
+                                        value={field.placeholder || ""}
+                                        onChange={(e) =>
+                                          updateCustomField(
+                                            call.id,
+                                            index,
+                                            "placeholder",
+                                            e.target.value
+                                          )
+                                        }
+                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                      />
+                                    </label>
+
+                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        order
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={field.order || index + 1}
+                                        onChange={(e) =>
+                                          updateCustomField(call.id, index, "order", e.target.value)
+                                        }
+                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                      />
+                                    </label>
+                                  </div>
+
+                                  <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                    <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                      description
+                                    </span>
+                                    <textarea
+                                      rows={3}
+                                      value={field.description || ""}
+                                      onChange={(e) =>
+                                        updateCustomField(
+                                          call.id,
+                                          index,
+                                          "description",
+                                          e.target.value
+                                        )
+                                      }
+                                      className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                                    />
+                                  </label>
+
+                                  {field.type === "select" ? (
+                                    <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        options
+                                      </span>
+                                      <textarea
+                                        rows={4}
+                                        value={(field.options || []).join("\n")}
+                                        onChange={(e) =>
+                                          updateCustomField(
+                                            call.id,
+                                            index,
+                                            "options",
+                                            parseCustomFieldOptions(e.target.value)
+                                          )
+                                        }
+                                        placeholder={"회화\n사진\n설치\n영상"}
+                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                                      />
+                                    </label>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
 
@@ -2314,6 +2648,32 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                     )}
                                   </div>
                                 </div>
+
+                                {getCustomFieldAnswersList(app.customFieldAnswers).length > 0 ? (
+                                  <div className="mt-4 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
+                                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                                      추가 입력 답변
+                                    </p>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                      {getCustomFieldAnswersList(app.customFieldAnswers).map((answer) => (
+                                        <div
+                                          key={`${app.id}-${answer.fieldId}`}
+                                          className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-4"
+                                        >
+                                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                                            {answer.label}
+                                          </p>
+                                          <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                                            {getCustomFieldAnswerDisplayValue(answer)}
+                                          </p>
+                                          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">
+                                            {getCustomFieldTypeLabel(answer.type)}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
 
                               <div className="w-full space-y-3 xl:w-[340px]">

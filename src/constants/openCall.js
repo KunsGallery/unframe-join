@@ -71,6 +71,16 @@ export const DEFAULT_OPEN_CALL_FORM_FIELDS = {
   },
 };
 
+export const OPEN_CALL_CUSTOM_FIELD_TYPES = [
+  "text",
+  "textarea",
+  "url",
+  "email",
+  "phone",
+  "select",
+  "checkbox",
+];
+
 export const DEFAULT_OPEN_CALL_FAQS = [
   {
     question: "지원 가능한 작품 분야에 제한이 있나요?",
@@ -149,6 +159,47 @@ const toNumber = (value, fallback) => {
 
 const toText = (value, fallback = "") =>
   typeof value === "string" ? value : fallback;
+
+const cloneCustomField = (field = {}, fallbackOrder = 1) => {
+  const type = OPEN_CALL_CUSTOM_FIELD_TYPES.includes(field?.type)
+    ? field.type
+    : "text";
+  const id =
+    typeof field?.id === "string" && field.id.trim()
+      ? field.id.trim()
+      : `custom_${fallbackOrder}`;
+
+  return {
+    id,
+    label: toText(field?.label, ""),
+    type,
+    placeholder: toText(field?.placeholder, ""),
+    description: toText(field?.description, ""),
+    required: toBoolean(field?.required, false),
+    enabled: toBoolean(field?.enabled, true),
+    order: toNumber(field?.order, fallbackOrder),
+    options:
+      type === "select"
+        ? Array.isArray(field?.options)
+          ? field.options
+              .map((option) => toText(option, "").trim())
+              .filter(Boolean)
+          : []
+        : [],
+  };
+};
+
+export const normalizeOpenCallCustomFields = (customFields = []) => {
+  const list = Array.isArray(customFields) ? customFields : [];
+
+  return list
+    .map((field, index) => cloneCustomField(field, index + 1))
+    .sort((a, b) => {
+      const orderDiff = toNumber(a.order, 0) - toNumber(b.order, 0);
+      if (orderDiff !== 0) return orderDiff;
+      return String(a.label || a.id || "").localeCompare(String(b.label || b.id || ""), "ko");
+    });
+};
 
 export const renderOpenCallTemplate = (template = "", context = {}) => {
   const safeTemplate = String(template || "");
@@ -237,6 +288,7 @@ export const normalizeOpenCallFormSettings = (formSettings = {}) => {
         required: toBoolean(fields.snsLink?.required, false),
       },
     },
+    customFields: normalizeOpenCallCustomFields(formSettings?.customFields),
   };
 };
 

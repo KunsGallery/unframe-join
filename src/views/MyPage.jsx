@@ -26,6 +26,10 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import {
+  getSnsOrWebsiteLinkLabel,
+  normalizeSnsOrWebsiteUrl,
+} from "../lib/links";
 
 const EMPTY_PROFILE = {
   realName: "",
@@ -128,6 +132,24 @@ const getApplicationMetaLine = (app) => {
   ]
     .filter(Boolean)
     .join(" · ");
+};
+
+const getCustomFieldAnswersList = (answers) =>
+  Object.entries(answers || {}).map(([fieldId, answer]) => ({
+    fieldId,
+    label: answer?.label || fieldId,
+    type: answer?.type || "text",
+    value: answer?.value,
+  }));
+
+const getCustomFieldAnswerDisplayValue = (answer) => {
+  if (!answer) return "-";
+  if (answer.type === "checkbox") {
+    return answer.value === true ? "예" : "아니오";
+  }
+
+  const text = String(answer.value ?? "").trim();
+  return text || "-";
 };
 
 const sortApplications = (apps) => {
@@ -266,6 +288,9 @@ const ApplicationDetailPanel = ({ app }) => {
       : app.status === "rejected"
       ? "심사 결과와 피드백을 확인해 주세요."
       : "검토가 진행 중입니다.";
+  const customFieldAnswers = getCustomFieldAnswersList(app.customFieldAnswers);
+  const snsUrl = normalizeSnsOrWebsiteUrl(app.snsLink);
+  const snsLabel = getSnsOrWebsiteLinkLabel(app.snsLink);
 
   return (
     <div className="space-y-5">
@@ -416,9 +441,20 @@ const ApplicationDetailPanel = ({ app }) => {
               <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
                 SNS / Website
               </p>
-              <p className="text-sm font-bold text-zinc-700 break-all">
-                {app.snsLink || "-"}
-              </p>
+              {snsUrl ? (
+                <a
+                  href={snsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 text-sm font-bold text-[#004aad] break-all"
+                >
+                  {snsLabel || "웹사이트 보기"}
+                </a>
+              ) : (
+                <p className="text-sm font-bold text-zinc-700 break-all">
+                  {app.snsLink || "-"}
+                </p>
+              )}
             </div>
 
             <div>
@@ -429,6 +465,32 @@ const ApplicationDetailPanel = ({ app }) => {
                 {app.portfolioUrl || "-"}
               </p>
             </div>
+
+            {customFieldAnswers.length > 0 ? (
+              <div className="rounded-[24px] border border-zinc-100 bg-zinc-50 px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-3">
+                  추가 입력 답변
+                </p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {customFieldAnswers.map((answer) => (
+                    <div
+                      key={`${app.id}-${answer.fieldId}`}
+                      className="rounded-[18px] border border-zinc-100 bg-white px-4 py-4"
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                        {answer.label}
+                      </p>
+                      <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                        {getCustomFieldAnswerDisplayValue(answer)}
+                      </p>
+                      <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">
+                        {answer.type}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-5 space-y-3">
