@@ -336,8 +336,38 @@ const OpenCallLanding = ({ onBack, onApply }) => {
           ))}
         </div>
 
+        <div className="mt-6 md:mt-8 rounded-[32px] border border-[#004AAD]/15 bg-[#004AAD]/5 px-5 py-6 md:px-7 md:py-7">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
+                Ready to apply
+              </p>
+              <p className="text-lg font-black tracking-tight text-zinc-900 break-keep md:text-xl">
+                {textOrFallback(openCall.title, OPEN_CALL_FALLBACK.title)}
+              </p>
+              {!canApply && disabledHelpText ? (
+                <p className="mt-2 text-sm font-bold text-zinc-500 break-keep">
+                  {disabledHelpText}
+                </p>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={!canApply}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_18px_35px_rgba(0,74,173,0.22)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none disabled:hover:translate-y-0"
+            >
+              {canApply
+                ? applyButtonText
+                : disabledButtonText}
+              {canApply ? <ArrowRight size={15} /> : null}
+            </button>
+          </div>
+        </div>
+
         {faqs.length > 0 ? (
-          <div className="mt-6 md:mt-8 rounded-[32px] border border-zinc-950/10 bg-white/70 px-5 py-6 md:px-7 md:py-7 shadow-[0_20px_60px_rgba(0,0,0,0.05)]">
+          <div className="mt-14 md:mt-16 rounded-[32px] border border-zinc-950/10 bg-white/70 px-5 py-6 md:px-7 md:py-7 shadow-[0_20px_60px_rgba(0,0,0,0.05)]">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
@@ -392,36 +422,6 @@ const OpenCallLanding = ({ onBack, onApply }) => {
             </div>
           </div>
         ) : null}
-
-        <div className="mt-6 md:mt-8 rounded-[32px] border border-[#004AAD]/15 bg-[#004AAD]/5 px-5 py-6 md:px-7 md:py-7">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
-                Ready to apply
-              </p>
-              <p className="text-lg font-black tracking-tight text-zinc-900 break-keep md:text-xl">
-                {textOrFallback(openCall.title, OPEN_CALL_FALLBACK.title)}
-              </p>
-              {!canApply && disabledHelpText ? (
-                <p className="mt-2 text-sm font-bold text-zinc-500 break-keep">
-                  {disabledHelpText}
-                </p>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleApply}
-              disabled={!canApply}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_18px_35px_rgba(0,74,173,0.22)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none disabled:hover:translate-y-0"
-            >
-              {canApply
-                ? applyButtonText
-                : disabledButtonText}
-              {canApply ? <ArrowRight size={15} /> : null}
-            </button>
-          </div>
-        </div>
 
         <div className="mt-6 flex justify-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 shadow-sm backdrop-blur">
