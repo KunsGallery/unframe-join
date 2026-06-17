@@ -14,6 +14,9 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+const formatMultilineText = (value = "") =>
+  escapeHtml(value).replace(/\r?\n/g, "<br />");
+
 const formatProgram = (program) => {
   if (!program) return "-";
   return `${program.name} · ${program.price}만원`;
@@ -72,6 +75,7 @@ const buildApplicantHtml = ({
   applicationDetailUrl,
   submittedAt,
   applicationId,
+  messageBody = "",
 }) => {
   const stamp = formatReceiptStamp(submittedAt); // 예: 03.26.08:00
   const receivedAt = formatKoreanDateTime(submittedAt);
@@ -143,9 +147,13 @@ const buildApplicantHtml = ({
                   </div>
 
                   <div style="font-family:Inter,'Noto Sans KR',Arial,sans-serif;font-size:14px;line-height:1.9;color:#444444;margin-bottom:30px;font-weight:400;word-break:keep-all;">
-                    안녕하세요, ${safeApplicantName}님.<br/><br/>
+                    ${
+                      messageBody
+                        ? formatMultilineText(messageBody)
+                        : `안녕하세요, ${safeApplicantName}님.<br/><br/>
                     반갑습니다. 언프레임의 새로운 페이지를 당신과 함께 채울 수 있을지 설레는 마음으로 검토를 시작합니다. 
-                    보내주신 비전의 조각들은 저희 큐레이션 보드에 의해 소중히 다루어질 것입니다.
+                    보내주신 비전의 조각들은 저희 큐레이션 보드에 의해 소중히 다루어질 것입니다.`
+                    }
                   </div>
 
                   <!-- Data table -->
@@ -248,9 +256,18 @@ const buildAdminHtml = ({
   stageName,
   submittedAt,
   applicationId,
+  messageBody = "",
 }) => `
   <div style="font-family: Arial, sans-serif; color: #111; line-height: 1.6;">
     <h2 style="margin-bottom: 20px;">새 신청서가 접수되었습니다.</h2>
+
+    ${
+      messageBody
+        ? `<div style="margin-bottom: 20px; padding: 16px 18px; border-radius: 14px; background: #f8fafc; border: 1px solid #e5e7eb; white-space: pre-line;">${formatMultilineText(
+            messageBody
+          )}</div>`
+        : ""
+    }
 
     <div style="padding: 20px; border: 1px solid #e5e7eb; border-radius: 16px; background: #fafafa;">
       <p><strong>접수 코드</strong><br />${escapeHtml(
@@ -334,48 +351,64 @@ export async function handler(event) {
       applicationDetailUrl = "",
       submittedAt = new Date().toISOString(),
       applicationId = "",
+      sendApplicantEmail = true,
+      sendAdminEmail = true,
+      applicantEmailSubject = "",
+      applicantEmailBody = "",
+      adminEmailSubject = "",
+      adminEmailBody = "",
     } = payload;
 
     if (!applicantEmail) {
       return json(400, { error: "Applicant email is required" });
     }
 
-    await sendMail({
-      apiKey,
-      from,
-      to: [applicantEmail],
-      subject: `[UNFRAME] 신청이 정상적으로 접수되었습니다`,
-      html: buildApplicantHtml({
-        applicantName,
-        exhibitionTitle,
-        selectedDate,
-        selectedProgram,
-        partnerType,
-        applicationDetailUrl,
-        submittedAt,
-        applicationId,
-      }),
-    });
+    if (sendApplicantEmail) {
+      await sendMail({
+        apiKey,
+        from,
+        to: [applicantEmail],
+        subject:
+          applicantEmailSubject ||
+          `[UNFRAME] 신청이 정상적으로 접수되었습니다`,
+        html: buildApplicantHtml({
+          applicantName,
+          exhibitionTitle,
+          selectedDate,
+          selectedProgram,
+          partnerType,
+          applicationDetailUrl,
+          submittedAt,
+          applicationId,
+          messageBody: applicantEmailBody,
+        }),
+      });
+    }
 
-    await sendMail({
-      apiKey,
-      from,
-      to: adminTo.split(",").map((v) => v.trim()).filter(Boolean),
-      subject: `[UNFRAME] 새 신청 접수 - ${exhibitionTitle || applicantName || "Untitled"}`,
-      html: buildAdminHtml({
-        applicantName,
-        applicantEmail,
-        exhibitionTitle,
-        selectedDate,
-        selectedProgram,
-        partnerType,
-        phone,
-        brandName,
-        stageName,
-        submittedAt,
-        applicationId,
-      }),
-    });
+    if (sendAdminEmail) {
+      await sendMail({
+        apiKey,
+        from,
+        to: adminTo.split(",").map((v) => v.trim()).filter(Boolean),
+        subject:
+          adminEmailSubject ||
+          `[UNFRAME] 새 신청 접수 - ${exhibitionTitle || applicantName || "Untitled"}`,
+        html: buildAdminHtml({
+          applicantName,
+          applicantEmail,
+          exhibitionTitle,
+          selectedDate,
+          selectedProgram,
+          partnerType,
+          phone,
+          brandName,
+          stageName,
+          submittedAt,
+          applicationId,
+          messageBody: adminEmailBody,
+        }),
+      });
+    }
 
     return json(200, { ok: true });
   } catch (error) {

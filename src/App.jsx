@@ -104,6 +104,7 @@ const App = () => {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitSuccess, setIsSubmitSuccess] = useState(false);
+  const [successTemplateContext, setSuccessTemplateContext] = useState(null);
 
   const [partnerType, setPartnerType] = useState("");
   const [selectedProgram, setSelectedProgram] = useState(null);
@@ -260,6 +261,7 @@ const App = () => {
     setOpenCallMode("landing");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
     setSelectedDate(null);
     setSelectedProgram(null);
     setPartnerType("");
@@ -272,6 +274,7 @@ const App = () => {
     setOpenCallMode("landing");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
     setSelectedDate(null);
     setSelectedProgram(null);
     setPartnerType("");
@@ -285,6 +288,7 @@ const App = () => {
     setOpenCallMode("landing");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
     setSelectedDate(null);
     setSelectedProgram(null);
     setPartnerType("");
@@ -294,6 +298,7 @@ const App = () => {
 
   const handleReturnToOpenCallLanding = () => {
     setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
     setOpenCallMode("landing");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -307,6 +312,7 @@ const App = () => {
     setOpenCallMode("landing");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
+    setSuccessTemplateContext(null);
     setSelectedDate(null);
     setSelectedProgram(null);
     setPartnerType("");
@@ -340,6 +346,7 @@ const App = () => {
             setSelectedOpenCall(null);
             setCurrentStep(1);
             setIsSubmitSuccess(false);
+            setSuccessTemplateContext(null);
             setSelectedDate(null);
             setSelectedProgram(null);
             setPartnerType("");
@@ -358,6 +365,7 @@ const App = () => {
           <SuccessView
             trackType={selectedTrack}
             completionSettings={selectedOpenCallView?.completionSettings}
+            templateContext={successTemplateContext}
             onReturn={() => {
               handleReturnToJoinHome();
             }}
@@ -411,8 +419,9 @@ const App = () => {
                   handleLogin={handleLogin}
                   initialProfileData={savedProfileData}
                   onBack={() => setOpenCallMode("landing")}
-                  onSubmitSuccess={() => {
+                  onSubmitSuccess={(successContext) => {
                     window.scrollTo({ top: 0, behavior: "smooth" });
+                    setSuccessTemplateContext(successContext || null);
                     setIsSubmitSuccess(true);
                   }}
                 />
@@ -481,6 +490,7 @@ const App = () => {
                     onBack={() => handleStepTransition(3)}
                     onSubmitSuccess={() => {
                       window.scrollTo({ top: 0, behavior: "smooth" });
+                      setSuccessTemplateContext(null);
                       setIsSubmitSuccess(true);
                     }}
                     db={db}

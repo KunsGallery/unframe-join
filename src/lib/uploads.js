@@ -137,6 +137,12 @@ export const sendApplicationEmails = async ({
   stageName,
   myPageUrl = "",
   applicationDetailUrl = "",
+  sendApplicantEmail = true,
+  sendAdminEmail = true,
+  applicantEmailSubject = "",
+  applicantEmailBody = "",
+  adminEmailSubject = "",
+  adminEmailBody = "",
 }) => {
   const response = await fetch("/.netlify/functions/send-application-emails", {
     method: "POST",
@@ -154,6 +160,12 @@ export const sendApplicationEmails = async ({
       brandName,
       stageName,
       applicationDetailUrl: applicationDetailUrl || myPageUrl,
+      sendApplicantEmail,
+      sendAdminEmail,
+      applicantEmailSubject,
+      applicantEmailBody,
+      adminEmailSubject,
+      adminEmailBody,
     }),
   });
 

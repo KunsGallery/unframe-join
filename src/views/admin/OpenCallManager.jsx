@@ -24,11 +24,14 @@ import {
 } from "firebase/firestore";
 import {
   OPEN_CALL_FALLBACK,
+  OPEN_CALL_TEMPLATE_VARIABLES,
+  OPEN_CALL_TITLE,
   createFallbackOpenCall,
   normalizeOpenCallCompletionSettings,
   normalizeOpenCallFormSettings,
   normalizeOpenCallFaqs,
   normalizeOpenCallNotificationSettings,
+  renderOpenCallTemplate,
 } from "../../constants/openCall";
 
 const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
@@ -149,6 +152,8 @@ const escapeCsv = (value) => {
 
 const getPlainText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
+const getMultilinePreview = (value) => String(value ?? "").trim() || "비어 있음";
+
 const getWorkValue = (work, key) => getPlainText(work?.[key] || "");
 
 const getOpenCallFileSlug = (call) => {
@@ -174,6 +179,16 @@ const getOpenCallDraftNotificationSettings = (draft, call) =>
       call?.notificationSettings ||
       OPEN_CALL_FALLBACK.notificationSettings
   );
+
+const buildOpenCallPreviewContext = (call, draft) => ({
+  name: "김언프레임",
+  email: "artist@example.com",
+  phone: "010-0000-0000",
+  openCallTitle: draft?.title || call?.title || OPEN_CALL_TITLE,
+  openCallId: call?.id || "open-call-preview",
+  applicationId: "preview-application-id",
+  submittedAt: "2026-06-17 15:00",
+});
 
 const createEmptyFaq = (order = 1) => ({
   question: "",
@@ -918,6 +933,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const completionSettings = getOpenCallDraftCompletionSettings(draft, call);
             const notificationSettings = getOpenCallDraftNotificationSettings(draft, call);
             const faqItems = normalizeFaqDrafts(draft.faqs);
+            const previewContext = buildOpenCallPreviewContext(call, draft);
 
             return (
               <div
@@ -1581,6 +1597,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             함께 저장합니다. 이메일과 알림톡은 기존 발송 함수를 재사용하고,
                             SMS는 현재 저장만 지원합니다.
                           </p>
+                          <p className="mt-3 rounded-[18px] border border-dashed border-[#004aad]/15 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-[#004aad] select-all break-all">
+                            사용 가능한 변수: {OPEN_CALL_TEMPLATE_VARIABLES.join(", ")}
+                          </p>
                         </div>
 
                         <span className="inline-flex items-center gap-1.5 rounded-full border border-[#004aad]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
@@ -1672,6 +1691,59 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                 />
                               </label>
                             </div>
+
+                            <div className="rounded-[24px] border border-[#004aad]/10 bg-[#004aad]/5 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                                완료 화면 미리보기
+                              </p>
+                              <div className="mt-3 space-y-3 rounded-[20px] border border-white bg-white p-4">
+                                <div>
+                                  <p className="text-lg font-black text-zinc-900 break-keep">
+                                    {getMultilinePreview(
+                                      renderOpenCallTemplate(
+                                        completionSettings.title,
+                                        previewContext
+                                      )
+                                    )}
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                                    {getMultilinePreview(
+                                      renderOpenCallTemplate(
+                                        completionSettings.message,
+                                        previewContext
+                                      )
+                                    )}
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-line text-xs font-semibold leading-relaxed text-zinc-400 break-keep">
+                                    {getMultilinePreview(
+                                      renderOpenCallTemplate(
+                                        completionSettings.subMessage,
+                                        previewContext
+                                      )
+                                    )}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                                    {getMultilinePreview(
+                                      renderOpenCallTemplate(
+                                        completionSettings.buttonLabel,
+                                        previewContext
+                                      )
+                                    )}
+                                  </span>
+                                  <span className="inline-flex items-center rounded-full border border-[#004aad]/15 bg-[#004aad]/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
+                                    {getMultilinePreview(
+                                      renderOpenCallTemplate(
+                                        completionSettings.secondaryButtonLabel,
+                                        previewContext
+                                      )
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -1712,6 +1784,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                               이메일은 기존 발송 함수가 지원자/운영자 메일을 함께 보냅니다.
                               SMS는 현재 별도 발송 체계가 없어 설정만 저장됩니다.
                             </p>
+                            <p className="rounded-[18px] border border-dashed border-[#004aad]/15 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-[#004aad] select-all break-all">
+                              사용 가능한 변수: {OPEN_CALL_TEMPLATE_VARIABLES.join(", ")}
+                            </p>
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
@@ -1745,8 +1820,32 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   )
                                 }
                                 className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </label>
+                                />
+                              </label>
+
+                            <div className="rounded-[24px] border border-[#004aad]/10 bg-[#004aad]/5 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                                지원자 이메일 미리보기
+                              </p>
+                              <div className="mt-3 rounded-[20px] border border-white bg-white p-4">
+                                <p className="text-sm font-black text-zinc-900 break-keep">
+                                  {getMultilinePreview(
+                                    renderOpenCallTemplate(
+                                      notificationSettings.applicantEmailSubject,
+                                      previewContext
+                                    )
+                                  )}
+                                </p>
+                                <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                                  {getMultilinePreview(
+                                    renderOpenCallTemplate(
+                                      notificationSettings.applicantEmailBody,
+                                      previewContext
+                                    )
+                                  )}
+                                </p>
+                              </div>
+                            </div>
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
@@ -1780,8 +1879,32 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   )
                                 }
                                 className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </label>
+                                />
+                              </label>
+
+                            <div className="rounded-[24px] border border-[#004aad]/10 bg-[#004aad]/5 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                                관리자 이메일 미리보기
+                              </p>
+                              <div className="mt-3 rounded-[20px] border border-white bg-white p-4">
+                                <p className="text-sm font-black text-zinc-900 break-keep">
+                                  {getMultilinePreview(
+                                    renderOpenCallTemplate(
+                                      notificationSettings.adminEmailSubject,
+                                      previewContext
+                                    )
+                                  )}
+                                </p>
+                                <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                                  {getMultilinePreview(
+                                    renderOpenCallTemplate(
+                                      notificationSettings.adminEmailBody,
+                                      previewContext
+                                    )
+                                  )}
+                                </p>
+                              </div>
+                            </div>
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
@@ -1798,8 +1921,24 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   )
                                 }
                                 className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </label>
+                                />
+                              </label>
+
+                            <div className="rounded-[24px] border border-[#004aad]/10 bg-[#004aad]/5 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                                알림톡 미리보기
+                              </p>
+                              <div className="mt-3 rounded-[20px] border border-white bg-white p-4">
+                                <p className="whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                                  {getMultilinePreview(
+                                    renderOpenCallTemplate(
+                                      notificationSettings.kakaoMessage,
+                                      previewContext
+                                    )
+                                  )}
+                                </p>
+                              </div>
+                            </div>
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
@@ -1816,8 +1955,25 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   )
                                 }
                                 className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </label>
+                                />
+                              </label>
+
+                            <div className="rounded-[24px] border border-zinc-200 bg-zinc-50 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+                                SMS 미리보기
+                              </p>
+                              <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                                {getMultilinePreview(
+                                  renderOpenCallTemplate(
+                                    notificationSettings.smsMessage,
+                                    previewContext
+                                  )
+                                )}
+                              </p>
+                              <p className="mt-2 text-[11px] font-semibold leading-relaxed text-zinc-400 break-keep">
+                                현재는 저장만 되고 실제 발송은 하지 않습니다.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>

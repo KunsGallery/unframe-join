@@ -37,6 +37,7 @@ import {
   getOpenCallDisplayStatus,
   normalizeOpenCallFormSettings,
   normalizeOpenCallNotificationSettings,
+  renderOpenCallTemplate,
 } from "../../constants/openCall";
 import { OPEN_CALL_PRIVACY_TEXT } from "../../constants/openCallPrivacy";
 
@@ -539,6 +540,15 @@ const OpenCallApplicationForm = ({
               appDocRef.id
             )}&app=${encodeURIComponent(appDocRef.id)}`
           : "";
+      const templateContext = {
+        name: trimValue(formData.name) || user?.displayName || "",
+        email: trimValue(formData.email) || user?.email || "",
+        phone: normalizePhone(formData.phone),
+        openCallTitle: currentOpenCall.title || OPEN_CALL_TITLE,
+        openCallId: currentOpenCall.id || OPEN_CALL_ID,
+        applicationId: appDocRef.id,
+        submittedAt: new Date().toLocaleString("ko-KR"),
+      };
       const applicantName =
         trimValue(formData.name) || user?.displayName || "Applicant";
       const applicantEmail = trimValue(formData.email) || user?.email || "";
@@ -568,6 +578,24 @@ const OpenCallApplicationForm = ({
             applicationDetailUrl,
             submittedAt: new Date().toISOString(),
             applicationId: appDocRef.id,
+            sendApplicantEmail: notificationSettings.applicantEmailEnabled,
+            sendAdminEmail: notificationSettings.adminEmailEnabled,
+            applicantEmailSubject: renderOpenCallTemplate(
+              notificationSettings.applicantEmailSubject,
+              templateContext
+            ),
+            applicantEmailBody: renderOpenCallTemplate(
+              notificationSettings.applicantEmailBody,
+              templateContext
+            ),
+            adminEmailSubject: renderOpenCallTemplate(
+              notificationSettings.adminEmailSubject,
+              templateContext
+            ),
+            adminEmailBody: renderOpenCallTemplate(
+              notificationSettings.adminEmailBody,
+              templateContext
+            ),
           });
         } catch (mailError) {
           console.error("open-call mail failed:", mailError);
@@ -588,6 +616,10 @@ const OpenCallApplicationForm = ({
               selectedProgram: openCallProgram,
               applicationId: appDocRef.id,
               applicationDetailUrl,
+              kakaoMessage: renderOpenCallTemplate(
+                notificationSettings.kakaoMessage,
+                templateContext
+              ),
             }),
           });
         } catch (kakaoError) {
@@ -599,7 +631,15 @@ const OpenCallApplicationForm = ({
         console.info("SMS 알림 설정은 저장되었지만 현재 발송 체계가 없습니다.");
       }
 
-      onSubmitSuccess();
+      onSubmitSuccess({
+        name: templateContext.name,
+        email: templateContext.email,
+        phone: templateContext.phone,
+        openCallTitle: templateContext.openCallTitle,
+        openCallId: templateContext.openCallId,
+        applicationId: templateContext.applicationId,
+        submittedAt: templateContext.submittedAt,
+      });
     } catch (error) {
       console.error(error);
       alert("제출 중 오류가 발생했습니다.");

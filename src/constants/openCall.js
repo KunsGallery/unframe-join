@@ -2,6 +2,16 @@ export const OPEN_CALL_ID = "2026-unframe-open-call-01-afterimage";
 export const OPEN_CALL_TITLE = "2026 UNFRAME OPEN CALL 01. 잔상";
 export const OPEN_CALL_SUBTITLE = "UNFRAME OPEN CALL 01 : 잔상(殘像)";
 
+export const OPEN_CALL_TEMPLATE_VARIABLES = [
+  "{{name}}",
+  "{{email}}",
+  "{{phone}}",
+  "{{openCallTitle}}",
+  "{{openCallId}}",
+  "{{applicationId}}",
+  "{{submittedAt}}",
+];
+
 export const DEFAULT_OPEN_CALL_FORM_SECTIONS = {
   applicant: {
     enabled: true,
@@ -93,10 +103,11 @@ export const DEFAULT_OPEN_CALL_FAQS = [
 ];
 
 export const DEFAULT_OPEN_CALL_COMPLETION_SETTINGS = {
-  title: "지원 접수 완료",
-  message: "지원서가 정상적으로 접수되었습니다.",
-  subMessage: "검토가 시작되면 마이페이지와 안내 메시지에서 확인하실 수 있습니다.",
-  buttonLabel: "Join Home으로 돌아가기",
+  title: "지원이 완료되었습니다.",
+  message: "{{name}} 작가님, {{openCallTitle}} 지원이 접수되었습니다.",
+  subMessage:
+    "접수 일시: {{submittedAt}}\n입력하신 이메일({{email}})과 연락처({{phone}})로 추가 안내가 전달될 수 있습니다.",
+  buttonLabel: "메인으로 돌아가기",
   secondaryButtonLabel: "오픈콜 다시 보기",
 };
 
@@ -105,12 +116,15 @@ export const DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS = {
   adminEmailEnabled: true,
   kakaoEnabled: true,
   smsEnabled: false,
-  applicantEmailSubject: "[UNFRAME] 오픈콜 지원이 정상적으로 접수되었습니다",
-  applicantEmailBody: "지원이 정상적으로 접수되었습니다.",
-  adminEmailSubject: "[UNFRAME] 오픈콜 신규 지원 접수",
-  adminEmailBody: "오픈콜 지원이 새로 접수되었습니다.",
-  kakaoMessage: "오픈콜 지원이 정상적으로 접수되었습니다.",
-  smsMessage: "오픈콜 지원이 정상적으로 접수되었습니다.",
+  applicantEmailSubject: "[UNFRAME] {{openCallTitle}} 지원이 접수되었습니다.",
+  applicantEmailBody:
+    "{{name}} 작가님, 안녕하세요.\n{{openCallTitle}} 지원이 정상적으로 접수되었습니다.\n접수 일시: {{submittedAt}}",
+  adminEmailSubject: "[UNFRAME JOIN] 새 오픈콜 지원서가 접수되었습니다.",
+  adminEmailBody:
+    "{{openCallTitle}}에 새 지원서가 접수되었습니다.\n지원자: {{name}}\n이메일: {{email}}\n연락처: {{phone}}\n지원서 ID: {{applicationId}}",
+  kakaoMessage: "{{name}} 작가님, {{openCallTitle}} 지원이 정상적으로 접수되었습니다.",
+  smsMessage:
+    "{{name}} 작가님, {{openCallTitle}} 지원이 접수되었습니다. 접수 ID: {{applicationId}}",
 };
 
 const cloneFormSection = (section = {}, fallback = {}) => ({
@@ -135,6 +149,24 @@ const toNumber = (value, fallback) => {
 
 const toText = (value, fallback = "") =>
   typeof value === "string" ? value : fallback;
+
+export const renderOpenCallTemplate = (template = "", context = {}) => {
+  const safeTemplate = String(template || "");
+  const replacements = {
+    "{{name}}": context?.name ?? "",
+    "{{email}}": context?.email ?? "",
+    "{{phone}}": context?.phone ?? "",
+    "{{openCallTitle}}": context?.openCallTitle ?? "",
+    "{{openCallId}}": context?.openCallId ?? "",
+    "{{applicationId}}": context?.applicationId ?? "",
+    "{{submittedAt}}": context?.submittedAt ?? "",
+  };
+
+  return Object.entries(replacements).reduce(
+    (acc, [needle, value]) => acc.replaceAll(needle, String(value ?? "")),
+    safeTemplate
+  );
+};
 
 export const normalizeOpenCallFormSettings = (formSettings = {}) => {
   const sections = formSettings?.sections || {};

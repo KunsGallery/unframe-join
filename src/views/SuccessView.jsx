@@ -1,15 +1,47 @@
 import React from "react";
 import { CheckCircle2 } from "lucide-react";
 import {
-  OPEN_CALL_TITLE,
   normalizeOpenCallCompletionSettings,
+  renderOpenCallTemplate,
 } from "../constants/openCall";
 
-const SuccessView = ({ onReturn, onSecondaryAction, trackType, completionSettings }) => {
+const SuccessView = ({
+  onReturn,
+  onSecondaryAction,
+  trackType,
+  completionSettings,
+  templateContext,
+}) => {
   const isOpenCall = trackType === "open-call";
   const openCallCompletionSettings = normalizeOpenCallCompletionSettings(
     completionSettings
   );
+  const renderedCompletion = isOpenCall
+    ? {
+        title: renderOpenCallTemplate(
+          openCallCompletionSettings.title,
+          templateContext
+        ),
+        message: renderOpenCallTemplate(
+          openCallCompletionSettings.message,
+          templateContext
+        ),
+        subMessage: renderOpenCallTemplate(
+          openCallCompletionSettings.subMessage,
+          templateContext
+        ),
+        buttonLabel:
+          renderOpenCallTemplate(
+            openCallCompletionSettings.buttonLabel,
+            templateContext
+          ) || "메인으로 돌아가기",
+        secondaryButtonLabel:
+          renderOpenCallTemplate(
+            openCallCompletionSettings.secondaryButtonLabel,
+            templateContext
+          ) || "오픈콜 다시 보기",
+      }
+    : null;
 
   return (
     <section className="max-w-xl mx-auto py-40 text-center animate-in zoom-in-95 duration-700 min-h-screen relative z-10 text-zinc-900 px-4">
@@ -18,18 +50,17 @@ const SuccessView = ({ onReturn, onSecondaryAction, trackType, completionSetting
       </div>
 
       <h2 className="text-4xl font-black uppercase mb-6 text-[#004aad] text-center">
-        {isOpenCall ? openCallCompletionSettings.title : "Proposal Received"}
+        {isOpenCall ? renderedCompletion?.title || "" : "Proposal Received"}
       </h2>
 
       <p className="text-zinc-500 font-light leading-relaxed mb-12 break-keep text-base text-center">
         {isOpenCall ? (
           <span className="block space-y-2">
             <span className="block whitespace-pre-line">
-              {openCallCompletionSettings.message || OPEN_CALL_TITLE}
+              {renderedCompletion?.message || ""}
             </span>
             <span className="block whitespace-pre-line text-zinc-400">
-              {openCallCompletionSettings.subMessage ||
-                "검토 결과는 마이페이지와 안내 메시지에서 순차적으로 확인하실 수 있습니다."}
+              {renderedCompletion?.subMessage || ""}
             </span>
           </span>
         ) : (
@@ -47,7 +78,7 @@ const SuccessView = ({ onReturn, onSecondaryAction, trackType, completionSetting
           className="w-full border border-zinc-200 text-zinc-400 py-5 rounded-full font-black uppercase text-xs transition-all hover:bg-zinc-50 shadow-sm transition-all text-center"
         >
           {isOpenCall
-            ? openCallCompletionSettings.buttonLabel || "Join Home으로 돌아가기"
+            ? renderedCompletion?.buttonLabel
             : "Return to Home"}
         </button>
 
@@ -56,7 +87,7 @@ const SuccessView = ({ onReturn, onSecondaryAction, trackType, completionSetting
             onClick={onSecondaryAction}
             className="w-full rounded-full border border-[#004aad]/15 bg-white py-5 font-black uppercase text-xs text-[#004aad] transition-all hover:bg-[#004aad]/5 shadow-sm text-center"
           >
-            {openCallCompletionSettings.secondaryButtonLabel || "오픈콜 다시 보기"}
+            {renderedCompletion?.secondaryButtonLabel}
           </button>
         ) : null}
       </div>

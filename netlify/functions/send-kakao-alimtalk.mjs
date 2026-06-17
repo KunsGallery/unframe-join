@@ -61,6 +61,7 @@ const buildKakaoPayload = ({
   requestMessage,
   applicationId,
   applicationDetailUrl,
+  kakaoMessage,
 }) => {
   const normalizedTo = normalizeKoreanPhone(to);
 
@@ -80,6 +81,14 @@ const buildKakaoPayload = ({
     "#{project_name}": exhibitionTitle || "-",
   };
 
+  const customMessage = String(kakaoMessage || "").trim();
+  const customVariables = customMessage
+    ? {
+        "#{message}": customMessage,
+        "#{custom_message}": customMessage,
+      }
+    : {};
+
   if (type === "application_received") {
     return {
       to: normalizedTo,
@@ -88,6 +97,7 @@ const buildKakaoPayload = ({
         templateId,
         variables: {
           ...commonVariables,
+          ...customVariables,
           "#{selected_date}": selectedDate || "-",
           "#{program_name}": formatProgram(selectedProgram),
         },
@@ -103,6 +113,7 @@ const buildKakaoPayload = ({
         templateId,
         variables: {
           ...commonVariables,
+          ...customVariables,
           "#{selected_date}": selectedDate || "-",
           "#{program_name}": formatProgram(selectedProgram),
           "#{application_id}": detailUrl,
@@ -119,6 +130,7 @@ const buildKakaoPayload = ({
         templateId,
         variables: {
           ...commonVariables,
+          ...customVariables,
           "#{selected_date}": selectedDate || "-",
           "#{application_id}": detailUrl,
         },
@@ -134,6 +146,7 @@ const buildKakaoPayload = ({
         templateId,
         variables: {
           ...commonVariables,
+          ...customVariables,
           "#{request_message}": requestMessage || "-",
           "#{application_id}": detailUrl,
         },
@@ -149,6 +162,7 @@ const buildKakaoPayload = ({
         templateId,
         variables: {
           ...commonVariables,
+          ...customVariables,
         },
       },
     };
@@ -218,6 +232,7 @@ export async function handler(event) {
       requestMessage = "",
       applicationId = "",
       applicationDetailUrl = "",
+      kakaoMessage = "",
     } = body;
 
     if (
@@ -247,6 +262,7 @@ export async function handler(event) {
       requestMessage,
       applicationId,
       applicationDetailUrl,
+      kakaoMessage,
     });
 
     const result = await sendKakaoMessage({
