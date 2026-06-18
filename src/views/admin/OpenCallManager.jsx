@@ -7,7 +7,6 @@ import {
   Download,
   Loader2,
   Megaphone,
-  CircleDot,
   Plus,
   Save,
   Star,
@@ -1528,12 +1527,17 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                           <div className="mt-5 flex flex-wrap gap-2">
                             <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
-                              <CircleDot size={12} />
+                              <span
+                                aria-hidden="true"
+                                className="inline-block h-2 w-2 rounded-full bg-current"
+                              />
                               {previewMediumText}
                             </span>
                             {previewHeroAccent ? (
                               <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
-                                <Sparkles size={12} />
+                                <span aria-hidden="true" className="text-[11px] leading-none">
+                                  ✦
+                                </span>
                                 {previewHeroAccent}
                               </span>
                             ) : null}
