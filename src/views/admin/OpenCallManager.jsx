@@ -29,6 +29,8 @@ import {
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
   buildFallbackDescriptionSections,
+  getOpenCallDisplayStatus,
+  parseOpenCallDate,
   normalizeOpenCallCompletionSettings,
   normalizeOpenCallDescriptionSections,
   normalizeOpenCallFormSettings,
@@ -132,6 +134,59 @@ const normalizeDescriptionSectionPayload = (sections) =>
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index + 1,
     isVisible: section.isVisible !== false,
   }));
+
+const getOpenCallSortTimestamp = (call) => {
+  const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
+  if (applicationStartAt) return applicationStartAt.getTime();
+
+  const createdAt = parseOpenCallDate(call?.createdAt);
+  if (createdAt) return createdAt.getTime();
+
+  const updatedAt = parseOpenCallDate(call?.updatedAt);
+  if (updatedAt) return updatedAt.getTime();
+
+  return 0;
+};
+
+const sortByLatestOpenCall = (calls) =>
+  [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
+
+const pickActiveOpenCall = (calls) => {
+  const normalized = (calls || [])
+    .map(normalizeCall)
+    .filter((call) => call.isVisible !== false && call.status !== "archived");
+
+  if (normalized.length === 0) {
+    return createFallbackOpenCall();
+  }
+
+  const featuredVisible = normalized.filter((call) => call.isFeatured);
+  const featuredActive = featuredVisible.filter((call) => {
+    const displayStatus = getOpenCallDisplayStatus(call);
+    return displayStatus.key === "open" || displayStatus.key === "upcoming";
+  });
+  const activeVisible = normalized.filter((call) => {
+    const displayStatus = getOpenCallDisplayStatus(call);
+    return displayStatus.key === "open" || displayStatus.key === "upcoming";
+  });
+
+  const candidatePool =
+    featuredActive.length > 0
+      ? featuredActive
+      : activeVisible.length > 0
+      ? activeVisible
+      : featuredVisible.length > 0
+      ? featuredVisible
+      : normalized;
+
+  return sortByLatestOpenCall(candidatePool)[0] || createFallbackOpenCall();
+};
+
+const scrollToOpenCallSection = (id) => {
+  if (typeof document === "undefined") return;
+  const target = document.getElementById(id);
+  target?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 const toDatetimeLocalValue = (value) => {
   if (!value) return "";
@@ -367,6 +422,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOpenCallId, setSelectedOpenCallId] = useState("");
+  const [previewOpenCallId, setPreviewOpenCallId] = useState("");
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
@@ -413,6 +469,19 @@ const OpenCallManager = ({ db, appId, applications }) => {
         return bTime - aTime;
       });
   }, [openCalls]);
+
+  useEffect(() => {
+    if (sortedCalls.length === 0) {
+      setPreviewOpenCallId("");
+      return;
+    }
+
+    setPreviewOpenCallId((current) =>
+      current && sortedCalls.some((call) => call.id === current)
+        ? current
+        : sortedCalls[0].id
+    );
+  }, [sortedCalls]);
 
   useEffect(() => {
     setDrafts((prev) => {
@@ -832,6 +901,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
       updatedAt: serverTimestamp(),
       createdAt: call.createdAt || serverTimestamp(),
     };
+    const activeCandidate = pickActiveOpenCall(
+      sortedCalls.map((item) => (item.id === call.id ? { ...item, ...payload } : item))
+    );
 
     setTimedSaveFeedback(call.id, {
       state: "saving",
@@ -846,7 +918,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
       );
       setTimedSaveFeedback(call.id, {
         state: "saved",
-        message: "저장되었습니다. /opencall 페이지에 반영됩니다.",
+        message:
+          activeCandidate?.id === call.id
+            ? "저장되었습니다. 현재 대표 공고라면 /opencall에 바로 반영됩니다."
+            : "저장되었습니다. 단, 현재 /opencall 대표 공고가 아니므로 사용자 페이지에는 바로 보이지 않을 수 있습니다.",
       });
     } catch (error) {
       console.error(error);
@@ -1082,12 +1157,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
     URL.revokeObjectURL(url);
   };
 
-  const handleToggleFeatured = async (call, nextValue) => {
+  const handleSetFeaturedOpenCall = async (call) => {
     try {
       await updateDoc(
         doc(db, "artifacts", appId, "public", "data", "openCalls", call.id),
         {
-          isFeatured: nextValue,
+          isVisible: true,
+          isFeatured: true,
           updatedAt: serverTimestamp(),
         }
       );
@@ -1096,8 +1172,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
       setManagerNotice(formatFirestorePermissionMessage(error));
       return;
     }
-
-    if (!nextValue) return;
 
     try {
       await Promise.all(
@@ -1111,8 +1185,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                 updatedAt: serverTimestamp(),
               }
             )
-          )
+        )
       );
+      setManagerNotice("이 공고가 /opencall 대표 공고로 설정되었습니다.");
     } catch (error) {
       console.error(error);
       setManagerNotice(formatFirestorePermissionMessage(error));
@@ -1130,6 +1205,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
     () => (selectedOpenCall ? getOpenCallApplicationCounts(selectedOpenCall.id) : null),
     [selectedOpenCall, selectedApplications]
   );
+  const activeOpenCall = useMemo(() => pickActiveOpenCall(sortedCalls), [sortedCalls]);
+  const previewedOpenCall = useMemo(
+    () => sortedCalls.find((call) => call.id === previewOpenCallId) || sortedCalls[0] || null,
+    [previewOpenCallId, sortedCalls]
+  );
+  const previewMatchesLanding =
+    previewedOpenCall && activeOpenCall ? previewedOpenCall.id === activeOpenCall.id : false;
 
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
@@ -1158,6 +1240,45 @@ const OpenCallManager = ({ db, appId, applications }) => {
         </button>
       </div>
 
+      <div className="mb-5 grid gap-3 rounded-[28px] border border-zinc-100 bg-zinc-50/80 p-4 md:grid-cols-3">
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            현재 편집 중인 openCallId
+          </p>
+          <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+            {previewedOpenCall?.id || "-"}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            현재 /opencall 노출 공고
+          </p>
+          <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+            {activeOpenCall?.id || "-"}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            일치 여부
+          </p>
+          <p
+            className={`mt-2 text-sm font-black ${
+              previewMatchesLanding ? "text-emerald-600" : "text-amber-600"
+            }`}
+          >
+            {previewMatchesLanding ? "YES" : "NO"}
+          </p>
+        </div>
+      </div>
+
+      {!previewMatchesLanding ? (
+        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 break-keep">
+          지금 편집 중인 공고와 /opencall에 노출 중인 공고가 다릅니다.
+        </div>
+      ) : null}
+
       {managerNotice ? (
         <div className="mb-5 rounded-2xl border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-3 text-sm font-bold text-[#004aad] break-keep">
           {managerNotice}
@@ -1184,6 +1305,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const draft = drafts[call.id] || {};
             const applicantCount = getApplicantItems(applications, call.id).length;
             const isSelected = selectedOpenCallId === call.id;
+            const isPreviewed = previewOpenCallId === call.id;
             const statusMeta = STATUS_META[draft.status || call.status || "draft"];
             const formSettings = getOpenCallDraftFormSettings(draft, call);
             const completionSettings = getOpenCallDraftCompletionSettings(draft, call);
@@ -1191,11 +1313,40 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const customFields = normalizeCustomFieldDrafts(formSettings.customFields);
             const faqItems = normalizeFaqDrafts(draft.faqs);
             const previewContext = buildOpenCallPreviewContext(call, draft);
+            const previewHeroAccent = String(draft.heroAccent || call.heroAccent || "").trim();
+            const previewHeroTitle = draft.heroTitle || call.heroTitle || OPEN_CALL_FALLBACK.heroTitle;
+            const previewBadgeText = draft.badgeText || call.badgeText || OPEN_CALL_FALLBACK.badgeText;
+            const previewSubtitle = draft.subtitle || call.subtitle || OPEN_CALL_FALLBACK.subtitle;
+            const previewIntroText = draft.introText || call.introText || OPEN_CALL_FALLBACK.introText;
+            const previewMediumText = draft.mediumText || call.mediumText || OPEN_CALL_FALLBACK.mediumText;
+            const previewApplyButtonText =
+              draft.applyButtonText || call.applyButtonText || OPEN_CALL_FALLBACK.applyButtonText;
+            const previewStatusNoticeText =
+              draft.statusNoticeText || call.statusNoticeText || OPEN_CALL_FALLBACK.statusNoticeText;
+            const previewLandingLabels = normalizeOpenCallLandingLabels(
+              draft.landingLabels || call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
+            );
+            const previewDescriptionSections = normalizeDescriptionSectionDrafts(
+              draft.descriptionSections && draft.descriptionSections.length > 0
+                ? draft.descriptionSections
+                : call.descriptionSections && call.descriptionSections.length > 0
+                ? call.descriptionSections
+                : buildFallbackDescriptionSections(call)
+            ).filter((section) => section.isVisible !== false && (section.title.trim() || section.body.trim()));
+            const heroEditId = `open-call-${call.id}-hero`;
+            const descriptionEditId = `open-call-${call.id}-description`;
+            const ctaEditId = `open-call-${call.id}-cta`;
+            const faqEditId = `open-call-${call.id}-faq`;
+            const formEditId = `open-call-${call.id}-form`;
+            const completionEditId = `open-call-${call.id}-completion`;
+            const notificationEditId = `open-call-${call.id}-notification`;
 
             return (
               <div
                 key={call.id}
-                className="overflow-hidden rounded-[32px] border border-zinc-100 bg-zinc-50/70"
+                className={`overflow-hidden rounded-[32px] border bg-zinc-50/70 ${
+                  isPreviewed ? "border-[#004aad]/25 ring-1 ring-[#004aad]/10" : "border-zinc-100"
+                }`}
               >
                 <div className="p-5 md:p-6">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1229,7 +1380,16 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewOpenCallId(call.id)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                      >
+                        <Megaphone size={14} />
+                        프리뷰 보기
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => setSelectedOpenCallId(isSelected ? "" : call.id)}
@@ -1241,7 +1401,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                       <button
                         type="button"
-                        onClick={() => handleToggleFeatured(call, !(draft.isFeatured ?? call.isFeatured))}
+                        onClick={() => handleSetFeaturedOpenCall(call)}
                         className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
                       >
                         {(draft.isFeatured ?? call.isFeatured) ? (
@@ -1249,12 +1409,261 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         ) : (
                           <StarOff size={14} />
                         )}
-                        대표 설정
+                        이 공고를 /opencall 대표 공고로 설정
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-5 rounded-[28px] border border-zinc-100 bg-white p-4 md:p-5">
+                  <div className="mt-5 rounded-[28px] border border-[#004aad]/10 bg-white p-4 md:p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                          오픈콜 페이지 프리뷰 편집
+                        </p>
+                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-400 break-keep">
+                          실제 /opencall에 보이는 흐름을 기준으로 바로 수정할 수 있습니다.
+                          각 버튼은 아래 편집 섹션으로 이동합니다.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(heroEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          상단 제목 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(descriptionEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          상세 설명 카드 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(ctaEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          CTA 문구 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(faqEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          Q&amp;A [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(formEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          신청 입력양식 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(completionEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          완료 화면 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(notificationEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          알림 설정 [수정]
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-[32px] border border-zinc-100 bg-[#fbfaf6] p-5 md:p-6">
+                      <div className="flex items-center gap-3 text-[#004AAD]">
+                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6">
+                          <Megaphone size={18} />
+                        </span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
+                          OPEN CALL
+                        </span>
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
+                          {previewBadgeText}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                          {statusMeta?.label || call.status || "draft"}
+                        </span>
+                        {draft.isFeatured ?? call.isFeatured ? (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
+                            대표 공고
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+                        <div>
+                          <div className="flex flex-wrap items-start gap-3">
+                            <h5 className="max-w-3xl text-[2.1rem] font-black tracking-tighter leading-[0.95] text-zinc-900 break-keep md:text-5xl">
+                              {previewHeroTitle}
+                            </h5>
+                            <button
+                              type="button"
+                              onClick={() => scrollToOpenCallSection(heroEditId)}
+                              className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                            >
+                              공모 제목 [수정]
+                            </button>
+                          </div>
+
+                          <p className="mt-4 whitespace-pre-line text-lg font-black text-[#004AAD] break-keep">
+                            {previewSubtitle}
+                          </p>
+                          <p className="mt-4 max-w-3xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-600 break-keep">
+                            {previewIntroText}
+                          </p>
+
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
+                              <CircleDot size={12} />
+                              {previewMediumText}
+                            </span>
+                            {previewHeroAccent ? (
+                              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
+                                <Sparkles size={12} />
+                                {previewHeroAccent}
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => updateDraft(call.id, "heroAccent", "")}
+                              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                            >
+                              보조 배지 숨기기
+                            </button>
+                          </div>
+
+                          <div className="mt-5 rounded-[24px] border border-white bg-white/85 px-4 py-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                              상태 안내 문구
+                            </p>
+                            <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-600 break-keep">
+                              {previewStatusNoticeText}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3">
+                          <div className="rounded-[24px] border border-white bg-white/85 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
+                                READY TO APPLY
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => scrollToOpenCallSection(ctaEditId)}
+                                className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                              >
+                                CTA [수정]
+                              </button>
+                            </div>
+                            <p className="mt-2 text-lg font-black tracking-tight text-zinc-900 break-keep">
+                              {previewLandingLabels.readyToApplyLabel}
+                            </p>
+                            <button
+                              type="button"
+                              className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white"
+                            >
+                              {previewApplyButtonText}
+                            </button>
+                          </div>
+
+                          <div className="rounded-[24px] border border-white bg-white/85 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
+                                  {previewLandingLabels.faqEyebrow}
+                                </p>
+                                <p className="mt-1 text-lg font-black tracking-tight text-zinc-900">
+                                  {previewLandingLabels.faqTitle}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => scrollToOpenCallSection(faqEditId)}
+                                className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                              >
+                                Q&amp;A [수정]
+                              </button>
+                            </div>
+                            <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                              {previewLandingLabels.faqDescription}
+                            </p>
+                            <div className="mt-4 space-y-2">
+                              {faqItems.slice(0, 2).map((faq, index) => (
+                                <div
+                                  key={`${call.id}-preview-faq-${index}`}
+                                  className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-3"
+                                >
+                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                    FAQ {String(index + 1).padStart(2, "0")}
+                                  </p>
+                                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                                    {faq.question || "질문 없음"}
+                                  </p>
+                                  <p className="mt-2 text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                                    {faq.answer || "답변 없음"}
+                                  </p>
+                                </div>
+                              ))}
+                              {faqItems.length > 2 ? (
+                                <p className="text-[11px] font-semibold text-zinc-400">
+                                  외 {faqItems.length - 2}개 문항
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        {previewDescriptionSections.map((section, index) => (
+                          <div
+                            key={`${call.id}-preview-section-${section.id || index}`}
+                            className="rounded-[24px] border border-white bg-white/90 p-4 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                상세 설명 카드 {String(index + 1).padStart(2, "0")}
+                              </p>
+                              {index === 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => scrollToOpenCallSection(descriptionEditId)}
+                                  className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                                >
+                                  수정
+                                </button>
+                              ) : null}
+                            </div>
+                            <h6 className="mt-3 text-base font-black tracking-tight text-zinc-900 break-keep">
+                              {section.title}
+                            </h6>
+                            <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+                              {section.body}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    id={heroEditId}
+                    className="mt-5 rounded-[28px] border border-zinc-100 bg-white p-4 md:p-5"
+                  >
                     <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -1268,9 +1677,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
 
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
+                    <div
+                      id={ctaEditId}
+                      className="rounded-[24px] border border-zinc-100 bg-white p-4"
+                    >
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        title
+                        공모 제목
                       </label>
                       <input
                         value={draft.title || ""}
@@ -1281,7 +1693,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        subtitle
+                        공모 부제 / 파란색 제목
                       </label>
                       <input
                         value={draft.subtitle || ""}
@@ -1292,7 +1704,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        badgeText
+                        상단 배지 문구
                       </label>
                       <input
                         value={draft.badgeText || ""}
@@ -1303,7 +1715,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        heroTitle
+                        공모 대표 제목
                       </label>
                       <input
                         value={draft.heroTitle || ""}
@@ -1314,7 +1726,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        heroAccent
+                        초록색 보조 배지 문구
                       </label>
                       <input
                         value={draft.heroAccent || ""}
@@ -1325,7 +1737,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        introText
+                        공모 소개문
                       </label>
                       <textarea
                         rows={4}
@@ -1337,7 +1749,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        mediumText
+                        매체/대상 안내 pill
                       </label>
                       <textarea
                         rows={4}
@@ -1349,7 +1761,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        statusNoticeText
+                        상태 안내 문구
                       </label>
                       <textarea
                         rows={4}
@@ -1361,7 +1773,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        applyButtonText
+                        지원 버튼 문구
                       </label>
                       <input
                         value={draft.applyButtonText || ""}
@@ -1372,12 +1784,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4 xl:col-span-2">
                       <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                        landingLabels
+                        랜딩 문구 설정
                       </p>
                       <div className="grid gap-3 md:grid-cols-2">
                         <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                           <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            readyToApplyLabel
+                            READY TO APPLY 라벨
                           </span>
                           <input
                             value={draft.landingLabels?.readyToApplyLabel || ""}
@@ -1390,7 +1802,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                         <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                           <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            faqEyebrow
+                            Q&A 소제목
                           </span>
                           <input
                             value={draft.landingLabels?.faqEyebrow || ""}
@@ -1403,7 +1815,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                         <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                           <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            faqTitle
+                            FAQ 제목
                           </span>
                           <input
                             value={draft.landingLabels?.faqTitle || ""}
@@ -1414,7 +1826,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                         <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                           <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            faqDescription
+                            FAQ 설명
                           </span>
                           <textarea
                             rows={3}
@@ -1431,7 +1843,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <div className="flex items-center justify-between gap-3 mb-3">
                         <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          status
+                          공고 상태
                         </label>
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
                           draft / open / closed / archived
@@ -1455,7 +1867,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         <div className="flex-1">
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                              application dates
+                              노출 일정
                             </label>
                             <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
                               datetime-local
@@ -1505,11 +1917,11 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateDraft(call.id, "isVisible", !(draft.isVisible ?? call.isVisible))
-                            }
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateDraft(call.id, "isVisible", !(draft.isVisible ?? call.isVisible))
+                              }
                             className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
                               draft.isVisible ?? call.isVisible
                                 ? "bg-[#004aad] text-white"
@@ -1540,7 +1952,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             ) : (
                               <StarOff size={14} />
                             )}
-                            {(draft.isFeatured ?? call.isFeatured) ? "대표" : "일반"}
+                            {(draft.isFeatured ?? call.isFeatured) ? "대표 공고" : "일반 공고"}
                           </button>
 
                           <button
@@ -1572,7 +1984,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
+                    <div
+                      id={completionEditId}
+                      className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2"
+                    >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -1768,7 +2183,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <SaveStatusRow call={call} />
 
-                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2">
+                    <div
+                      id={formEditId}
+                      className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2"
+                    >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -1779,9 +2197,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             유지되지만, 비활성 항목은 화면과 검증에서 제외됩니다.
                           </p>
                         </div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#004aad]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
-                          formSettings
-                        </span>
                       </div>
 
                       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -1866,11 +2281,11 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           <div className="mt-4 grid gap-3">
                             <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-bold text-zinc-800">대표 작품</p>
-                                  <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                    최대 3개까지 노출하고, 필요한 개수만 필수로 설정합니다.
-                                  </p>
+                                  <div>
+                                    <p className="text-sm font-bold text-zinc-800">대표 작품</p>
+                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                      최대 3개까지 노출하고, 필요한 개수만 필수로 설정합니다.
+                                    </p>
                                 </div>
                                 <button
                                   type="button"
@@ -1895,7 +2310,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                 <label className="rounded-[18px] border border-white bg-white px-3 py-3">
                                   <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                    requiredCount
+                                    필수 개수
                                   </span>
                                   <input
                                     type="number"
@@ -1916,7 +2331,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                 <label className="rounded-[18px] border border-white bg-white px-3 py-3">
                                   <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                    maxCount
+                                    최대 개수
                                   </span>
                                   <input
                                     type="number"
@@ -1939,11 +2354,11 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-bold text-zinc-800">작업 소개</p>
-                                  <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                    최대 글자 수를 조정할 수 있습니다.
-                                  </p>
+                                  <div>
+                                    <p className="text-sm font-bold text-zinc-800">작업 소개</p>
+                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
+                                      최대 글자 수를 조정할 수 있습니다.
+                                    </p>
                                 </div>
                                 <button
                                   type="button"
@@ -1967,7 +2382,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                               <label className="mt-4 block rounded-[18px] border border-white bg-white px-3 py-3">
                                 <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                  maxLength
+                                  최대 글자 수
                                 </span>
                                 <input
                                   type="number"
@@ -2107,22 +2522,18 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           </p>
                         </div>
 
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#004aad]/15 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
-                          <Megaphone size={14} />
-                          completionSettings / notificationSettings
-                        </span>
                       </div>
 
                       <div className="mt-4 grid gap-4 lg:grid-cols-2">
                         <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                            완료 화면 문구
+                            지원 완료 화면 설정
                           </p>
 
                           <div className="mt-4 grid gap-3">
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                title
+                                완료 화면 제목
                               </span>
                               <input
                                 value={completionSettings.title || ""}
@@ -2135,7 +2546,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                message
+                                완료 화면 안내문
                               </span>
                               <textarea
                                 rows={3}
@@ -2149,7 +2560,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                subMessage
+                                보조 안내문
                               </span>
                               <textarea
                                 rows={3}
@@ -2164,7 +2575,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             <div className="grid gap-3 sm:grid-cols-2">
                               <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                 <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                  buttonLabel
+                                  메인 버튼 문구
                                 </span>
                                 <input
                                   value={completionSettings.buttonLabel || ""}
@@ -2181,7 +2592,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                               <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                 <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                  secondaryButtonLabel
+                                  보조 버튼 문구
                                 </span>
                                 <input
                                   value={completionSettings.secondaryButtonLabel || ""}
@@ -2252,7 +2663,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           </div>
                         </div>
 
-                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                        <div
+                          id={notificationEditId}
+                          className="rounded-[24px] border border-white bg-white p-4 shadow-sm"
+                        >
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
                             접수 알림 설정
                           </p>
@@ -2295,7 +2709,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                applicantEmailSubject
+                                지원자 메일 제목
                               </span>
                               <input
                                 value={notificationSettings.applicantEmailSubject || ""}
@@ -2312,7 +2726,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                applicantEmailBody
+                                지원자 메일 본문
                               </span>
                               <textarea
                                 rows={3}
@@ -2354,7 +2768,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                adminEmailSubject
+                                운영자 메일 제목
                               </span>
                               <input
                                 value={notificationSettings.adminEmailSubject || ""}
@@ -2371,7 +2785,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                adminEmailBody
+                                운영자 메일 본문
                               </span>
                               <textarea
                                 rows={3}
@@ -2413,7 +2827,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                kakaoMessage
+                                알림톡 문구
                               </span>
                               <textarea
                                 rows={3}
@@ -2447,7 +2861,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                smsMessage
+                                SMS 문구
                               </span>
                               <textarea
                                 rows={3}
@@ -2486,7 +2900,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <SaveStatusRow call={call} />
 
-                    <div className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2">
+                    <div
+                      id={faqEditId}
+                      className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2"
+                    >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
@@ -2516,9 +2933,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           >
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div className="flex-1">
-                                <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center justify-between gap-3">
                                   <label className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    question
+                                    질문
                                   </label>
                                   <button
                                     type="button"
@@ -2547,7 +2964,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                               <div className="grid gap-3 sm:grid-cols-[120px_auto] lg:min-w-[18rem] lg:max-w-[18rem]">
                                 <label className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                   <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    order
+                                    순서
                                   </span>
                                   <input
                                     type="number"
@@ -2573,7 +2990,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                             <div className="mt-4">
                               <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                answer
+                                답변
                               </label>
                               <textarea
                                 rows={4}
@@ -2592,11 +3009,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <SaveStatusRow call={call} />
 
-                    <div className="rounded-[28px] border border-zinc-100 bg-white p-4 xl:col-span-2">
+                    <div
+                      id={descriptionEditId}
+                      className="rounded-[28px] border border-zinc-100 bg-white p-4 xl:col-span-2"
+                    >
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                            descriptionSections
+                            상세 설명 카드
                           </p>
                           <p className="mt-1 text-xs font-bold text-zinc-400">
                             섹션 추가와 삭제로 공고 설명을 구성합니다.
@@ -2623,9 +3043,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                   <div className="flex-1">
                                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                      <div className="flex-1">
+                                    <div className="flex-1">
                                         <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                          section title
+                                          섹션 제목
                                         </label>
                                         <input
                                           value={section.title || ""}
@@ -2643,7 +3063,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                       <div className="sm:w-28">
                                         <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                          order
+                                          순서
                                         </label>
                                         <input
                                           type="number"
@@ -2698,7 +3118,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                 <div className="mt-3">
                                   <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    section body
+                                    섹션 본문
                                   </label>
                                   <textarea
                                     rows={4}

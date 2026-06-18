@@ -185,6 +185,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
     ? openCall.applyButtonText
     : OPEN_CALL_FALLBACK.applyButtonText;
   const landingLabels = openCall.landingLabels || OPEN_CALL_FALLBACK.landingLabels;
+  const heroAccent = String(openCall.heroAccent || "").trim();
   const statusLabel = STATUS_LABELS[displayStatus.key] || displayStatus.label;
   const statusHelpText = textOrFallback(
     openCall.statusNoticeText,
@@ -294,8 +295,6 @@ const OpenCallLanding = ({ onBack, onApply }) => {
 
               <h1 className="mt-6 text-[2.7rem] font-black tracking-tighter text-zinc-900 leading-[0.92] break-keep md:text-6xl">
                 {textOrFallback(openCall.heroTitle, "2026 UNFRAME OPEN CALL 01.")}
-                <br />
-                {textOrFallback(openCall.heroAccent, "잔상")}
               </h1>
 
               <p className="mt-4 whitespace-pre-line text-lg font-black text-[#004AAD] break-keep md:text-xl">
@@ -311,10 +310,12 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   <CircleDot size={12} />
                   {textOrFallback(openCall.mediumText, OPEN_CALL_FALLBACK.mediumText)}
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
-                  <Sparkles size={12} />
-                  {textOrFallback(openCall.themeHanja, "殘像")}
-                </span>
+                {heroAccent ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black tracking-[0.16em] text-[#6e8d00]">
+                    <Sparkles size={12} />
+                    {heroAccent}
+                  </span>
+                ) : null}
               </div>
 
               <div className="mt-7 grid gap-3 md:grid-cols-2">
