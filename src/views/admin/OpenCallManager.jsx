@@ -28,9 +28,12 @@ import {
   OPEN_CALL_TEMPLATE_VARIABLES,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
+  buildFallbackDescriptionSections,
   normalizeOpenCallCompletionSettings,
+  normalizeOpenCallDescriptionSections,
   normalizeOpenCallFormSettings,
   normalizeOpenCallFaqs,
+  normalizeOpenCallLandingLabels,
   normalizeOpenCallNotificationSettings,
   renderOpenCallTemplate,
 } from "../../constants/openCall";
@@ -81,19 +84,54 @@ const STATUS_META = {
   },
 };
 
-const createEmptySection = () => ({ title: "", body: "" });
+const createDescriptionSectionId = () =>
+  `section_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const normalizeSections = (sections) => {
-  const list = Array.isArray(sections) ? sections : [];
-  if (list.length === 0) {
-    return [createEmptySection()];
-  }
+const createEmptyDescriptionSection = (order = 1) => ({
+  id: createDescriptionSectionId(),
+  title: "새 섹션",
+  body: "",
+  order,
+  isVisible: true,
+});
 
-  return list.map((section) => ({
-    title: section?.title || "",
-    body: section?.body || "",
-  }));
+const normalizeDescriptionSectionDrafts = (sections) =>
+  normalizeOpenCallDescriptionSections(Array.isArray(sections) ? sections : []).map(
+    (section, index) => ({
+      id: section.id || createDescriptionSectionId(),
+      title: section.title || "",
+      body: section.body || "",
+      order: Number.isFinite(Number(section.order)) ? Number(section.order) : index + 1,
+      isVisible: section.isVisible !== false,
+    })
+  );
+
+const buildDescriptionSectionDrafts = (call) => {
+  const source =
+    Array.isArray(call?.descriptionSections) && call.descriptionSections.length > 0
+      ? call.descriptionSections
+      : buildFallbackDescriptionSections(call);
+
+  const normalized = normalizeDescriptionSectionDrafts(source);
+  return normalized.length > 0 ? normalized : [createEmptyDescriptionSection(1)];
 };
+
+const getNextDescriptionSectionOrder = (sections) => {
+  const list = Array.isArray(sections) ? sections : [];
+  return list.reduce((max, section) => {
+    const order = Number(section?.order);
+    return Number.isFinite(order) ? Math.max(max, order) : max;
+  }, 0) + 1;
+};
+
+const normalizeDescriptionSectionPayload = (sections) =>
+  normalizeDescriptionSectionDrafts(Array.isArray(sections) ? sections : []).map((section, index) => ({
+    id: section.id || createDescriptionSectionId(),
+    title: section.title || "",
+    body: section.body || "",
+    order: Number.isFinite(Number(section.order)) ? Number(section.order) : index + 1,
+    isVisible: section.isVisible !== false,
+  }));
 
 const toDatetimeLocalValue = (value) => {
   if (!value) return "";
@@ -389,9 +427,16 @@ const OpenCallManager = ({ db, appId, applications }) => {
             badgeText: call.badgeText || "OPEN",
             heroTitle: call.heroTitle || "",
             heroAccent: call.heroAccent || "",
+            statusNoticeText:
+              call.statusNoticeText ||
+              OPEN_CALL_FALLBACK.statusNoticeText ||
+              "현재 지원서를 접수하고 있습니다.",
             isVisible: call.isVisible !== false,
             isFeatured: !!call.isFeatured,
-            descriptionSections: normalizeSections(call.descriptionSections),
+            descriptionSections: buildDescriptionSectionDrafts(call),
+            landingLabels: normalizeOpenCallLandingLabels(
+              call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
+            ),
             formSettings: normalizeOpenCallFormSettings(call.formSettings),
             completionSettings: normalizeOpenCallCompletionSettings(
               call.completionSettings
@@ -400,9 +445,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
               call.notificationSettings
             ),
             mediumText: call.mediumText || "",
-            eligibilityText: call.eligibilityText || "",
-            benefitText: call.benefitText || "",
-            magazineText: call.magazineText || "",
             applyButtonText: call.applyButtonText || "",
             faqs: normalizeFaqDrafts(call.faqs),
             applicationStartAt: toDatetimeLocalValue(call.applicationStartAt),
@@ -573,7 +615,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
     }));
     setDrafts((prev) => {
       const current = prev[callId] || {};
-      const sections = normalizeSections(current.descriptionSections);
+      const sections = normalizeDescriptionSectionDrafts(current.descriptionSections);
 
       return {
         ...prev,
@@ -594,12 +636,15 @@ const OpenCallManager = ({ db, appId, applications }) => {
     }));
     setDrafts((prev) => {
       const current = prev[callId] || {};
-      const sections = normalizeSections(current.descriptionSections);
+      const sections = normalizeDescriptionSectionDrafts(current.descriptionSections);
       return {
         ...prev,
         [callId]: {
           ...current,
-          descriptionSections: [...sections, createEmptySection()],
+          descriptionSections: [
+            ...sections,
+            createEmptyDescriptionSection(getNextDescriptionSectionOrder(sections)),
+          ],
         },
       };
     });
@@ -612,7 +657,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
     }));
     setDrafts((prev) => {
       const current = prev[callId] || {};
-      const sections = normalizeSections(current.descriptionSections).filter(
+      const sections = normalizeDescriptionSectionDrafts(current.descriptionSections).filter(
         (_, sectionIndex) => sectionIndex !== index
       );
 
@@ -621,7 +666,31 @@ const OpenCallManager = ({ db, appId, applications }) => {
         [callId]: {
           ...current,
           descriptionSections:
-            sections.length > 0 ? sections : [createEmptySection()],
+            sections.length > 0 ? sections : [createEmptyDescriptionSection(1)],
+        },
+      };
+    });
+  };
+
+  const updateLandingLabel = (callId, key, value) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const landingLabels = normalizeOpenCallLandingLabels(
+        current.landingLabels || OPEN_CALL_FALLBACK.landingLabels
+      );
+
+      return {
+        ...prev,
+        [callId]: {
+          ...current,
+          landingLabels: {
+            ...landingLabels,
+            [key]: value,
+          },
         },
       };
     });
@@ -736,10 +805,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
     const payload = {
       ...call,
       ...draft,
-      descriptionSections: normalizeSections(draft.descriptionSections).map((section) => ({
-        title: section.title || "",
-        body: section.body || "",
-      })),
+      statusNoticeText:
+        draft.statusNoticeText || call.statusNoticeText || OPEN_CALL_FALLBACK.statusNoticeText,
+      descriptionSections: normalizeDescriptionSectionPayload(
+        draft.descriptionSections || call.descriptionSections
+      ),
+      landingLabels: normalizeOpenCallLandingLabels(
+        draft.landingLabels || call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
+      ),
       faqs: normalizeFaqPayload(draft.faqs),
       formSettings: normalizeOpenCallFormSettings(
         draft.formSettings || call.formSettings || OPEN_CALL_FALLBACK.formSettings
@@ -1181,7 +1254,20 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
                   </div>
 
-                  <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  <div className="mt-5 rounded-[28px] border border-zinc-100 bg-white p-4 md:p-5">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                          상단 공모 소개
+                        </p>
+                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-400 break-keep">
+                          Hero, 상태 안내, CTA 문구, FAQ 라벨을 한 곳에서 수정합니다. 상세 설명은 아래
+                          설명 카드에서만 관리합니다.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
                         title
@@ -1263,36 +1349,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
                       <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        eligibilityText
+                        statusNoticeText
                       </label>
                       <textarea
                         rows={4}
-                        value={draft.eligibilityText || ""}
-                        onChange={(e) => updateDraft(call.id, "eligibilityText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        benefitText
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={draft.benefitText || ""}
-                        onChange={(e) => updateDraft(call.id, "benefitText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        magazineText
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={draft.magazineText || ""}
-                        onChange={(e) => updateDraft(call.id, "magazineText", e.target.value)}
+                        value={draft.statusNoticeText || ""}
+                        onChange={(e) => updateDraft(call.id, "statusNoticeText", e.target.value)}
                         className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
                       />
                     </div>
@@ -1306,6 +1368,64 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         onChange={(e) => updateDraft(call.id, "applyButtonText", e.target.value)}
                         className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                       />
+                    </div>
+
+                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4 xl:col-span-2">
+                      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                        landingLabels
+                      </p>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                            readyToApplyLabel
+                          </span>
+                          <input
+                            value={draft.landingLabels?.readyToApplyLabel || ""}
+                            onChange={(e) =>
+                              updateLandingLabel(call.id, "readyToApplyLabel", e.target.value)
+                            }
+                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                          />
+                        </label>
+
+                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                            faqEyebrow
+                          </span>
+                          <input
+                            value={draft.landingLabels?.faqEyebrow || ""}
+                            onChange={(e) =>
+                              updateLandingLabel(call.id, "faqEyebrow", e.target.value)
+                            }
+                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                          />
+                        </label>
+
+                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                            faqTitle
+                          </span>
+                          <input
+                            value={draft.landingLabels?.faqTitle || ""}
+                            onChange={(e) => updateLandingLabel(call.id, "faqTitle", e.target.value)}
+                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                          />
+                        </label>
+
+                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                            faqDescription
+                          </span>
+                          <textarea
+                            rows={3}
+                            value={draft.landingLabels?.faqDescription || ""}
+                            onChange={(e) =>
+                              updateLandingLabel(call.id, "faqDescription", e.target.value)
+                            }
+                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                          />
+                        </label>
+                      </div>
                     </div>
 
                     <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
@@ -2493,64 +2613,113 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
 
                       <div className="space-y-3">
-                        {normalizeSections(draft.descriptionSections).map((section, index) => (
-                          <div
-                            key={`${call.id}-section-${index}`}
-                            className="rounded-[24px] border border-zinc-100 bg-zinc-50 p-4"
-                          >
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-                              <div className="flex-1">
-                                <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                  section title
-                                </label>
-                                <input
-                                  value={section.title || ""}
-                                  onChange={(e) =>
-                                    updateDescriptionSection(
-                                      call.id,
-                                      index,
-                                      "title",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                />
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => removeDescriptionSection(call.id, index)}
-                                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500"
+                        {normalizeDescriptionSectionDrafts(draft.descriptionSections).map(
+                          (section, index) => {
+                            return (
+                              <div
+                                key={section.id || `${call.id}-section-${index}`}
+                                className="rounded-[24px] border border-zinc-100 bg-zinc-50 p-4"
                               >
-                                <Plus size={14} className="rotate-45" />
-                                섹션 삭제
-                              </button>
-                            </div>
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                      <div className="flex-1">
+                                        <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                          section title
+                                        </label>
+                                        <input
+                                          value={section.title || ""}
+                                          onChange={(e) =>
+                                            updateDescriptionSection(
+                                              call.id,
+                                              index,
+                                              "title",
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                        />
+                                      </div>
 
-                            <div className="mt-3">
-                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                section body
-                              </label>
-                              <textarea
-                                rows={4}
-                                value={section.body || ""}
-                                onChange={(e) =>
-                                  updateDescriptionSection(
-                                    call.id,
-                                    index,
-                                    "body",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </div>
-                          </div>
-                        ))}
+                                      <div className="sm:w-28">
+                                        <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                          order
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          value={section.order || index + 1}
+                                          onChange={(e) =>
+                                            updateDescriptionSection(
+                                              call.id,
+                                              index,
+                                              "order",
+                                              e.target.value
+                                            )
+                                          }
+                                          className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateDescriptionSection(
+                                            call.id,
+                                            index,
+                                            "isVisible",
+                                            section.isVisible === false
+                                          )
+                                        }
+                                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                          section.isVisible === false
+                                            ? "border border-zinc-200 bg-white text-zinc-500"
+                                            : "bg-[#004aad] text-white"
+                                        }`}
+                                      >
+                                        {section.isVisible === false
+                                          ? "숨김"
+                                          : "사용자 화면에 노출"}
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => removeDescriptionSection(call.id, index)}
+                                        className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500"
+                                      >
+                                        <Plus size={14} className="rotate-45" />
+                                        섹션 삭제
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3">
+                                  <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                    section body
+                                  </label>
+                                  <textarea
+                                    rows={4}
+                                    value={section.body || ""}
+                                    onChange={(e) =>
+                                      updateDescriptionSection(
+                                        call.id,
+                                        index,
+                                        "body",
+                                        e.target.value
+                                      )
+                                    }
+                                    className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
+                        )}
                       </div>
                     </div>
-                  </div>
-                </div>
 
                 <SaveStatusRow call={call} sticky />
 
@@ -2781,7 +2950,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     )}
                   </div>
                 ) : null}
-              </div>
+              </div></div></div></div>
             );
           })}
         </div>

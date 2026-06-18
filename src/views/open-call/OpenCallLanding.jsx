@@ -16,8 +16,10 @@ import {
   DEFAULT_OPEN_CALL_FAQS,
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
+  buildFallbackDescriptionSections,
   getOpenCallDisplayStatus,
   parseOpenCallDate,
+  normalizeOpenCallDescriptionSections,
   normalizeOpenCallFaqs,
 } from "../../constants/openCall";
 
@@ -42,10 +44,21 @@ const Section = ({ index, title, children, accent = false }) => (
 );
 
 const normalizeOpenCall = (openCall) =>
-  createFallbackOpenCall({
-    ...openCall,
-    id: openCall?.id || OPEN_CALL_FALLBACK.id,
-  });
+  (() => {
+    const normalized = createFallbackOpenCall({
+      ...openCall,
+      id: openCall?.id || OPEN_CALL_FALLBACK.id,
+    });
+    const descriptionSections =
+      Array.isArray(openCall?.descriptionSections) && openCall.descriptionSections.length > 0
+        ? normalizeOpenCallDescriptionSections(openCall.descriptionSections)
+        : buildFallbackDescriptionSections(openCall);
+
+    return {
+      ...normalized,
+      descriptionSections,
+    };
+  })();
 
 const getOpenCallSortTimestamp = (call) => {
   const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
@@ -171,8 +184,12 @@ const OpenCallLanding = ({ onBack, onApply }) => {
   const applyButtonText = openCall.applyButtonText?.trim()
     ? openCall.applyButtonText
     : OPEN_CALL_FALLBACK.applyButtonText;
+  const landingLabels = openCall.landingLabels || OPEN_CALL_FALLBACK.landingLabels;
   const statusLabel = STATUS_LABELS[displayStatus.key] || displayStatus.label;
-  const statusHelpText = STATUS_HELP_TEXTS[displayStatus.key] || "";
+  const statusHelpText = textOrFallback(
+    openCall.statusNoticeText,
+    STATUS_HELP_TEXTS[displayStatus.key] || ""
+  );
   const disabledButtonText =
     STATUS_DISABLED_BUTTON_TEXTS[displayStatus.key] || displayStatus.label;
 
@@ -186,7 +203,10 @@ const OpenCallLanding = ({ onBack, onApply }) => {
   const sections = (Array.isArray(openCall.descriptionSections)
     ? openCall.descriptionSections
     : OPEN_CALL_FALLBACK.descriptionSections
-  ).filter((section) => section?.title?.trim() || section?.body?.trim());
+  )
+    .filter((section) => section?.isVisible !== false)
+    .filter((section) => section?.title?.trim() || section?.body?.trim())
+    .sort((a, b) => (a.order || 999) - (b.order || 999));
   const faqs = useMemo(() => {
     const source = Array.isArray(openCall?.faqs) ? openCall.faqs : DEFAULT_OPEN_CALL_FAQS;
     return normalizeOpenCallFaqs(source)
@@ -316,38 +336,6 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                 })}
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[28px] border border-white/70 bg-white/75 p-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                    지원 대상
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
-                    {textOrFallback(
-                      openCall.eligibilityText,
-                      OPEN_CALL_FALLBACK.eligibilityText
-                    )}
-                  </p>
-                </div>
-
-                <div className="rounded-[28px] border border-white/70 bg-white/75 p-5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                    선정 이후
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
-                    {textOrFallback(openCall.benefitText, OPEN_CALL_FALLBACK.benefitText)}
-                  </p>
-                </div>
-
-                <div className="rounded-[28px] border border-white/70 bg-white/75 p-5 md:col-span-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                    U# 매거진
-                  </p>
-                  <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep">
-                    {textOrFallback(openCall.magazineText, OPEN_CALL_FALLBACK.magazineText)}
-                  </p>
-                </div>
-              </div>
-
               <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/70 px-4 py-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
                   상태 안내
@@ -383,7 +371,10 @@ const OpenCallLanding = ({ onBack, onApply }) => {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
-                Ready to apply
+                {textOrFallback(
+                  landingLabels.readyToApplyLabel,
+                  OPEN_CALL_FALLBACK.landingLabels.readyToApplyLabel
+                )}
               </p>
               <p className="text-lg font-black tracking-tight text-zinc-900 break-keep md:text-xl">
                 {textOrFallback(openCall.title, OPEN_CALL_FALLBACK.title)}
@@ -414,14 +405,23 @@ const OpenCallLanding = ({ onBack, onApply }) => {
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-                  Q&amp;A
+                  {textOrFallback(
+                    landingLabels.faqEyebrow,
+                    OPEN_CALL_FALLBACK.landingLabels.faqEyebrow
+                  )}
                 </p>
                 <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-950 md:text-3xl">
-                  자주 묻는 질문
+                  {textOrFallback(
+                    landingLabels.faqTitle,
+                    OPEN_CALL_FALLBACK.landingLabels.faqTitle
+                  )}
                 </h2>
               </div>
               <p className="text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                공고마다 자주 묻는 내용을 먼저 확인할 수 있도록 정리했습니다.
+                {textOrFallback(
+                  landingLabels.faqDescription,
+                  OPEN_CALL_FALLBACK.landingLabels.faqDescription
+                )}
               </p>
             </div>
 

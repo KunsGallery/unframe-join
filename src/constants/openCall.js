@@ -160,6 +160,85 @@ const toNumber = (value, fallback) => {
 const toText = (value, fallback = "") =>
   typeof value === "string" ? value : fallback;
 
+const createOpenCallDescriptionSectionId = () =>
+  `section_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+const cloneDescriptionSection = (section = {}, fallbackOrder = 1) => ({
+  id:
+    typeof section?.id === "string" && section.id.trim()
+      ? section.id.trim()
+      : createOpenCallDescriptionSectionId(),
+  title: toText(section?.title, ""),
+  body: toText(section?.body, ""),
+  order: toNumber(section?.order, fallbackOrder),
+  isVisible: toBoolean(section?.isVisible, true),
+});
+
+export const DEFAULT_OPEN_CALL_LANDING_LABELS = {
+  readyToApplyLabel: "READY TO APPLY",
+  faqEyebrow: "Q&A",
+  faqTitle: "자주 묻는 질문",
+  faqDescription: "공고마다 자주 묻는 내용을 먼저 확인할 수 있도록 정리했습니다.",
+};
+
+export const normalizeOpenCallLandingLabels = (landingLabels = {}) => ({
+  ...DEFAULT_OPEN_CALL_LANDING_LABELS,
+  ...landingLabels,
+  readyToApplyLabel: toText(
+    landingLabels?.readyToApplyLabel,
+    DEFAULT_OPEN_CALL_LANDING_LABELS.readyToApplyLabel
+  ),
+  faqEyebrow: toText(
+    landingLabels?.faqEyebrow,
+    DEFAULT_OPEN_CALL_LANDING_LABELS.faqEyebrow
+  ),
+  faqTitle: toText(landingLabels?.faqTitle, DEFAULT_OPEN_CALL_LANDING_LABELS.faqTitle),
+  faqDescription: toText(
+    landingLabels?.faqDescription,
+    DEFAULT_OPEN_CALL_LANDING_LABELS.faqDescription
+  ),
+});
+
+export const normalizeOpenCallDescriptionSections = (sections = []) => {
+  const list = Array.isArray(sections) ? sections : [];
+
+  return list
+    .map((section, index) => cloneDescriptionSection(section, index + 1))
+    .sort((a, b) => {
+      const orderDiff = toNumber(a.order, 0) - toNumber(b.order, 0);
+      if (orderDiff !== 0) return orderDiff;
+      return String(a.title || a.id || "").localeCompare(String(b.title || b.id || ""), "ko");
+    });
+};
+
+export const buildFallbackDescriptionSections = (openCall = {}) =>
+  [
+    openCall?.eligibilityText && {
+      title: "지원 대상",
+      body: openCall.eligibilityText,
+      order: 1,
+      isVisible: true,
+    },
+    openCall?.mediumText && {
+      title: "대상 매체",
+      body: openCall.mediumText,
+      order: 2,
+      isVisible: true,
+    },
+    openCall?.benefitText && {
+      title: "선정 이후",
+      body: openCall.benefitText,
+      order: 3,
+      isVisible: true,
+    },
+    openCall?.magazineText && {
+      title: "U# 매거진 인터뷰 검토",
+      body: openCall.magazineText,
+      order: 4,
+      isVisible: true,
+    },
+  ].filter(Boolean);
+
 const cloneCustomField = (field = {}, fallbackOrder = 1) => {
   const type = OPEN_CALL_CUSTOM_FIELD_TYPES.includes(field?.type)
     ? field.type
@@ -386,30 +465,42 @@ export const OPEN_CALL_FALLBACK = {
   themeHanja: "殘像",
   heroTitle: "2026 UNFRAME OPEN CALL 01.",
   heroAccent: "잔상",
+  statusNoticeText: "현재 지원서를 접수하고 있습니다.",
   introText:
     "설명보다 먼저 마음에 남는 작품이 있습니다. 한 번 보고 나면 쉽게 사라지지 않는 작업, 조용히 다시 떠오르는 작품을 찾습니다.",
-  descriptionSections: [
+  descriptionSections: normalizeOpenCallDescriptionSections([
     {
       title: "이런 작품을 찾습니다",
       body: "특정 장르나 어려운 설명보다, 작품 자체의 힘으로 보는 사람의 시선을 붙잡는 창작자를 찾습니다.",
+      order: 1,
+      isVisible: true,
     },
     {
       title: "지원 대상",
       body: "전시 또는 온라인 공개가 가능한 독립적인 완성작을 대상으로 합니다. 미완성 아이디어나 과정 기록은 이번 회차의 대상이 아닙니다.",
+      order: 2,
+      isVisible: true,
     },
     {
       title: "대상 매체",
       body: "회화, 드로잉, 사진, 오브제, 조각, 설치, 공예, 영상 등 매체와 장르는 제한하지 않습니다.",
+      order: 3,
+      isVisible: true,
     },
     {
       title: "선정 이후",
       body: "1차 선정 작가의 일부 작업은 UNFRAME 공식 홈페이지를 통해 온라인 쇼케이스로 공개될 예정이며, 관람객 리뷰는 최종 심사와 아카이빙에 참고됩니다.",
+      order: 4,
+      isVisible: true,
     },
     {
       title: "U# 매거진 인터뷰 검토",
       body: "좋은 반응을 얻은 창작자는 최종 전시 선정 여부와 별개로 U# 매거진 비대면 인터뷰 대상으로 검토됩니다.",
+      order: 5,
+      isVisible: true,
     },
-  ],
+  ]),
+  landingLabels: normalizeOpenCallLandingLabels(),
   mediumText:
     "회화, 드로잉, 사진, 오브제, 조각, 설치, 공예, 영상 등 매체와 장르는 제한하지 않습니다.",
   eligibilityText:
@@ -472,9 +563,18 @@ export const getOpenCallDisplayStatus = (openCall, now = new Date()) => {
 export const createFallbackOpenCall = (overrides = {}) => ({
   ...OPEN_CALL_FALLBACK,
   ...overrides,
-  descriptionSections: Array.isArray(overrides.descriptionSections)
-    ? overrides.descriptionSections
-    : OPEN_CALL_FALLBACK.descriptionSections,
+  statusNoticeText: toText(
+    overrides.statusNoticeText,
+    OPEN_CALL_FALLBACK.statusNoticeText
+  ),
+  descriptionSections: normalizeOpenCallDescriptionSections(
+    Array.isArray(overrides.descriptionSections)
+      ? overrides.descriptionSections
+      : OPEN_CALL_FALLBACK.descriptionSections
+  ),
+  landingLabels: normalizeOpenCallLandingLabels(
+    overrides.landingLabels || OPEN_CALL_FALLBACK.landingLabels
+  ),
   faqs: normalizeOpenCallFaqs(
     Object.prototype.hasOwnProperty.call(overrides, "faqs")
       ? overrides.faqs
