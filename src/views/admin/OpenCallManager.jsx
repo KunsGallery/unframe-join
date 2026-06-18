@@ -7,6 +7,7 @@ import {
   Download,
   Loader2,
   Megaphone,
+  CircleDot,
   Plus,
   Save,
   Star,
