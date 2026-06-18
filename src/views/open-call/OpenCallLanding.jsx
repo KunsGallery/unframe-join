@@ -16,10 +16,9 @@ import {
   DEFAULT_OPEN_CALL_FAQS,
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
-  buildFallbackDescriptionSections,
   getOpenCallDisplayStatus,
+  getOpenCallDescriptionSections,
   parseOpenCallDate,
-  normalizeOpenCallDescriptionSections,
   normalizeOpenCallFaqs,
 } from "../../constants/openCall";
 
@@ -43,23 +42,6 @@ const Section = ({ index, title, children, accent = false }) => (
   </div>
 );
 
-const normalizeOpenCall = (openCall) =>
-  (() => {
-    const normalized = createFallbackOpenCall({
-      ...openCall,
-      id: openCall?.id || OPEN_CALL_FALLBACK.id,
-    });
-    const descriptionSections =
-      Array.isArray(openCall?.descriptionSections) && openCall.descriptionSections.length > 0
-        ? normalizeOpenCallDescriptionSections(openCall.descriptionSections)
-        : buildFallbackDescriptionSections(openCall);
-
-    return {
-      ...normalized,
-      descriptionSections,
-    };
-  })();
-
 const getOpenCallSortTimestamp = (call) => {
   const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
   if (applicationStartAt) return applicationStartAt.getTime();
@@ -77,23 +59,28 @@ const sortByLatestOpenCall = (calls) =>
   [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
 
 const pickActiveOpenCall = (calls) => {
-  const normalized = (calls || [])
-    .map(normalizeOpenCall)
-    .filter((call) => call.isVisible !== false && call.status !== "archived");
+  const candidates = (calls || [])
+    .map((call) => ({
+      raw: call,
+      normalized: createFallbackOpenCall({
+        ...call,
+        id: call?.id || OPEN_CALL_FALLBACK.id,
+      }),
+    }))
+    .filter(({ normalized }) => normalized.isVisible !== false && normalized.status !== "archived");
 
-  if (normalized.length === 0) {
+  if (candidates.length === 0) {
     return createFallbackOpenCall();
   }
 
-  const featuredVisible = normalized.filter((call) => call.isFeatured);
-  const featuredActive = featuredVisible.filter((call) => {
-    const displayStatus = getOpenCallDisplayStatus(call);
+  const isActiveCandidate = ({ normalized }) => {
+    const displayStatus = getOpenCallDisplayStatus(normalized);
     return displayStatus.key === "open" || displayStatus.key === "upcoming";
-  });
-  const activeVisible = normalized.filter((call) => {
-    const displayStatus = getOpenCallDisplayStatus(call);
-    return displayStatus.key === "open" || displayStatus.key === "upcoming";
-  });
+  };
+
+  const featuredVisible = candidates.filter(({ normalized }) => normalized.isFeatured);
+  const featuredActive = featuredVisible.filter(isActiveCandidate);
+  const activeVisible = candidates.filter(isActiveCandidate);
 
   const candidatePool =
     featuredActive.length > 0
@@ -102,9 +89,12 @@ const pickActiveOpenCall = (calls) => {
       ? activeVisible
       : featuredVisible.length > 0
       ? featuredVisible
-      : normalized;
+      : candidates;
 
-  return sortByLatestOpenCall(candidatePool)[0] || createFallbackOpenCall();
+  const sortedCandidates = sortByLatestOpenCall(candidatePool.map(({ normalized }) => normalized));
+  const selected = sortedCandidates[0];
+
+  return candidatePool.find(({ normalized }) => normalized.id === selected?.id)?.raw || selected || createFallbackOpenCall();
 };
 
 const formatDateTime = (value) => {
@@ -168,13 +158,22 @@ const OpenCallLanding = ({ onBack, onApply }) => {
     return () => unsubscribe();
   }, []);
 
-  const openCall = useMemo(() => pickActiveOpenCall(openCalls), [openCalls]);
+  const selectedOpenCall = useMemo(() => pickActiveOpenCall(openCalls), [openCalls]);
+  const openCall = useMemo(
+    () => createFallbackOpenCall(selectedOpenCall),
+    [selectedOpenCall]
+  );
+  const visibleSections = useMemo(
+    () => getOpenCallDescriptionSections(selectedOpenCall),
+    [selectedOpenCall]
+  );
 
   useEffect(() => {
     if (import.meta.env.DEV) {
-      console.log("ACTIVE_OPEN_CALL_FOR_LANDING", openCall);
+      console.log("OPEN_CALL_LANDING_ACTIVE_ID", openCall?.id);
+      console.log("OPEN_CALL_LANDING_DESCRIPTION_SECTIONS", visibleSections);
     }
-  }, [openCall]);
+  }, [openCall, visibleSections]);
 
   const displayStatus = useMemo(
     () => getOpenCallDisplayStatus(openCall),
@@ -201,13 +200,6 @@ const OpenCallLanding = ({ onBack, onApply }) => {
     onApply(openCall);
   };
 
-  const sections = (Array.isArray(openCall.descriptionSections)
-    ? openCall.descriptionSections
-    : OPEN_CALL_FALLBACK.descriptionSections
-  )
-    .filter((section) => section?.isVisible !== false)
-    .filter((section) => section?.title?.trim() || section?.body?.trim())
-    .sort((a, b) => (a.order || 999) - (b.order || 999));
   const faqs = useMemo(() => {
     const source = Array.isArray(openCall?.faqs) ? openCall.faqs : DEFAULT_OPEN_CALL_FAQS;
     return normalizeOpenCallFaqs(source)
@@ -356,11 +348,11 @@ const OpenCallLanding = ({ onBack, onApply }) => {
         </div>
 
         <div className="mt-6 grid gap-4 md:mt-8 md:grid-cols-2">
-          {sections.map((section, index) => (
-            <Section
-              key={`${section.title}-${index}`}
-              index={String(index + 1).padStart(2, "0")}
-              title={section.title}
+                {visibleSections.map((section, index) => (
+                  <Section
+                    key={`${section.title}-${index}`}
+                    index={String(index + 1).padStart(2, "0")}
+                    title={section.title}
               accent={index % 3 === 0}
             >
               {section.body}

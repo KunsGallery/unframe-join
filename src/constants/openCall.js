@@ -239,6 +239,30 @@ export const buildFallbackDescriptionSections = (openCall = {}) =>
     },
   ].filter(Boolean);
 
+export const getOpenCallDescriptionSections = (openCall = {}) => {
+  if (!openCall) return [];
+
+  if (Object.prototype.hasOwnProperty.call(openCall, "descriptionSections")) {
+    return normalizeOpenCallDescriptionSections(Array.isArray(openCall.descriptionSections) ? openCall.descriptionSections : [])
+      .filter((section) => section?.isVisible !== false)
+      .filter((section) => {
+        const title = String(section?.title || "").trim();
+        const body = String(section?.body || "").trim();
+        return title || body;
+      })
+      .sort((a, b) => Number(a?.order || 999) - Number(b?.order || 999));
+  }
+
+  return normalizeOpenCallDescriptionSections(buildFallbackDescriptionSections(openCall))
+    .filter((section) => section?.isVisible !== false)
+    .filter((section) => {
+      const title = String(section?.title || "").trim();
+      const body = String(section?.body || "").trim();
+      return title || body;
+    })
+    .sort((a, b) => Number(a?.order || 999) - Number(b?.order || 999));
+};
+
 const cloneCustomField = (field = {}, fallbackOrder = 1) => {
   const type = OPEN_CALL_CUSTOM_FIELD_TYPES.includes(field?.type)
     ? field.type

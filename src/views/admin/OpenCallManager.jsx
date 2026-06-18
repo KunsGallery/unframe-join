@@ -30,6 +30,7 @@ import {
   createFallbackOpenCall,
   buildFallbackDescriptionSections,
   getOpenCallDisplayStatus,
+  getOpenCallDescriptionSections,
   parseOpenCallDate,
   normalizeOpenCallCompletionSettings,
   normalizeOpenCallDescriptionSections,
@@ -109,13 +110,18 @@ const normalizeDescriptionSectionDrafts = (sections) =>
   );
 
 const buildDescriptionSectionDrafts = (call) => {
-  const source =
-    Array.isArray(call?.descriptionSections) && call.descriptionSections.length > 0
+  const hasDescriptionSectionsField = Object.prototype.hasOwnProperty.call(
+    call || {},
+    "descriptionSections"
+  );
+  const source = hasDescriptionSectionsField
+    ? Array.isArray(call?.descriptionSections)
       ? call.descriptionSections
-      : buildFallbackDescriptionSections(call);
+      : []
+    : buildFallbackDescriptionSections(call);
 
   const normalized = normalizeDescriptionSectionDrafts(source);
-  return normalized.length > 0 ? normalized : [createEmptyDescriptionSection(1)];
+  return hasDescriptionSectionsField ? normalized : normalized.length > 0 ? normalized : [createEmptyDescriptionSection(1)];
 };
 
 const getNextDescriptionSectionOrder = (sections) => {
@@ -1302,6 +1308,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       ) : (
         <div className="space-y-5">
           {sortedCalls.map((call) => {
+            const rawCall = openCalls.find((item) => item.id === call.id) || call;
             const draft = drafts[call.id] || {};
             const applicantCount = getApplicantItems(applications, call.id).length;
             const isSelected = selectedOpenCallId === call.id;
@@ -1326,13 +1333,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const previewLandingLabels = normalizeOpenCallLandingLabels(
               draft.landingLabels || call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
             );
-            const previewDescriptionSections = normalizeDescriptionSectionDrafts(
-              draft.descriptionSections && draft.descriptionSections.length > 0
-                ? draft.descriptionSections
-                : call.descriptionSections && call.descriptionSections.length > 0
-                ? call.descriptionSections
-                : buildFallbackDescriptionSections(call)
-            ).filter((section) => section.isVisible !== false && (section.title.trim() || section.body.trim()));
+            const previewOpenCall = { ...call, ...draft };
+            const firestoreDescriptionSections = Array.isArray(rawCall.descriptionSections)
+              ? rawCall.descriptionSections
+              : [];
+            const formDescriptionSections = normalizeDescriptionSectionDrafts(
+              draft.descriptionSections
+            );
+            const previewDescriptionSections = getOpenCallDescriptionSections(previewOpenCall);
             const heroEditId = `open-call-${call.id}-hero`;
             const descriptionEditId = `open-call-${call.id}-description`;
             const ctaEditId = `open-call-${call.id}-cta`;
@@ -1479,14 +1487,26 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <div className="mt-4 rounded-[32px] border border-zinc-100 bg-[#fbfaf6] p-5 md:p-6">
-                      <div className="flex items-center gap-3 text-[#004AAD]">
+                      <div className="mt-4 rounded-[32px] border border-zinc-100 bg-[#fbfaf6] p-5 md:p-6">
+                        <div className="flex items-center gap-3 text-[#004AAD]">
                         <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6">
                           <Megaphone size={18} />
                         </span>
                         <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
                           OPEN CALL
                         </span>
+                      </div>
+
+                      <div className="mt-4 grid gap-2 rounded-[24px] border border-white bg-white/80 px-4 py-3 md:grid-cols-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
+                          편집 form descriptionSections: {formDescriptionSections.length}
+                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
+                          Firestore descriptionSections: {firestoreDescriptionSections.length}
+                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
+                          /opencall preview descriptionSections: {previewDescriptionSections.length}
+                        </p>
                       </div>
 
                       <div className="mt-5 flex flex-wrap items-center gap-2">
