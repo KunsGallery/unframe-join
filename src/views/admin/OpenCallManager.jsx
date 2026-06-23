@@ -1507,6 +1507,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
     previewedOpenCallForStatus?.isFeatured === true &&
     previewedOpenCallForStatus?.isVisible === false;
   const editingOpenCall = previewedOpenCallForStatus || previewedOpenCall || null;
+  const previewApplyButtonText = String(
+    editingOpenCall?.applyButtonText || OPEN_CALL_FALLBACK.applyButtonText
+  ).trim() || OPEN_CALL_FALLBACK.applyButtonText;
+  const previewDescriptionSections = getOpenCallDescriptionSections(editingOpenCall);
   const editingPublicationState = getPublicationState(editingOpenCall);
   const activePublicationState = getPublicationState(activeOpenCall);
   const activeDisplayStatus = activeOpenCallView
