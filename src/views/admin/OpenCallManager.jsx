@@ -258,6 +258,166 @@ const normalizeOpenCallPublicationState = (call = {}) => {
   return next;
 };
 
+const PUBLICATION_STATE_OPTIONS = [
+  "private",
+  "public",
+  "featured",
+  "archived",
+];
+
+const PUBLICATION_STATE_META = {
+  private: {
+    label: "비공개",
+    tone: "border-zinc-200 bg-zinc-50 text-zinc-600",
+  },
+  public: {
+    label: "공개 · 대표 아님",
+    tone: "border-sky-200 bg-sky-50 text-sky-700",
+  },
+  featured: {
+    label: "/opencall 대표 공고",
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  },
+  archived: {
+    label: "마감/보관",
+    tone: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+};
+
+const getPublicationState = (call) => {
+  if (!call) return "private";
+  if (call.isVisible === false) return "private";
+  if (call.isFeatured === true) return "featured";
+  if (call.status === "closed" || call.status === "archived") return "archived";
+  return "public";
+};
+
+const getPublicationStateLabel = (call) =>
+  PUBLICATION_STATE_META[getPublicationState(call)]?.label || "비공개";
+
+const buildPublicationStatePatch = (call, state) => {
+  const currentStatus = call?.status || "draft";
+
+  if (state === "private") {
+    return {
+      ...call,
+      isVisible: false,
+      isFeatured: false,
+    };
+  }
+
+  if (state === "public") {
+    return {
+      ...call,
+      isVisible: true,
+      isFeatured: false,
+      status: ["draft", "archived", "closed"].includes(currentStatus)
+        ? "open"
+        : currentStatus,
+    };
+  }
+
+  if (state === "featured") {
+    return {
+      ...call,
+      isVisible: true,
+      isFeatured: true,
+      status: ["draft", "archived", "closed"].includes(currentStatus)
+        ? "open"
+        : currentStatus,
+    };
+  }
+
+  if (state === "archived") {
+    return {
+      ...call,
+      isVisible: true,
+      isFeatured: false,
+      status: "closed",
+    };
+  }
+
+  return call;
+};
+
+const getOpenCallVisibilityDiagnostics = ({
+  editingCall,
+  activeOpenCall,
+  visibleSections,
+  applyButtonText,
+}) => {
+  const displayStatus = getOpenCallDisplayStatus(editingCall || activeOpenCall || null);
+
+  return [
+    {
+      key: "exists",
+      label: "공고 문서 있음",
+      ok: Boolean(editingCall?.id),
+    },
+    {
+      key: "visible",
+      label: "공개 상태",
+      ok: editingCall?.isVisible !== false,
+      fixLabel: "공개로 전환",
+    },
+    {
+      key: "featured",
+      label: "대표 공고 설정",
+      ok: editingCall?.isFeatured === true,
+      fixLabel: "대표 공고로 설정",
+    },
+    {
+      key: "applyable",
+      label: "접수 가능 상태 open/upcoming",
+      ok: displayStatus.key === "open" || displayStatus.key === "upcoming",
+    },
+    {
+      key: "active",
+      label: "/opencall active 공고와 일치",
+      ok: Boolean(editingCall?.id) && activeOpenCall?.id === editingCall.id,
+      fixLabel: "현재 대표 공고 편집하기",
+    },
+    {
+      key: "sections",
+      label: "상세 설명 카드 있음",
+      ok: visibleSections.length > 0,
+    },
+    {
+      key: "cta",
+      label: "신청 버튼 문구 있음",
+      ok: Boolean(applyButtonText?.trim()),
+    },
+  ];
+};
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+
+  try {
+    const date =
+      typeof value?.toDate === "function" ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return new Intl.DateTimeFormat("ko-KR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  } catch {
+    return "-";
+  }
+};
+
+const getSaveButtonLabel = (call) => {
+  const publicationState = getPublicationState(call);
+  const isReflectableFeatured =
+    publicationState === "featured" && call?.isVisible !== false;
+
+  return isReflectableFeatured ? "저장하고 /opencall에 반영" : "저장하기";
+};
+
 const buildOpenCallPreviewContext = (call, draft) => ({
   name: "김언프레임",
   email: "artist@example.com",
@@ -560,42 +720,19 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
   };
 
-  const handleToggleVisibility = (call) => {
-    const currentVisible = drafts[call.id]?.isVisible ?? call.isVisible;
-    const currentFeatured = drafts[call.id]?.isFeatured ?? call.isFeatured;
+  const handleSetPublicationState = (call, state) => {
+    if (!call?.id) return;
 
-    if (currentVisible && currentFeatured) {
+    if (state === "private" && (drafts[call.id]?.isFeatured ?? call.isFeatured)) {
       const ok = window.confirm(
         "대표 공고를 비공개로 전환하면 /opencall에 노출되지 않습니다.\n비공개로 전환하면서 대표 공고를 해제할까요?"
       );
       if (!ok) return;
-
-      updatePublicationDraft(call.id, (current) => ({
-        ...current,
-        isVisible: false,
-        isFeatured: false,
-      }));
-      return;
     }
 
-    updatePublicationDraft(call.id, (current) => ({
-      ...current,
-      isVisible: !currentVisible,
-    }));
-  };
-
-  const handleToggleFeatured = (call) => {
-    const currentFeatured = drafts[call.id]?.isFeatured ?? call.isFeatured;
-    const currentStatus = drafts[call.id]?.status ?? call.status;
-
-    updatePublicationDraft(call.id, (current) => ({
-      ...current,
-      isFeatured: !currentFeatured,
-      isVisible: !currentFeatured ? true : current.isVisible,
-      status: !currentFeatured
-        ? normalizeFeaturedOpenCallStatus(currentStatus)
-        : current.status,
-    }));
+    updatePublicationDraft(call.id, (current) =>
+      buildPublicationStatePatch(current, state)
+    );
   };
 
   const updateFormSettings = (callId, mutate) => {
@@ -972,16 +1109,22 @@ const OpenCallManager = ({ db, appId, applications }) => {
       const isHiddenFeatured =
         payload.isFeatured === true && payload.isVisible === false;
       const isActiveCall = activeCandidate?.id === call.id;
+      const savedDisplayStatus = getOpenCallDisplayStatus(payload);
+      const isVisiblePublic = payload.isVisible !== false && payload.isFeatured !== true;
 
       setTimedSaveFeedback(call.id, {
         state: "saved",
         message:
           !hasActiveOpenCall
             ? "저장되었습니다. 하지만 현재 /opencall에 노출 가능한 공고가 없습니다. 이 공고를 공개 대표 공고로 설정해야 외부 페이지에 반영됩니다."
-            : isHiddenFeatured
+            : payload.isVisible === false
+            ? "저장되었습니다. 이 공고는 비공개 상태라 외부 페이지에는 표시되지 않습니다."
+            : payload.isFeatured === true && isHiddenFeatured
             ? "저장되었습니다. 이 공고는 대표 공고지만 비공개 상태라 /opencall에는 반영되지 않습니다."
-            : isActiveCall
+            : payload.isFeatured === true && isActiveCall && savedDisplayStatus.canApply
             ? "저장되었습니다. 현재 /opencall 대표 공고이므로 외부 페이지에 반영됩니다."
+            : isVisiblePublic
+            ? "저장되었습니다. 이 공고는 공개 상태지만 /opencall 대표 공고가 아니므로 외부 메인 오픈콜 페이지에는 표시되지 않습니다."
             : "저장되었습니다. 하지만 현재 수정 중인 공고는 /opencall 노출 공고가 아니므로 외부 페이지에는 반영되지 않습니다.",
       });
     } catch (error) {
@@ -1013,6 +1156,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
   const SaveSettingsButton = ({ call, className = "" }) => {
     const feedback = saveFeedbacks[call.id];
+    const draft = drafts[call.id] || {};
+    const saveLabel = getSaveButtonLabel({ ...call, ...draft });
 
     return (
       <button
@@ -1022,7 +1167,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
         className={`inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       >
         <Save size={14} />
-        {feedback?.state === "saving" ? "저장 중..." : "설정 저장"}
+        {feedback?.state === "saving" ? "저장 중..." : saveLabel}
       </button>
     );
   };
@@ -1071,7 +1216,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
               feedback?.state
             )}`}
           >
-            {feedback?.message || "오픈콜 설정을 수정한 뒤에는 반드시 저장해 주세요."}
+            {feedback?.message || "공개 상태를 확인한 뒤 저장해 주세요."}
           </p>
           <SaveSettingsButton call={call} className="w-full md:w-auto" />
         </div>
@@ -1361,9 +1506,299 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const previewedFeaturedHidden =
     previewedOpenCallForStatus?.isFeatured === true &&
     previewedOpenCallForStatus?.isVisible === false;
+  const editingOpenCall = previewedOpenCallForStatus || previewedOpenCall || null;
+  const editingPublicationState = getPublicationState(editingOpenCall);
+  const activePublicationState = getPublicationState(activeOpenCall);
+  const activeDisplayStatus = activeOpenCallView
+    ? getOpenCallDisplayStatus(activeOpenCallView)
+    : { key: "none", label: "노출 없음", canApply: false };
+  const publicationDiagnostics = useMemo(
+    () =>
+      getOpenCallVisibilityDiagnostics({
+        editingCall: editingOpenCall,
+        activeOpenCall,
+        visibleSections: previewDescriptionSections,
+        applyButtonText: previewApplyButtonText,
+      }),
+    [activeOpenCall, editingOpenCall, previewApplyButtonText, previewDescriptionSections]
+  );
+  const diagnosticsPassCount = publicationDiagnostics.filter((check) => check.ok).length;
+  const diagnosticsAllPass = diagnosticsPassCount === publicationDiagnostics.length;
+  const externalReflectable =
+    Boolean(activeOpenCall?.id) &&
+    activePublicationState === "featured" &&
+    activeOpenCall?.isVisible !== false &&
+    (activeDisplayStatus.key === "open" || activeDisplayStatus.key === "upcoming");
 
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
+      <div className="mb-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
+                현재 /opencall 외부 노출 상태
+              </p>
+              <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep">
+                {hasActiveOpenCall
+                  ? activeOpenCallView?.title || "현재 /opencall에 노출 중인 공고"
+                  : "현재 /opencall에 노출 중인 공고가 없습니다"}
+              </h3>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                {externalReflectable
+                  ? "외부 페이지에 바로 반영될 수 있는 상태입니다."
+                  : hasActiveOpenCall
+                  ? "외부 페이지는 보이지만, 저장/발행 조건을 다시 확인하면 더 안전합니다."
+                  : "대표 공고가 비공개이거나, 노출 가능한 공고가 없습니다."}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => window.open("/opencall", "_blank", "noopener,noreferrer")}
+                className="inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90"
+              >
+                외부 페이지 열기
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeOpenCallId) return;
+                  setPreviewOpenCallId(activeOpenCallId);
+                }}
+                disabled={!activeOpenCallId}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                현재 대표 공고 편집하기
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetPublicationState(activeOpenCallView || editingOpenCall, "private")}
+                disabled={!activeOpenCallView && !editingOpenCall}
+                className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-300 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                비공개로 전환
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                공고명
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {activeOpenCallView?.title || "-"}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                현재 상태
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {hasActiveOpenCall ? (externalReflectable ? "외부 공개 중" : "노출 준비 중") : "노출 없음"}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                대표 공고 여부
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {activeOpenCallView?.isFeatured ? "YES" : "NO"}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                공개 여부
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {activeOpenCallView?.isVisible === false ? "비공개" : activeOpenCallView ? "공개" : "-"}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                접수 상태
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {activeDisplayStatus.label}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                마지막 저장/수정 시각
+              </p>
+              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                {formatDateTime(activeOpenCallView?.updatedAt || activeOpenCallView?.createdAt)}
+              </p>
+            </div>
+            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                외부 페이지 반영 가능 여부
+              </p>
+              <p
+                className={`mt-2 text-sm font-black break-keep ${
+                  externalReflectable ? "text-emerald-600" : "text-amber-600"
+                }`}
+              >
+                {externalReflectable ? "반영 가능" : "반영 불가"}
+              </p>
+            </div>
+          </div>
+
+          <details className="mt-4 rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+            <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+              개발/진단 정보 보기
+            </summary>
+            <div className="mt-3 space-y-1 text-sm font-medium text-zinc-600 break-keep">
+              <p>현재 편집 공고 ID: {previewedOpenCall?.id || "-"}</p>
+              <p>/opencall 노출 공고 ID: {activeOpenCall?.id || "-"}</p>
+              <p>일치 여부: {previewMatchesLanding ? "YES" : "NO"}</p>
+            </div>
+          </details>
+        </div>
+
+        <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
+                발행 상태
+              </p>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-zinc-900">
+                운영자가 이해하기 쉬운 상태로 바꾸기
+              </h3>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+                공개/비공개/대표 공고/마감 상태를 한 번에 고르고, 실제 저장은 아래 버튼으로
+                반영합니다.
+              </p>
+            </div>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] ${
+                PUBLICATION_STATE_META[editingPublicationState]?.tone ||
+                "border-zinc-200 bg-zinc-50 text-zinc-600"
+              }`}
+            >
+              {getPublicationStateLabel(editingOpenCall)}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {PUBLICATION_STATE_OPTIONS.map((state) => {
+              const meta = PUBLICATION_STATE_META[state];
+              const isActive = editingPublicationState === state;
+              return (
+                <button
+                  key={state}
+                  type="button"
+                  onClick={() => handleSetPublicationState(editingOpenCall, state)}
+                  className={`rounded-[22px] border px-4 py-4 text-left transition-all ${
+                    isActive
+                      ? `${meta.tone} shadow-sm`
+                      : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-[#004aad]/20 hover:bg-white"
+                  }`}
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">
+                    {meta.label}
+                  </p>
+                  <p className="mt-2 text-sm font-medium leading-relaxed break-keep">
+                    {state === "private"
+                      ? "외부 페이지에 표시하지 않습니다."
+                      : state === "public"
+                      ? "공개하지만 대표 공고로는 지정하지 않습니다."
+                      : state === "featured"
+                      ? "외부 /opencall 대표 공고로 공개합니다."
+                      : "마감 상태로 보관합니다."}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`mb-8 rounded-[32px] border p-5 md:p-6 ${
+          diagnosticsAllPass
+            ? "border-emerald-200 bg-emerald-50/60"
+            : "border-amber-200 bg-amber-50/60"
+        }`}
+      >
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
+              외부 노출 진단
+            </p>
+            <h3 className="mt-2 text-xl font-black tracking-tight text-zinc-900">
+              /opencall 반영 전 확인해야 할 항목
+            </h3>
+            <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+              {diagnosticsPassCount}/{publicationDiagnostics.length} 항목이 통과했습니다. 체크가
+              남아 있으면 외부 페이지 반영 조건을 다시 확인해 주세요.
+            </p>
+          </div>
+          <span
+            className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] ${
+              diagnosticsAllPass
+                ? "border-emerald-200 bg-white text-emerald-700"
+                : "border-amber-200 bg-white text-amber-700"
+            }`}
+          >
+            {diagnosticsAllPass ? "진단 통과" : "확인 필요"}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {publicationDiagnostics.map((check) => (
+            <div
+              key={check.key}
+              className={`rounded-[24px] border px-4 py-4 ${
+                check.ok
+                  ? "border-emerald-200 bg-white"
+                  : "border-amber-200 bg-white"
+              }`}
+            >
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                {check.label}
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                {check.ok ? (
+                  <BadgeCheck size={14} className="text-emerald-600" />
+                ) : (
+                  <AlertTriangle size={14} className="text-amber-600" />
+                )}
+                <p
+                  className={`text-sm font-black break-keep ${
+                    check.ok ? "text-emerald-700" : "text-amber-700"
+                  }`}
+                >
+                  {check.ok ? "통과" : "확인 필요"}
+                </p>
+              </div>
+              {!check.ok && check.fixLabel ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    check.key === "active"
+                      ? setPreviewOpenCallId(activeOpenCallId)
+                      : handleSetPublicationState(
+                          editingOpenCall || previewedOpenCall || activeOpenCall || null,
+                          check.key === "visible"
+                            ? "public"
+                            : check.key === "featured"
+                            ? "featured"
+                            : "public"
+                        )
+                  }
+                  className="mt-3 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-300 hover:text-amber-800"
+                >
+                  {check.fixLabel}
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad]/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -1606,6 +2041,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
               draft.landingLabels || call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
             );
             const previewOpenCall = { ...call, ...draft };
+            const publicationState = getPublicationState(previewOpenCall);
+            const visibilityButtonLabel =
+              publicationState === "private" ? "공개로 전환" : "비공개로 전환";
+            const featuredButtonLabel =
+              publicationState === "featured" ? "대표 공고 해제" : "대표 공고로 설정";
+            const saveButtonLabel = getSaveButtonLabel(previewOpenCall);
             const firestoreDescriptionSections = Array.isArray(rawCall.descriptionSections)
               ? rawCall.descriptionSections
               : [];
@@ -2216,49 +2657,61 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           <div className="flex flex-wrap items-center gap-3">
                             <button
                               type="button"
-                              onClick={() => handleToggleVisibility(call)}
-                            className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
-                              draft.isVisible ?? call.isVisible
-                                ? "bg-[#004aad] text-white"
-                                : "border border-zinc-200 bg-white text-zinc-500"
-                            }`}
-                          >
-                            {draft.isVisible ?? call.isVisible ? (
-                              <Eye size={14} />
-                            ) : (
-                              <EyeOff size={14} />
-                            )}
-                            {draft.isVisible ?? call.isVisible ? "공개 중" : "비공개"}
-                          </button>
+                              onClick={() =>
+                                handleSetPublicationState(
+                                  previewOpenCall,
+                                  publicationState === "private" ? "public" : "private"
+                                )
+                              }
+                              className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                publicationState === "private"
+                                  ? "bg-[#004aad] text-white"
+                                  : "border border-zinc-200 bg-white text-zinc-500"
+                              }`}
+                            >
+                              {publicationState === "private" ? (
+                                <EyeOff size={14} />
+                              ) : (
+                                <Eye size={14} />
+                              )}
+                              {visibilityButtonLabel}
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleToggleFeatured(call)}
-                            className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
-                              draft.isFeatured ?? call.isFeatured
-                                ? "bg-[#AAD004] text-white"
-                                : "border border-zinc-200 bg-white text-zinc-500"
-                            }`}
-                          >
-                            {(draft.isFeatured ?? call.isFeatured) ? (
-                              <BadgeCheck size={14} />
-                            ) : (
-                              <StarOff size={14} />
-                            )}
-                            {(draft.isFeatured ?? call.isFeatured) ? "대표 공고" : "일반 공고"}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSetPublicationState(
+                                  previewOpenCall,
+                                  publicationState === "featured" ? "public" : "featured"
+                                )
+                              }
+                              className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                publicationState === "featured"
+                                  ? "bg-[#AAD004] text-white"
+                                  : "border border-zinc-200 bg-white text-zinc-500"
+                              }`}
+                            >
+                              {publicationState === "featured" ? (
+                                <BadgeCheck size={14} />
+                              ) : (
+                                <StarOff size={14} />
+                              )}
+                              {featuredButtonLabel}
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleSave(call)}
-                            disabled={saveFeedbacks[call.id]?.state === "saving"}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:opacity-60"
-                          >
-                            <Save size={14} />
-                            {saveFeedbacks[call.id]?.state === "saving" ? "저장 중..." : "설정 저장"}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSave(call)}
+                              disabled={saveFeedbacks[call.id]?.state === "saving"}
+                              className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:opacity-60"
+                            >
+                              <Save size={14} />
+                              {saveFeedbacks[call.id]?.state === "saving"
+                                ? "저장 중..."
+                                : saveButtonLabel}
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
                       <div className="mt-3 flex items-center justify-end">
                         {saveFeedbacks[call.id]?.message ? (
