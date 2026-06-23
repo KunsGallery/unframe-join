@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BadgeCheck,
   Eye,
   EyeOff,
@@ -32,6 +33,7 @@ import {
   getOpenCallDisplayStatus,
   getOpenCallDescriptionSections,
   parseOpenCallDate,
+  pickActiveOpenCall,
   normalizeOpenCallCompletionSettings,
   normalizeOpenCallDescriptionSections,
   normalizeOpenCallFormSettings,
@@ -140,53 +142,6 @@ const normalizeDescriptionSectionPayload = (sections) =>
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index + 1,
     isVisible: section.isVisible !== false,
   }));
-
-const getOpenCallSortTimestamp = (call) => {
-  const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
-  if (applicationStartAt) return applicationStartAt.getTime();
-
-  const createdAt = parseOpenCallDate(call?.createdAt);
-  if (createdAt) return createdAt.getTime();
-
-  const updatedAt = parseOpenCallDate(call?.updatedAt);
-  if (updatedAt) return updatedAt.getTime();
-
-  return 0;
-};
-
-const sortByLatestOpenCall = (calls) =>
-  [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
-
-const pickActiveOpenCall = (calls) => {
-  const normalized = (calls || [])
-    .map(normalizeCall)
-    .filter((call) => call.isVisible !== false && call.status !== "archived");
-
-  if (normalized.length === 0) {
-    return createFallbackOpenCall();
-  }
-
-  const featuredVisible = normalized.filter((call) => call.isFeatured);
-  const featuredActive = featuredVisible.filter((call) => {
-    const displayStatus = getOpenCallDisplayStatus(call);
-    return displayStatus.key === "open" || displayStatus.key === "upcoming";
-  });
-  const activeVisible = normalized.filter((call) => {
-    const displayStatus = getOpenCallDisplayStatus(call);
-    return displayStatus.key === "open" || displayStatus.key === "upcoming";
-  });
-
-  const candidatePool =
-    featuredActive.length > 0
-      ? featuredActive
-      : activeVisible.length > 0
-      ? activeVisible
-      : featuredVisible.length > 0
-      ? featuredVisible
-      : normalized;
-
-  return sortByLatestOpenCall(candidatePool)[0] || createFallbackOpenCall();
-};
 
 const scrollToOpenCallSection = (id) => {
   if (typeof document === "undefined") return;
@@ -476,6 +431,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
       });
   }, [openCalls]);
 
+  const activeOpenCall = useMemo(() => pickActiveOpenCall(openCalls), [openCalls]);
+  const activeOpenCallId = activeOpenCall?.id || "";
+
   useEffect(() => {
     if (sortedCalls.length === 0) {
       setPreviewOpenCallId("");
@@ -485,9 +443,11 @@ const OpenCallManager = ({ db, appId, applications }) => {
     setPreviewOpenCallId((current) =>
       current && sortedCalls.some((call) => call.id === current)
         ? current
+        : activeOpenCallId && sortedCalls.some((call) => call.id === activeOpenCallId)
+        ? activeOpenCallId
         : sortedCalls[0].id
     );
-  }, [sortedCalls]);
+  }, [activeOpenCallId, sortedCalls]);
 
   useEffect(() => {
     setDrafts((prev) => {
@@ -926,8 +886,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
         state: "saved",
         message:
           activeCandidate?.id === call.id
-            ? "저장되었습니다. 현재 대표 공고라면 /opencall에 바로 반영됩니다."
-            : "저장되었습니다. 단, 현재 /opencall 대표 공고가 아니므로 사용자 페이지에는 바로 보이지 않을 수 있습니다.",
+            ? "저장되었습니다. 현재 /opencall 대표 공고이므로 외부 페이지에 반영됩니다."
+            : "저장되었습니다. 하지만 현재 /opencall 대표 공고가 아니므로 외부 페이지에는 반영되지 않습니다.",
       });
     } catch (error) {
       console.error(error);
@@ -974,22 +934,49 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
   const SaveStatusRow = ({ call, sticky = false, className = "" }) => {
     const feedback = saveFeedbacks[call.id];
+    const isActiveCall = call.id === activeOpenCallId;
+    const isCurrentPreviewCall = call.id === previewOpenCallId;
+    const showMismatchWarning = !isActiveCall;
+    const warningMessage = isCurrentPreviewCall
+      ? "주의: 현재 수정 중인 공고는 /opencall 대표 공고가 아닙니다.\n저장해도 외부 페이지에는 바로 보이지 않을 수 있습니다."
+      : "주의: 현재 수정 중인 공고는 /opencall 대표 공고가 아닙니다.\n저장해도 외부 페이지에는 바로 보이지 않을 수 있습니다.";
+
     return (
       <div
-        className={`flex flex-col gap-3 md:flex-row md:items-center md:justify-between ${
+        className={`${
           sticky
             ? "sticky bottom-4 z-20 mt-8 rounded-[24px] border border-zinc-950/10 bg-white/90 p-3 shadow-xl backdrop-blur"
             : "mt-6 border-t border-zinc-950/10 pt-4"
         } ${className}`}
       >
-        <p
-          className={`text-xs font-bold break-keep whitespace-pre-wrap ${getSaveFeedbackClassName(
-            feedback?.state
-          )}`}
-        >
-          {feedback?.message || "오픈콜 설정을 수정한 뒤에는 반드시 저장해 주세요."}
-        </p>
-        <SaveSettingsButton call={call} className="w-full md:w-auto" />
+        {showMismatchWarning ? (
+          <div className="mb-3 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs font-bold text-amber-700 break-keep whitespace-pre-wrap">
+                {warningMessage}
+              </p>
+              <button
+                type="button"
+                onClick={() => handleSetFeaturedOpenCall(call)}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800"
+              >
+                <Star size={14} />
+                이 공고를 /opencall 대표 공고로 설정
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p
+            className={`text-xs font-bold break-keep whitespace-pre-wrap ${getSaveFeedbackClassName(
+              feedback?.state
+            )}`}
+          >
+            {feedback?.message || "오픈콜 설정을 수정한 뒤에는 반드시 저장해 주세요."}
+          </p>
+          <SaveSettingsButton call={call} className="w-full md:w-auto" />
+        </div>
       </div>
     );
   };
@@ -1193,7 +1180,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
             )
         )
       );
-      setManagerNotice("이 공고가 /opencall 대표 공고로 설정되었습니다.");
+      setPreviewOpenCallId(call.id);
+      setManagerNotice(
+        "이 공고가 /opencall 대표 공고로 설정되었습니다. 이제 이 편집 내용이 외부 /opencall 페이지에 반영됩니다."
+      );
     } catch (error) {
       console.error(error);
       setManagerNotice(formatFirestorePermissionMessage(error));
@@ -1211,13 +1201,40 @@ const OpenCallManager = ({ db, appId, applications }) => {
     () => (selectedOpenCall ? getOpenCallApplicationCounts(selectedOpenCall.id) : null),
     [selectedOpenCall, selectedApplications]
   );
-  const activeOpenCall = useMemo(() => pickActiveOpenCall(sortedCalls), [sortedCalls]);
   const previewedOpenCall = useMemo(
-    () => sortedCalls.find((call) => call.id === previewOpenCallId) || sortedCalls[0] || null,
-    [previewOpenCallId, sortedCalls]
+    () =>
+      sortedCalls.find((call) => call.id === previewOpenCallId) ||
+      (activeOpenCallId
+        ? sortedCalls.find((call) => call.id === activeOpenCallId) || null
+        : sortedCalls[0] || null),
+    [activeOpenCallId, previewOpenCallId, sortedCalls]
   );
   const previewMatchesLanding =
     previewedOpenCall && activeOpenCall ? previewedOpenCall.id === activeOpenCall.id : false;
+  const previewedDraft = previewedOpenCall ? drafts[previewedOpenCall.id] || {} : null;
+  const previewedRawOpenCall = useMemo(
+    () => openCalls.find((call) => call.id === previewOpenCallId) || null,
+    [openCalls, previewOpenCallId]
+  );
+  const previewedOpenCallForStatus = useMemo(
+    () =>
+      previewedRawOpenCall || previewedOpenCall
+        ? { ...(previewedRawOpenCall || previewedOpenCall || {}), ...(previewedDraft || {}) }
+        : null,
+    [previewedDraft, previewedOpenCall, previewedRawOpenCall]
+  );
+  const activeOpenCallView = useMemo(
+    () => (activeOpenCall ? createFallbackOpenCall(activeOpenCall) : null),
+    [activeOpenCall]
+  );
+  const previewHeroAccentText =
+    String(previewedOpenCallForStatus?.heroAccent || "").trim() || "-";
+  const activeHeroAccentText =
+    String(activeOpenCallView?.heroAccent || activeOpenCall?.heroAccent || "").trim() || "-";
+  const previewDescriptionSectionCount = getOpenCallDescriptionSections(
+    previewedOpenCallForStatus
+  ).length;
+  const activeDescriptionSectionCount = getOpenCallDescriptionSections(activeOpenCall).length;
 
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
@@ -1236,20 +1253,35 @@ const OpenCallManager = ({ db, appId, applications }) => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSeedDefault}
-          className="inline-flex items-center gap-2 rounded-2xl bg-[#004aad] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-[#004aad]/15 transition-opacity hover:opacity-90"
-        >
-          <Plus size={14} />
-          기본 잔상 공고 생성
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              if (!activeOpenCallId) return;
+              setPreviewOpenCallId(activeOpenCallId);
+            }}
+            disabled={!activeOpenCallId || previewOpenCallId === activeOpenCallId}
+            className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Megaphone size={14} />
+            현재 /opencall 대표 공고 편집하기
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSeedDefault}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#004aad] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-[#004aad]/15 transition-opacity hover:opacity-90"
+          >
+            <Plus size={14} />
+            기본 잔상 공고 생성
+          </button>
+        </div>
       </div>
 
-      <div className="mb-5 grid gap-3 rounded-[28px] border border-zinc-100 bg-zinc-50/80 p-4 md:grid-cols-3">
+      <div className="mb-5 grid gap-3 rounded-[28px] border border-zinc-100 bg-zinc-50/80 p-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-[22px] border border-white bg-white px-4 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            현재 편집 중인 openCallId
+            현재 편집 중인 공고 ID
           </p>
           <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
             {previewedOpenCall?.id || "-"}
@@ -1265,7 +1297,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
           </p>
         </div>
 
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+        <div
+          className={`rounded-[22px] border px-4 py-3 ${
+            previewMatchesLanding
+              ? "border-white bg-white"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
             일치 여부
           </p>
@@ -1277,11 +1315,67 @@ const OpenCallManager = ({ db, appId, applications }) => {
             {previewMatchesLanding ? "YES" : "NO"}
           </p>
         </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            편집 중 heroAccent
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
+            {previewHeroAccentText}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            노출 중 heroAccent
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
+            {activeHeroAccentText}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            편집 중 descriptionSections
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
+            {previewDescriptionSectionCount}
+          </p>
+        </div>
+
+        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+            노출 중 descriptionSections
+          </p>
+          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
+            {activeDescriptionSectionCount}
+          </p>
+        </div>
       </div>
 
       {!previewMatchesLanding ? (
-        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 break-keep">
-          지금 편집 중인 공고와 /opencall에 노출 중인 공고가 다릅니다.
+        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
+              <p className="text-sm font-bold text-amber-700 break-keep whitespace-pre-wrap">
+                현재 수정 중인 공고는 /opencall에 노출 중인 대표 공고가 아닙니다.
+                {"\n"}이 상태로 저장해도 외부 /opencall 페이지에는 반영되지 않을 수 있습니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!activeOpenCallId) return;
+                setPreviewOpenCallId(activeOpenCallId);
+              }}
+              disabled={!activeOpenCallId}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Megaphone size={14} />
+              /opencall 대표 공고로 전환
+            </button>
+          </div>
         </div>
       ) : null}
 

@@ -18,8 +18,9 @@ import {
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
   getOpenCallDescriptionSections,
-  parseOpenCallDate,
   normalizeOpenCallFaqs,
+  parseOpenCallDate,
+  pickActiveOpenCall,
 } from "../../constants/openCall";
 
 const Section = ({ index, title, children, accent = false }) => (
@@ -41,61 +42,6 @@ const Section = ({ index, title, children, accent = false }) => (
     </div>
   </div>
 );
-
-const getOpenCallSortTimestamp = (call) => {
-  const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
-  if (applicationStartAt) return applicationStartAt.getTime();
-
-  const createdAt = parseOpenCallDate(call?.createdAt);
-  if (createdAt) return createdAt.getTime();
-
-  const updatedAt = parseOpenCallDate(call?.updatedAt);
-  if (updatedAt) return updatedAt.getTime();
-
-  return 0;
-};
-
-const sortByLatestOpenCall = (calls) =>
-  [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
-
-const pickActiveOpenCall = (calls) => {
-  const candidates = (calls || [])
-    .map((call) => ({
-      raw: call,
-      normalized: createFallbackOpenCall({
-        ...call,
-        id: call?.id || OPEN_CALL_FALLBACK.id,
-      }),
-    }))
-    .filter(({ normalized }) => normalized.isVisible !== false && normalized.status !== "archived");
-
-  if (candidates.length === 0) {
-    return createFallbackOpenCall();
-  }
-
-  const isActiveCandidate = ({ normalized }) => {
-    const displayStatus = getOpenCallDisplayStatus(normalized);
-    return displayStatus.key === "open" || displayStatus.key === "upcoming";
-  };
-
-  const featuredVisible = candidates.filter(({ normalized }) => normalized.isFeatured);
-  const featuredActive = featuredVisible.filter(isActiveCandidate);
-  const activeVisible = candidates.filter(isActiveCandidate);
-
-  const candidatePool =
-    featuredActive.length > 0
-      ? featuredActive
-      : activeVisible.length > 0
-      ? activeVisible
-      : featuredVisible.length > 0
-      ? featuredVisible
-      : candidates;
-
-  const sortedCandidates = sortByLatestOpenCall(candidatePool.map(({ normalized }) => normalized));
-  const selected = sortedCandidates[0];
-
-  return candidatePool.find(({ normalized }) => normalized.id === selected?.id)?.raw || selected || createFallbackOpenCall();
-};
 
 const formatDateTime = (value) => {
   const date = parseOpenCallDate(value);
@@ -160,11 +106,11 @@ const OpenCallLanding = ({ onBack, onApply }) => {
 
   const selectedOpenCall = useMemo(() => pickActiveOpenCall(openCalls), [openCalls]);
   const openCall = useMemo(
-    () => createFallbackOpenCall(selectedOpenCall),
+    () => createFallbackOpenCall(selectedOpenCall || OPEN_CALL_FALLBACK),
     [selectedOpenCall]
   );
   const visibleSections = useMemo(
-    () => getOpenCallDescriptionSections(selectedOpenCall),
+    () => getOpenCallDescriptionSections(selectedOpenCall || OPEN_CALL_FALLBACK),
     [selectedOpenCall]
   );
 

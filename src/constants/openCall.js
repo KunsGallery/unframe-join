@@ -584,6 +584,22 @@ export const getOpenCallDisplayStatus = (openCall, now = new Date()) => {
   return { key: "open", label: "접수 중", canApply: true };
 };
 
+const getOpenCallSortTimestamp = (call) => {
+  const applicationStartAt = parseOpenCallDate(call?.applicationStartAt);
+  if (applicationStartAt) return applicationStartAt.getTime();
+
+  const createdAt = parseOpenCallDate(call?.createdAt);
+  if (createdAt) return createdAt.getTime();
+
+  const updatedAt = parseOpenCallDate(call?.updatedAt);
+  if (updatedAt) return updatedAt.getTime();
+
+  return 0;
+};
+
+const sortByLatestOpenCall = (calls) =>
+  [...calls].sort((a, b) => getOpenCallSortTimestamp(b) - getOpenCallSortTimestamp(a));
+
 export const createFallbackOpenCall = (overrides = {}) => ({
   ...OPEN_CALL_FALLBACK,
   ...overrides,
@@ -614,3 +630,49 @@ export const createFallbackOpenCall = (overrides = {}) => ({
     overrides.notificationSettings || OPEN_CALL_FALLBACK.notificationSettings
   ),
 });
+
+export const pickActiveOpenCall = (openCalls = []) => {
+  const candidates = (Array.isArray(openCalls) ? openCalls : [])
+    .map((call) => ({
+      raw: call,
+      normalized: createFallbackOpenCall({
+        ...call,
+        id: call?.id || OPEN_CALL_FALLBACK.id,
+      }),
+    }))
+    .filter(({ normalized }) => normalized.isVisible !== false)
+    .filter(({ normalized }) => getOpenCallDisplayStatus(normalized).key !== "archived");
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const isActiveCandidate = ({ normalized }) => {
+    const displayStatus = getOpenCallDisplayStatus(normalized);
+    return displayStatus.key === "open" || displayStatus.key === "upcoming";
+  };
+
+  const featuredVisible = candidates.filter(({ normalized }) => normalized.isFeatured === true);
+  const featuredActive = featuredVisible.filter(isActiveCandidate);
+  const activeVisible = candidates.filter(isActiveCandidate);
+
+  const candidatePool =
+    featuredActive.length > 0
+      ? featuredActive
+      : activeVisible.length > 0
+      ? activeVisible
+      : featuredVisible.length > 0
+      ? featuredVisible
+      : candidates;
+
+  const sortedCandidates = sortByLatestOpenCall(
+    candidatePool.map(({ normalized }) => normalized)
+  );
+  const selected = sortedCandidates[0];
+
+  return (
+    candidatePool.find(({ normalized }) => normalized.id === selected?.id)?.raw ||
+    selected ||
+    null
+  );
+};
