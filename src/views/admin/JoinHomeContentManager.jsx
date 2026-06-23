@@ -3,6 +3,7 @@ import { Loader2, Save, Sparkles } from "lucide-react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   DEFAULT_JOIN_HOME_CONTENT,
+  normalizeJoinHomeContent,
   mergeJoinHomeContent,
 } from "../../constants/joinHome";
 
@@ -27,6 +28,8 @@ const getJoinHomeErrorMessage = (error, currentUser) => {
 
   return "메인 문구를 저장하는 중 오류가 발생했습니다.";
 };
+
+const isVisibleText = (value) => typeof value === "string" && value.trim().length > 0;
 
 const FieldBlock = ({
   label,
@@ -66,69 +69,171 @@ const FieldBlock = ({
   </label>
 );
 
-const JoinHomePreview = ({ content }) => (
-  <div className="rounded-[32px] border border-[#004aad]/12 bg-[#004aad]/5 p-5 md:p-6">
-    <div className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-      <Sparkles size={11} />
-      JoinHome Preview
+const ToggleBlock = ({ label, checked, onChange, hint = "", className = "" }) => (
+  <label
+    className={`flex items-start justify-between gap-4 rounded-[22px] border border-zinc-100 bg-white px-4 py-3 ${className}`}
+  >
+    <div>
+      <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+        {label}
+      </span>
+      {hint ? (
+        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
+          {hint}
+        </p>
+      ) : null}
     </div>
 
-    <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-      <div className="rounded-[28px] border border-white/80 bg-white p-5 md:p-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-400">
-          {content.heroBadgeText ?? DEFAULT_JOIN_HOME_CONTENT.heroBadgeText}
-        </p>
-        <h3 className="mt-4 whitespace-pre-line text-[2rem] font-black leading-[0.94] tracking-tighter text-zinc-950 break-keep md:text-[2.8rem]">
-          {content.heroTitle ?? DEFAULT_JOIN_HOME_CONTENT.heroTitle}
-        </h3>
-        <p className="mt-4 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep md:text-base">
-          {content.heroDescription ?? DEFAULT_JOIN_HOME_CONTENT.heroDescription}
-        </p>
-
-        <div className="mt-5 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-          <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
-            {content.heroPrimaryChip ?? DEFAULT_JOIN_HOME_CONTENT.heroPrimaryChip}
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
-            {content.heroSecondaryChip ?? DEFAULT_JOIN_HOME_CONTENT.heroSecondaryChip}
-          </span>
-        </div>
-      </div>
-
-      <div className="rounded-[28px] border border-white/80 bg-white p-5 md:p-6">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-          {content.brandNoteLabel ?? DEFAULT_JOIN_HOME_CONTENT.brandNoteLabel}
-        </p>
-        <p className="mt-3 text-lg font-black tracking-tight text-zinc-950 break-keep">
-          {content.brandNoteTitle ?? DEFAULT_JOIN_HOME_CONTENT.brandNoteTitle}
-        </p>
-        <div className="mt-4 inline-flex rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
-          {content.brandNoteLiveLabel ?? DEFAULT_JOIN_HOME_CONTENT.brandNoteLiveLabel}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-              {content.entryCardLabel ?? DEFAULT_JOIN_HOME_CONTENT.entryCardLabel}
-            </p>
-            <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-              {content.entryCardText ?? DEFAULT_JOIN_HOME_CONTENT.entryCardText}
-            </p>
-          </div>
-
-          <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-              {content.noticeCardLabel ?? DEFAULT_JOIN_HOME_CONTENT.noticeCardLabel}
-            </p>
-            <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-              {content.noticeCardText ?? DEFAULT_JOIN_HOME_CONTENT.noticeCardText}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      className="mt-1 h-5 w-5 shrink-0 rounded border-zinc-300 text-[#004aad] focus:ring-[#004aad]"
+    />
+  </label>
 );
+
+const JoinHomePreview = ({ content }) => {
+  const previewCountLabel = isVisibleText(content.activeTrackCountLabelTemplate)
+    ? content.activeTrackCountLabelTemplate.replace(/\{\{\s*count\s*\}\}/g, "4")
+    : "";
+
+  return (
+    <div className="rounded-[32px] border border-[#004aad]/12 bg-[#004aad]/5 p-5 md:p-6">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+        <Sparkles size={11} />
+        JoinHome Preview
+      </div>
+
+      <div className="mt-5 grid gap-4">
+        <div className="rounded-[28px] border border-white/80 bg-white p-5 md:p-6">
+          {isVisibleText(content.heroBadgeText) ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-400">
+              {content.heroBadgeText}
+            </p>
+          ) : null}
+
+          {isVisibleText(content.heroTitle) ? (
+            <h3 className="mt-4 whitespace-pre-line text-[2rem] font-black leading-[0.94] tracking-tighter text-zinc-950 break-keep md:text-[2.8rem]">
+              {content.heroTitle}
+            </h3>
+          ) : null}
+
+          {isVisibleText(content.heroDescription) ? (
+            <p className="mt-4 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-700 break-keep md:text-base">
+              {content.heroDescription}
+            </p>
+          ) : null}
+
+          <div className="mt-5 flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+            {isVisibleText(content.heroPrimaryChip) ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
+                {content.heroPrimaryChip}
+              </span>
+            ) : null}
+            {isVisibleText(content.heroSecondaryChip) ? (
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
+                {content.heroSecondaryChip}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {content.brandNoteEnabled ? (
+          <div className="rounded-[28px] border border-white/80 bg-white p-5 md:p-6">
+            {isVisibleText(content.brandNoteLabel) ? (
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+                {content.brandNoteLabel}
+              </p>
+            ) : null}
+
+            {isVisibleText(content.brandNoteTitle) ? (
+              <p className="mt-3 text-lg font-black tracking-tight text-zinc-950 break-keep">
+                {content.brandNoteTitle}
+              </p>
+            ) : null}
+
+            {isVisibleText(content.brandNoteLiveLabel) ? (
+              <div className="mt-4 inline-flex rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
+                {content.brandNoteLiveLabel}
+              </div>
+            ) : null}
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {isVisibleText(content.brandNoteLeftLabel) ||
+              isVisibleText(content.brandNoteLeftText) ? (
+                <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
+                  {isVisibleText(content.brandNoteLeftLabel) ? (
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                      {content.brandNoteLeftLabel}
+                    </p>
+                  ) : null}
+                  {isVisibleText(content.brandNoteLeftText) ? (
+                    <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                      {content.brandNoteLeftText}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {isVisibleText(content.brandNoteRightLabel) ||
+              isVisibleText(content.brandNoteRightText) ? (
+                <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
+                  {isVisibleText(content.brandNoteRightLabel) ? (
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                      {content.brandNoteRightLabel}
+                    </p>
+                  ) : null}
+                  {isVisibleText(content.brandNoteRightText) ? (
+                    <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                      {content.brandNoteRightText}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-[28px] border border-dashed border-zinc-200 bg-white p-5 text-sm font-bold text-zinc-400">
+            Brand Note 블록이 숨김 상태입니다.
+          </div>
+        )}
+
+        {content.waysToJoinEnabled ? (
+          <div className="rounded-[28px] border border-white/80 bg-white p-5 md:p-6">
+            {isVisibleText(content.waysToJoinEyebrow) ? (
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+                {content.waysToJoinEyebrow}
+              </p>
+            ) : null}
+            {isVisibleText(content.waysToJoinTitle) ? (
+              <h4 className="mt-2 text-lg font-black tracking-tight text-zinc-950 break-keep">
+                {content.waysToJoinTitle}
+              </h4>
+            ) : null}
+            {isVisibleText(content.waysToJoinDescription) ? (
+              <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+                {content.waysToJoinDescription}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2 rounded-[24px] border border-zinc-950/10 bg-white/80 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+          {content.activeTrackCountEnabled && previewCountLabel ? (
+            <span>{previewCountLabel}</span>
+          ) : null}
+          {isVisibleText(content.trackMetaNote) ? (
+            <span className="text-zinc-400">{content.trackMetaNote}</span>
+          ) : null}
+          {content.footerNoteEnabled && isVisibleText(content.footerNoteText) ? (
+            <span className="text-zinc-400">{content.footerNoteText}</span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const JoinHomeContentManager = ({ db, appId, currentUser }) => {
   const [contentDraft, setContentDraft] = useState(DEFAULT_JOIN_HOME_CONTENT);
@@ -171,8 +276,7 @@ const JoinHomeContentManager = ({ db, appId, currentUser }) => {
     setManagerNotice("");
 
     const payload = {
-      ...DEFAULT_JOIN_HOME_CONTENT,
-      ...contentDraft,
+      ...normalizeJoinHomeContent(contentDraft),
       updatedAt: serverTimestamp(),
     };
 
@@ -204,8 +308,8 @@ const JoinHomeContentManager = ({ db, appId, currentUser }) => {
             메인 문구 관리
           </h3>
           <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-            JoinHome 상단 히어로와 브랜드 노트를 관리합니다. 줄바꿈은 실제 화면에 그대로
-            반영됩니다.
+            JoinHome의 외부 노출 문구를 관리합니다. 섹션 노출 여부와 라벨, 버튼 문구, 보조
+            안내는 여기서 바로 바꿀 수 있습니다. 줄바꿈은 실제 화면에 그대로 반영됩니다.
           </p>
         </div>
 
@@ -292,35 +396,145 @@ const JoinHomeContentManager = ({ db, appId, currentUser }) => {
               onChange={(value) => updateField("brandNoteLiveLabel", value)}
               placeholder="LIVE"
             />
+            <ToggleBlock
+              label="brandNoteEnabled"
+              checked={contentDraft.brandNoteEnabled !== false}
+              onChange={(value) => updateField("brandNoteEnabled", value)}
+              hint="끄면 JoinHome에서 Brand Note 블록 전체가 숨겨집니다."
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <FieldBlock
-                label="entryCardLabel"
-                value={contentDraft.entryCardLabel || ""}
-                onChange={(value) => updateField("entryCardLabel", value)}
-                placeholder="ENTRY"
+                label="brandNoteLeftLabel"
+                value={contentDraft.brandNoteLeftLabel || ""}
+                onChange={(value) => updateField("brandNoteLeftLabel", value)}
+                placeholder="NOW OPEN"
               />
               <FieldBlock
-                label="noticeCardLabel"
-                value={contentDraft.noticeCardLabel || ""}
-                onChange={(value) => updateField("noticeCardLabel", value)}
-                placeholder="NOTICE"
+                label="brandNoteRightLabel"
+                value={contentDraft.brandNoteRightLabel || ""}
+                onChange={(value) => updateField("brandNoteRightLabel", value)}
+                placeholder="FEATURED"
               />
             </div>
             <FieldBlock
-              label="entryCardText"
-              value={contentDraft.entryCardText || ""}
-              onChange={(value) => updateField("entryCardText", value)}
-              placeholder={"신청 트랙은 살아 있고,\n필요한 입구만 선택하면 됩니다."}
+              label="brandNoteLeftText"
+              value={contentDraft.brandNoteLeftText || ""}
+              onChange={(value) => updateField("brandNoteLeftText", value)}
+              placeholder={"현재 신청 가능한 항목을\n한눈에 볼 수 있습니다."}
               textarea
               rows={3}
             />
             <FieldBlock
-              label="noticeCardText"
-              value={contentDraft.noticeCardText || ""}
-              onChange={(value) => updateField("noticeCardText", value)}
-              placeholder={"현재 노출 중인 공지와 대표 프로젝트는\n아래 영역에서 이어집니다."}
+              label="brandNoteRightText"
+              value={contentDraft.brandNoteRightText || ""}
+              onChange={(value) => updateField("brandNoteRightText", value)}
+              placeholder={"대표 공고의 주요 내용을\n아래에서 먼저 확인하세요."}
               textarea
               rows={3}
+            />
+
+            <ToggleBlock
+              label="waysToJoinEnabled"
+              checked={contentDraft.waysToJoinEnabled !== false}
+              onChange={(value) => updateField("waysToJoinEnabled", value)}
+              hint="끄면 Ways to Join 섹션을 숨기고, 더 간결한 첫 화면으로 보여줄 수 있습니다."
+            />
+            <FieldBlock
+              label="waysToJoinEyebrow"
+              value={contentDraft.waysToJoinEyebrow || ""}
+              onChange={(value) => updateField("waysToJoinEyebrow", value)}
+              placeholder="WAYS TO JOIN"
+            />
+            <FieldBlock
+              label="waysToJoinTitle"
+              value={contentDraft.waysToJoinTitle || ""}
+              onChange={(value) => updateField("waysToJoinTitle", value)}
+              placeholder="필요한 방식에 맞는 입구를 선택해 주세요."
+              textarea
+              rows={2}
+            />
+            <FieldBlock
+              label="waysToJoinDescription"
+              value={contentDraft.waysToJoinDescription || ""}
+              onChange={(value) => updateField("waysToJoinDescription", value)}
+              placeholder="선택 기준이나 추가 안내가 있으면 여기에 적습니다."
+              textarea
+              rows={3}
+            />
+
+            <ToggleBlock
+              label="activeTrackCountEnabled"
+              checked={contentDraft.activeTrackCountEnabled !== false}
+              onChange={(value) => updateField("activeTrackCountEnabled", value)}
+              hint="끄면 하단의 활성 트랙 수 문구를 숨깁니다."
+            />
+            <FieldBlock
+              label="activeTrackCountLabelTemplate"
+              value={contentDraft.activeTrackCountLabelTemplate || ""}
+              onChange={(value) => updateField("activeTrackCountLabelTemplate", value)}
+              placeholder="활성 트랙 {{count}}개"
+            />
+            <FieldBlock
+              label="trackMetaNote"
+              value={contentDraft.trackMetaNote || ""}
+              onChange={(value) => updateField("trackMetaNote", value)}
+              placeholder="관리자 설정에 따라 입구가 달라집니다"
+              textarea
+              rows={2}
+            />
+
+            <FieldBlock
+              label="currentProgramLabel"
+              value={contentDraft.currentProgramLabel || ""}
+              onChange={(value) => updateField("currentProgramLabel", value)}
+              placeholder="CURRENT PROGRAM"
+            />
+            <FieldBlock
+              label="preparedProgramLabel"
+              value={contentDraft.preparedProgramLabel || ""}
+              onChange={(value) => updateField("preparedProgramLabel", value)}
+              placeholder="PREPARING"
+            />
+            <FieldBlock
+              label="featuredProgramLabel"
+              value={contentDraft.featuredProgramLabel || ""}
+              onChange={(value) => updateField("featuredProgramLabel", value)}
+              placeholder="FEATURED"
+            />
+            <FieldBlock
+              label="featuredProjectsLabel"
+              value={contentDraft.featuredProjectsLabel || ""}
+              onChange={(value) => updateField("featuredProjectsLabel", value)}
+              placeholder="FEATURED PROJECTS"
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FieldBlock
+                label="auxiliaryEntryPointsLabel"
+                value={contentDraft.auxiliaryEntryPointsLabel || ""}
+                onChange={(value) => updateField("auxiliaryEntryPointsLabel", value)}
+                placeholder="AUXILIARY ENTRY POINTS"
+              />
+              <FieldBlock
+                label="auxiliaryEntryPointsSubLabel"
+                value={contentDraft.auxiliaryEntryPointsSubLabel || ""}
+                onChange={(value) => updateField("auxiliaryEntryPointsSubLabel", value)}
+                placeholder="MORE THAN FOUR TRACKS"
+              />
+            </div>
+
+            <ToggleBlock
+              label="footerNoteEnabled"
+              checked={contentDraft.footerNoteEnabled === true}
+              onChange={(value) => updateField("footerNoteEnabled", value)}
+              hint="하단 보조 문구가 필요할 때만 켭니다."
+            />
+            <FieldBlock
+              label="footerNoteText"
+              value={contentDraft.footerNoteText || ""}
+              onChange={(value) => updateField("footerNoteText", value)}
+              placeholder="원하면 여기에 추가 안내를 넣을 수 있습니다."
+              textarea
+              rows={2}
             />
           </div>
 

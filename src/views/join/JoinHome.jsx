@@ -15,7 +15,6 @@ import {
   mergeJoinHomeContent,
 } from "../../constants/joinHome";
 import {
-  DEFAULT_JOIN_TRACKS,
   JOIN_TRACK_COLLECTION,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
@@ -36,6 +35,14 @@ const TRACK_ICON_MAP = {
 };
 
 const TRACK_ALERT_MESSAGE = "준비 중입니다.";
+
+const isVisibleText = (value) => typeof value === "string" && value.trim().length > 0;
+
+const formatCountLabel = (template, count) => {
+  if (!isVisibleText(template)) return "";
+
+  return template.replace(/\{\{\s*count\s*\}\}/g, String(count));
+};
 
 const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(0, 74, 173, ${alpha})`;
@@ -252,21 +259,28 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
   );
 };
 
-const FeaturedProjectCard = ({ popup, onCta }) => {
+const FeaturedProjectCard = ({ popup, content, onCta }) => {
   const poster = popup?.posterImageUrl?.trim();
   const targetTrack = popup?.targetTrack || "open-call";
   const targetLabel = getEntryLabel(targetTrack);
   const ctaLabel = popup?.ctaLabel?.trim() || "자세히 보기";
+  const currentProgramLabel = content?.currentProgramLabel?.trim() || "";
+  const preparedProgramLabel = content?.preparedProgramLabel?.trim() || "";
+  const featuredProgramLabel = content?.featuredProgramLabel?.trim() || "";
+  const featuredProjectsLabel = content?.featuredProjectsLabel?.trim() || "";
+  const cardLabel = popup ? currentProgramLabel : preparedProgramLabel;
 
   return (
     <section className="overflow-hidden rounded-[32px] border border-zinc-950/10 bg-white/78 shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
       <div className="grid gap-0 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="flex flex-col justify-between p-6 md:p-8 lg:p-10">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
-              <CircleDot size={11} />
-              CURRENT PROGRAM
-            </div>
+            {isVisibleText(cardLabel) ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
+                <CircleDot size={11} />
+                {cardLabel}
+              </div>
+            ) : null}
 
             {popup ? (
               <>
@@ -286,7 +300,7 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
                   현재 대표 공지가 없습니다.
                 </h2>
                 <p className="mt-4 max-w-2xl whitespace-pre-line text-base font-bold leading-relaxed text-zinc-700 break-keep md:text-lg">
-                  관리자에서 joinPopups를 활성화하면 이 영역이 대표 프로젝트 카드로 채워집니다.
+                  대표 공지가 활성화되면 이 영역에 표시됩니다.
                 </p>
                 <p className="mt-5 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-[0.98rem]">
                   UNFRAME JOIN의 현재 입구와 공지를 한눈에 보여주는 자리입니다.
@@ -318,9 +332,11 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
               </button>
             ) : null}
 
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400">
-              Featured from joinPopups
-            </p>
+            {popup && isVisibleText(featuredProjectsLabel) ? (
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-400">
+                {featuredProjectsLabel}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -338,15 +354,19 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
           <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/35 via-zinc-950/8 to-white/10" />
           <div className="absolute inset-y-0 right-0 w-20 skew-x-[-8deg] bg-white/20 opacity-45 mix-blend-overlay" />
 
-          <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
-            FEATURED PROJECT
-          </div>
+          {isVisibleText(featuredProgramLabel) ? (
+            <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/90 backdrop-blur-md">
+              {featuredProgramLabel}
+            </div>
+          ) : null}
 
           {!poster ? (
             <div className="absolute bottom-5 left-5 right-5 rounded-[24px] border border-white/18 bg-white/10 p-4 text-white backdrop-blur-md">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/80">
-                UNFRAME JOIN
-              </p>
+              {isVisibleText(currentProgramLabel) ? (
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/80">
+                  {currentProgramLabel}
+                </p>
+              ) : null}
               <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-white/90 break-keep">
                 포스터가 없어도 대표 공지의 분위기를 유지할 수 있도록 그래픽 대체 화면을 보여줍니다.
               </p>
@@ -360,6 +380,7 @@ const FeaturedProjectCard = ({ popup, onCta }) => {
 
 const FeaturedProjectSlider = ({
   items,
+  content,
   activeIndex,
   onPrev,
   onNext,
@@ -369,7 +390,13 @@ const FeaturedProjectSlider = ({
   if (!items.length) return null;
 
   if (items.length === 1) {
-    return <FeaturedProjectCard popup={items[0]} onCta={() => onSelect(items[0])} />;
+    return (
+      <FeaturedProjectCard
+        popup={items[0]}
+        content={content}
+        onCta={() => onSelect(items[0])}
+      />
+    );
   }
 
   return (
@@ -381,7 +408,7 @@ const FeaturedProjectSlider = ({
         >
           {items.map((popup) => (
             <div key={popup.id} className="w-full shrink-0">
-              <FeaturedProjectCard popup={popup} onCta={() => onSelect(popup)} />
+              <FeaturedProjectCard popup={popup} content={content} onCta={() => onSelect(popup)} />
             </div>
           ))}
         </div>
@@ -432,75 +459,114 @@ const FeaturedProjectSlider = ({
 const BrandHero = ({ content }) => (
   <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
     <div className="max-w-4xl">
-      <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
-          <Sparkles size={15} />
-        </span>
-        <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
-          {content.heroBadgeText}
-        </span>
-      </div>
+      {isVisibleText(content.heroBadgeText) ? (
+        <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
+            <Sparkles size={15} />
+          </span>
+          <span className="text-[10px] font-black uppercase tracking-[0.34em] text-zinc-500">
+            {content.heroBadgeText}
+          </span>
+        </div>
+      ) : null}
 
-      <h1 className="mt-6 max-w-4xl whitespace-pre-line text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
-        {content.heroTitle}
-      </h1>
+      {isVisibleText(content.heroTitle) ? (
+        <h1 className="mt-6 max-w-4xl whitespace-pre-line text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
+          {content.heroTitle}
+        </h1>
+      ) : null}
 
-      <p className="mt-5 max-w-2xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
-        {content.heroDescription}
-      </p>
+      {isVisibleText(content.heroDescription) ? (
+        <p className="mt-5 max-w-2xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-700 break-keep md:text-lg">
+          {content.heroDescription}
+        </p>
+      ) : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-        <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
-          <CircleDot size={11} />
-          {content.heroPrimaryChip}
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
-          {content.heroSecondaryChip}
-        </span>
+        {isVisibleText(content.heroPrimaryChip) ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
+            <CircleDot size={11} />
+            {content.heroPrimaryChip}
+          </span>
+        ) : null}
+        {isVisibleText(content.heroSecondaryChip) ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
+            {content.heroSecondaryChip}
+          </span>
+        ) : null}
       </div>
     </div>
 
     <div className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-5 shadow-sm md:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-            {content.brandNoteLabel}
-          </p>
-          <p className="mt-2 text-lg font-black tracking-tight text-zinc-950">
-            {content.brandNoteTitle}
-          </p>
-        </div>
+      {content.brandNoteEnabled ? (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              {isVisibleText(content.brandNoteLabel) ? (
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+                  {content.brandNoteLabel}
+                </p>
+              ) : null}
+              {isVisibleText(content.brandNoteTitle) ? (
+                <p className="mt-2 text-lg font-black tracking-tight text-zinc-950">
+                  {content.brandNoteTitle}
+                </p>
+              ) : null}
+            </div>
 
-        <div className="rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
-          {content.brandNoteLiveLabel}
-        </div>
-      </div>
+            {isVisibleText(content.brandNoteLiveLabel) ? (
+              <div className="rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
+                {content.brandNoteLiveLabel}
+              </div>
+            ) : null}
+          </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-[24px] border border-white/80 bg-white p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            {content.entryCardLabel}
-          </p>
-          <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-            {content.entryCardText}
-          </p>
-        </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {isVisibleText(content.brandNoteLeftLabel) ||
+            isVisibleText(content.brandNoteLeftText) ? (
+              <div className="rounded-[24px] border border-white/80 bg-white p-4">
+                {isVisibleText(content.brandNoteLeftLabel) ? (
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    {content.brandNoteLeftLabel}
+                  </p>
+                ) : null}
+                {isVisibleText(content.brandNoteLeftText) ? (
+                  <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                    {content.brandNoteLeftText}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
-        <div className="rounded-[24px] border border-white/80 bg-white p-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            {content.noticeCardLabel}
-          </p>
-          <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-            {content.noticeCardText}
-          </p>
+            {isVisibleText(content.brandNoteRightLabel) ||
+            isVisibleText(content.brandNoteRightText) ? (
+              <div className="rounded-[24px] border border-white/80 bg-white p-4">
+                {isVisibleText(content.brandNoteRightLabel) ? (
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    {content.brandNoteRightLabel}
+                  </p>
+                ) : null}
+                {isVisibleText(content.brandNoteRightText) ? (
+                  <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                    {content.brandNoteRightText}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <div className="rounded-[24px] border border-dashed border-zinc-200 bg-white px-4 py-5 text-sm font-bold text-zinc-400">
+          Brand Note 블록이 숨김 상태입니다.
         </div>
-      </div>
+      )}
     </div>
   </section>
 );
 
 const EntryPanel = ({
   loading,
+  content,
   visibleTracks,
   primaryTracks,
   auxiliaryTracks,
@@ -510,23 +576,54 @@ const EntryPanel = ({
 }) => (
   <section className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-4 shadow-sm md:p-6">
     <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div>
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
-          WAYS TO JOIN
-        </p>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-950 md:text-3xl">
-          필요한 방식에 맞는 입구를 선택해 주세요.
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">
-          enabled 상태의 트랙만 보여집니다. rental과 open-call은 실제 진입되고, salon과
-          collaboration은 준비 중 안내를 띄웁니다.
-        </p>
+      <div className="max-w-3xl">
+        {content.waysToJoinEnabled ? (
+          <>
+            {isVisibleText(content.waysToJoinEyebrow) ? (
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
+                {content.waysToJoinEyebrow}
+              </p>
+            ) : null}
+            {isVisibleText(content.waysToJoinTitle) ? (
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-zinc-950 md:text-3xl">
+                {content.waysToJoinTitle}
+              </h2>
+            ) : null}
+            {isVisibleText(content.waysToJoinDescription) ? (
+              <p className="mt-2 max-w-2xl whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+                {content.waysToJoinDescription}
+              </p>
+            ) : null}
+          </>
+        ) : null}
+
+        {!content.waysToJoinEnabled && isVisibleText(content.trackMetaNote) ? (
+          <p className="text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+            {content.trackMetaNote}
+          </p>
+        ) : null}
       </div>
 
-      <div className="rounded-full border border-zinc-950/10 bg-white/85 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-        {loading ? "SYNCING" : `${visibleTracks.length} TRACKS ACTIVE`}
-      </div>
+      {content.activeTrackCountEnabled ? (
+        isVisibleText(
+          loading
+            ? "SYNCING"
+            : formatCountLabel(content.activeTrackCountLabelTemplate, visibleTracks.length)
+        ) ? (
+          <div className="rounded-full border border-zinc-950/10 bg-white/85 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+            {loading
+              ? "SYNCING"
+              : formatCountLabel(content.activeTrackCountLabelTemplate, visibleTracks.length)}
+          </div>
+        ) : null
+      ) : null}
     </div>
+
+    {content.waysToJoinEnabled && isVisibleText(content.trackMetaNote) ? (
+      <p className="mb-5 max-w-3xl text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+        {content.trackMetaNote}
+      </p>
+    ) : null}
 
     {primaryTracks.length > 0 ? (
       <>
@@ -594,7 +691,7 @@ const EntryPanel = ({
         <div>
           <p className="text-lg font-black text-zinc-950">노출 중인 트랙이 없습니다</p>
           <p className="mt-2 text-sm font-medium text-zinc-700 break-keep">
-            관리자에서 joinTracks를 활성화하면 이 허브가 열립니다.
+            현재 노출 가능한 트랙이 없습니다.
           </p>
         </div>
       </div>
@@ -603,12 +700,16 @@ const EntryPanel = ({
     {auxiliaryTracks.length > 0 ? (
       <div className="mt-5 rounded-[28px] border border-zinc-950/10 bg-white/80 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.06)] md:p-5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
-            Auxiliary entry points
-          </p>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
-            more than four tracks
-          </p>
+          {isVisibleText(content?.auxiliaryEntryPointsLabel) ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">
+              {content.auxiliaryEntryPointsLabel}
+            </p>
+          ) : null}
+          {isVisibleText(content?.auxiliaryEntryPointsSubLabel) ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
+              {content.auxiliaryEntryPointsSubLabel}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -616,6 +717,12 @@ const EntryPanel = ({
             <AuxiliaryTrackItem key={track.id} track={track} onClick={() => handleTrackClick(track)} />
           ))}
         </div>
+      </div>
+    ) : null}
+
+    {content.footerNoteEnabled && isVisibleText(content.footerNoteText) ? (
+      <div className="mt-5 rounded-[24px] border border-zinc-950/10 bg-white/75 px-4 py-3 text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+        {content.footerNoteText}
       </div>
     ) : null}
   </section>
@@ -944,6 +1051,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       <div className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
         <FeaturedProjectSlider
           items={featuredProjects}
+          content={joinHomeContent}
           activeIndex={featuredProjects.length === 0 ? 0 : featuredIndex}
           onPrev={handleFeaturedPrev}
           onNext={handleFeaturedNext}
@@ -955,6 +1063,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       <div className="mx-auto max-w-7xl px-5 pb-14 md:px-6 md:pb-20">
         <EntryPanel
           loading={loading}
+          content={joinHomeContent}
           visibleTracks={visibleTracks}
           primaryTracks={primaryTracks}
           auxiliaryTracks={auxiliaryTracks}
@@ -966,12 +1075,20 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
 
       <footer className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
         <div className="flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
-            활성 트랙 {DEFAULT_JOIN_TRACKS.length}개
-          </p>
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
-            관리자 설정에 따라 입구가 달라집니다
-          </p>
+          {joinHomeContent.activeTrackCountEnabled ? (
+            isVisibleText(
+              formatCountLabel(joinHomeContent.activeTrackCountLabelTemplate, visibleTracks.length)
+            ) ? (
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-500">
+                {formatCountLabel(joinHomeContent.activeTrackCountLabelTemplate, visibleTracks.length)}
+              </p>
+            ) : null
+          ) : null}
+          {isVisibleText(joinHomeContent.footerNoteText) && joinHomeContent.footerNoteEnabled ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-400">
+              {joinHomeContent.footerNoteText}
+            </p>
+          ) : null}
         </div>
       </footer>
 
