@@ -235,6 +235,29 @@ const getOpenCallDraftNotificationSettings = (draft, call) =>
       OPEN_CALL_FALLBACK.notificationSettings
   );
 
+const normalizeFeaturedOpenCallStatus = (status) => {
+  if (status === "draft" || status === "archived") {
+    return "open";
+  }
+
+  return status || "open";
+};
+
+const normalizeOpenCallPublicationState = (call = {}) => {
+  const next = { ...call };
+
+  if (next.isFeatured === true) {
+    next.isVisible = true;
+    next.status = normalizeFeaturedOpenCallStatus(next.status);
+  }
+
+  if (next.isVisible === false) {
+    next.isFeatured = false;
+  }
+
+  return next;
+};
+
 const buildOpenCallPreviewContext = (call, draft) => ({
   name: "김언프레임",
   email: "artist@example.com",
@@ -518,6 +541,60 @@ const OpenCallManager = ({ db, appId, applications }) => {
         ...(prev[callId] || {}),
         [key]: value,
       },
+    }));
+  };
+
+  const updatePublicationDraft = (callId, mutate) => {
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [callId]: null,
+    }));
+    setDrafts((prev) => {
+      const current = prev[callId] || {};
+      const nextDraft = mutate(current);
+
+      return {
+        ...prev,
+        [callId]: normalizeOpenCallPublicationState(nextDraft),
+      };
+    });
+  };
+
+  const handleToggleVisibility = (call) => {
+    const currentVisible = drafts[call.id]?.isVisible ?? call.isVisible;
+    const currentFeatured = drafts[call.id]?.isFeatured ?? call.isFeatured;
+
+    if (currentVisible && currentFeatured) {
+      const ok = window.confirm(
+        "대표 공고를 비공개로 전환하면 /opencall에 노출되지 않습니다.\n비공개로 전환하면서 대표 공고를 해제할까요?"
+      );
+      if (!ok) return;
+
+      updatePublicationDraft(call.id, (current) => ({
+        ...current,
+        isVisible: false,
+        isFeatured: false,
+      }));
+      return;
+    }
+
+    updatePublicationDraft(call.id, (current) => ({
+      ...current,
+      isVisible: !currentVisible,
+    }));
+  };
+
+  const handleToggleFeatured = (call) => {
+    const currentFeatured = drafts[call.id]?.isFeatured ?? call.isFeatured;
+    const currentStatus = drafts[call.id]?.status ?? call.status;
+
+    updatePublicationDraft(call.id, (current) => ({
+      ...current,
+      isFeatured: !currentFeatured,
+      isVisible: !currentFeatured ? true : current.isVisible,
+      status: !currentFeatured
+        ? normalizeFeaturedOpenCallStatus(currentStatus)
+        : current.status,
     }));
   };
 
@@ -837,7 +914,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
   const handleSave = async (call) => {
     const draft = drafts[call.id] || {};
-    const payload = {
+    const payload = normalizeOpenCallPublicationState({
       ...call,
       ...draft,
       statusNoticeText:
@@ -866,7 +943,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       trackType: "open-call",
       updatedAt: serverTimestamp(),
       createdAt: call.createdAt || serverTimestamp(),
-    };
+    });
     const activeCandidate = pickActiveOpenCall(
       sortedCalls.map((item) => (item.id === call.id ? { ...item, ...payload } : item))
     );
@@ -882,12 +959,30 @@ const OpenCallManager = ({ db, appId, applications }) => {
         payload,
         { merge: true }
       );
+      setDrafts((prev) => ({
+        ...prev,
+        [call.id]: {
+          ...(prev[call.id] || {}),
+          isVisible: payload.isVisible,
+          isFeatured: payload.isFeatured,
+          status: payload.status,
+        },
+      }));
+      const hasActiveOpenCall = Boolean(activeCandidate?.id);
+      const isHiddenFeatured =
+        payload.isFeatured === true && payload.isVisible === false;
+      const isActiveCall = activeCandidate?.id === call.id;
+
       setTimedSaveFeedback(call.id, {
         state: "saved",
         message:
-          activeCandidate?.id === call.id
+          !hasActiveOpenCall
+            ? "저장되었습니다. 하지만 현재 /opencall에 노출 가능한 공고가 없습니다. 이 공고를 공개 대표 공고로 설정해야 외부 페이지에 반영됩니다."
+            : isHiddenFeatured
+            ? "저장되었습니다. 이 공고는 대표 공고지만 비공개 상태라 /opencall에는 반영되지 않습니다."
+            : isActiveCall
             ? "저장되었습니다. 현재 /opencall 대표 공고이므로 외부 페이지에 반영됩니다."
-            : "저장되었습니다. 하지만 현재 /opencall 대표 공고가 아니므로 외부 페이지에는 반영되지 않습니다.",
+            : "저장되었습니다. 하지만 현재 수정 중인 공고는 /opencall 노출 공고가 아니므로 외부 페이지에는 반영되지 않습니다.",
       });
     } catch (error) {
       console.error(error);
@@ -935,11 +1030,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const SaveStatusRow = ({ call, sticky = false, className = "" }) => {
     const feedback = saveFeedbacks[call.id];
     const isActiveCall = call.id === activeOpenCallId;
-    const isCurrentPreviewCall = call.id === previewOpenCallId;
+    const hasActiveOpenCall = Boolean(activeOpenCallId);
     const showMismatchWarning = !isActiveCall;
-    const warningMessage = isCurrentPreviewCall
+    const warningMessage = hasActiveOpenCall
       ? "주의: 현재 수정 중인 공고는 /opencall 대표 공고가 아닙니다.\n저장해도 외부 페이지에는 바로 보이지 않을 수 있습니다."
-      : "주의: 현재 수정 중인 공고는 /opencall 대표 공고가 아닙니다.\n저장해도 외부 페이지에는 바로 보이지 않을 수 있습니다.";
+      : "주의: 현재 /opencall에 노출 중인 공고가 없습니다.\n대표 공고가 비공개이거나, 노출 가능한 open/upcoming 공고가 없습니다.";
+    const warningButtonLabel = hasActiveOpenCall
+      ? "이 공고를 /opencall 대표 공고로 설정"
+      : "현재 편집 중인 공고를 공개 대표 공고로 설정";
 
     return (
       <div
@@ -961,7 +1059,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800"
               >
                 <Star size={14} />
-                이 공고를 /opencall 대표 공고로 설정
+                {warningButtonLabel}
               </button>
             </div>
           </div>
@@ -1151,12 +1249,15 @@ const OpenCallManager = ({ db, appId, applications }) => {
   };
 
   const handleSetFeaturedOpenCall = async (call) => {
+    const currentStatus = call?.status;
+
     try {
       await updateDoc(
         doc(db, "artifacts", appId, "public", "data", "openCalls", call.id),
         {
           isVisible: true,
           isFeatured: true,
+          status: normalizeFeaturedOpenCallStatus(currentStatus),
           updatedAt: serverTimestamp(),
         }
       );
@@ -1180,6 +1281,27 @@ const OpenCallManager = ({ db, appId, applications }) => {
             )
         )
       );
+      setDrafts((prev) => {
+        const next = { ...prev };
+
+        next[call.id] = {
+          ...(next[call.id] || {}),
+          isVisible: true,
+          isFeatured: true,
+          status: normalizeFeaturedOpenCallStatus(currentStatus),
+        };
+
+        sortedCalls
+          .filter((item) => item.id !== call.id && item.isFeatured)
+          .forEach((item) => {
+            next[item.id] = {
+              ...(next[item.id] || {}),
+              isFeatured: false,
+            };
+          });
+
+        return next;
+      });
       setPreviewOpenCallId(call.id);
       setManagerNotice(
         "이 공고가 /opencall 대표 공고로 설정되었습니다. 이제 이 편집 내용이 외부 /opencall 페이지에 반영됩니다."
@@ -1235,6 +1357,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
     previewedOpenCallForStatus
   ).length;
   const activeDescriptionSectionCount = getOpenCallDescriptionSections(activeOpenCall).length;
+  const hasActiveOpenCall = Boolean(activeOpenCallId);
+  const previewedFeaturedHidden =
+    previewedOpenCallForStatus?.isFeatured === true &&
+    previewedOpenCallForStatus?.isVisible === false;
 
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
@@ -1353,7 +1479,59 @@ const OpenCallManager = ({ db, appId, applications }) => {
         </div>
       </div>
 
-      {!previewMatchesLanding ? (
+      {!hasActiveOpenCall ? (
+        <div className="mb-5 rounded-[22px] border border-red-200 bg-red-50 px-4 py-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
+              <p className="text-sm font-bold text-red-600 break-keep whitespace-pre-wrap">
+                현재 /opencall에 노출 중인 공고가 없습니다.
+                {"\n"}대표 공고가 비공개이거나, 노출 가능한 open/upcoming 공고가 없습니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!previewedOpenCall) return;
+                handleSetFeaturedOpenCall(previewedOpenCall);
+              }}
+              disabled={!previewedOpenCall}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-red-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-600 transition-colors hover:border-red-400 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Star size={14} />
+              현재 편집 중인 공고를 공개 대표 공고로 설정
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {previewedFeaturedHidden ? (
+        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
+              <p className="text-sm font-bold text-amber-700 break-keep whitespace-pre-wrap">
+                현재 편집 중인 공고는 대표 공고지만 비공개 상태입니다.
+                {"\n"}이 상태에서는 /opencall에 노출되지 않습니다.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!previewedOpenCall) return;
+                handleSetFeaturedOpenCall(previewedOpenCall);
+              }}
+              disabled={!previewedOpenCall}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Star size={14} />
+              현재 편집 중인 공고를 공개 대표 공고로 설정
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {hasActiveOpenCall && !previewMatchesLanding ? (
         <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-start gap-3">
@@ -2035,12 +2213,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-3">
                             <button
                               type="button"
-                              onClick={() =>
-                                updateDraft(call.id, "isVisible", !(draft.isVisible ?? call.isVisible))
-                              }
+                              onClick={() => handleToggleVisibility(call)}
                             className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
                               draft.isVisible ?? call.isVisible
                                 ? "bg-[#004aad] text-white"
@@ -2057,9 +2233,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                           <button
                             type="button"
-                            onClick={() =>
-                              updateDraft(call.id, "isFeatured", !(draft.isFeatured ?? call.isFeatured))
-                            }
+                            onClick={() => handleToggleFeatured(call)}
                             className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
                               draft.isFeatured ?? call.isFeatured
                                 ? "bg-[#AAD004] text-white"
