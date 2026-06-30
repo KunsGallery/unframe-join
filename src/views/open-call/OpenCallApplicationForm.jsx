@@ -186,6 +186,106 @@ const FieldError = ({ message }) => {
   );
 };
 
+const EditableFieldFrame = ({
+  editable,
+  title,
+  description,
+  enabled = true,
+  required,
+  onToggleEnabled,
+  onToggleRequired,
+  extraControls,
+  children,
+  disabledNote = "이 항목은 사용자 입력폼에서 숨김 처리됩니다.",
+}) => {
+  if (!editable) {
+    if (enabled === false) return null;
+    return children;
+  }
+
+  return (
+    <section className={`rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6 ${enabled === false ? "opacity-75" : ""}`}>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+            FORM FIELD
+          </p>
+          <h3 className="mt-2 text-lg md:text-xl font-black text-zinc-900 break-keep">
+            {title}
+          </h3>
+          {description ? (
+            <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
+              {description}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onToggleEnabled}
+            className={`inline-flex items-center justify-center rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
+              enabled ? "bg-[#004AAD] text-white" : "border border-zinc-200 bg-white text-zinc-500"
+            }`}
+          >
+            {enabled ? "사용" : "숨김"}
+          </button>
+
+          {typeof required === "boolean" ? (
+            <button
+              type="button"
+              onClick={onToggleRequired}
+              disabled={enabled === false}
+              className={`inline-flex items-center justify-center rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
+                required ? "bg-[#AAD004] text-white" : "border border-zinc-200 bg-white text-zinc-500"
+              }`}
+            >
+              {required ? "필수" : "선택"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {extraControls ? (
+        <div
+          className="mt-4 grid gap-3 md:grid-cols-2 [&>label]:rounded-[20px] [&>label]:border [&>label]:border-zinc-100 [&>label]:bg-zinc-50 [&>label]:px-4 [&>label]:py-3 [&>label>span]:block [&>label>span]:text-[10px] [&>label>span]:font-black [&>label>span]:uppercase [&>label>span]:tracking-[0.16em] [&>label>span]:text-zinc-300 [&>label>input]:mt-2 [&>label>input]:w-full [&>label>input]:rounded-2xl [&>label>input]:border [&>label>input]:border-zinc-100 [&>label>input]:bg-white [&>label>input]:px-3 [&>label>input]:py-3 [&>label>input]:text-sm [&>label>input]:font-bold [&>label>input]:outline-none [&>label>input]:transition-all [&>label>input]:focus:border-[#004aad]/20 [&>label>input]:focus:bg-white [&>label>select]:mt-2 [&>label>select]:w-full [&>label>select]:rounded-2xl [&>label>select]:border [&>label>select]:border-zinc-100 [&>label>select]:bg-white [&>label>select]:px-3 [&>label>select]:py-3 [&>label>select]:text-sm [&>label>select]:font-bold [&>label>select]:outline-none [&>label>select]:transition-all [&>label>select]:focus:border-[#004aad]/20 [&>label>select]:focus:bg-white [&>label>textarea]:mt-2 [&>label>textarea]:w-full [&>label>textarea]:rounded-2xl [&>label>textarea]:border [&>label>textarea]:border-zinc-100 [&>label>textarea]:bg-white [&>label>textarea]:px-3 [&>label>textarea]:py-3 [&>label>textarea]:text-sm [&>label>textarea]:font-medium [&>label>textarea]:leading-relaxed [&>label>textarea]:outline-none [&>label>textarea]:transition-all [&>label>textarea]:focus:border-[#004aad]/20 [&>label>textarea]:focus:bg-white"
+        >
+          {extraControls}
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-[24px] border border-dashed border-[#004aad]/15 bg-[#004aad]/5 px-4 py-4">
+        {enabled === false ? (
+          <p className="text-sm font-bold leading-relaxed text-zinc-500 break-keep">
+            {disabledNote}
+          </p>
+        ) : (
+          children
+        )}
+      </div>
+    </section>
+  );
+};
+
+const getNextCustomFieldOrder = (fields = []) =>
+  fields.reduce((max, field) => {
+    const order = Number(field?.order);
+    return Number.isFinite(order) ? Math.max(max, order) : max;
+  }, 0) + 1;
+
+const createEditableCustomField = (order) => ({
+  id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  label: "",
+  type: "text",
+  placeholder: "",
+  description: "",
+  required: false,
+  enabled: true,
+  order,
+  maxLength: 0,
+  options: [],
+});
+
 const OpenCallApplicationForm = ({
   openCall,
   db,
@@ -198,6 +298,9 @@ const OpenCallApplicationForm = ({
   previewMode = false,
   adminMode = false,
   bypassPeriodCheck = false,
+  editablePreview = false,
+  formSettings: formSettingsOverride,
+  onFormSettingsChange,
 }) => {
   const [formData, setFormData] = useState(() => ({
     ...EMPTY_FORM,
@@ -216,8 +319,11 @@ const OpenCallApplicationForm = ({
     [openCall]
   );
   const formSettings = useMemo(
-    () => normalizeOpenCallFormSettings(currentOpenCall.formSettings),
-    [currentOpenCall.formSettings]
+    () =>
+      normalizeOpenCallFormSettings(
+        formSettingsOverride || currentOpenCall.formSettings
+      ),
+    [currentOpenCall.formSettings, formSettingsOverride]
   );
   const notificationSettings = useMemo(
     () =>
@@ -233,6 +339,7 @@ const OpenCallApplicationForm = ({
   const canSubmitOpenCall = openCallStatus.canApply;
   const canAccessBeforePeriod = previewMode || adminMode || bypassPeriodCheck;
   const showClosedNotice = !canAccessBeforePeriod && !canSubmitOpenCall;
+  const canEditPreview = editablePreview && adminMode;
 
   const workImageRefs = [useRef(null), useRef(null), useRef(null)];
   const portfolioRef = useRef(null);
@@ -251,13 +358,441 @@ const OpenCallApplicationForm = ({
     );
   }, [initialProfileData]);
 
-  const customFields = useMemo(
+  const allCustomFields = useMemo(
     () =>
       (Array.isArray(formSettings.customFields) ? formSettings.customFields : [])
-        .filter((field) => field?.enabled !== false)
+        .slice()
         .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0)),
     [formSettings.customFields]
   );
+
+  const customFields = useMemo(
+    () =>
+      allCustomFields.filter((field) => field?.enabled !== false),
+    [allCustomFields]
+  );
+  const visibleCustomFields = customFields;
+
+  const updateFormSettings = (updater) => {
+    if (!canEditPreview || typeof onFormSettingsChange !== "function") return;
+
+    const nextValue = typeof updater === "function" ? updater(formSettings) : updater;
+    onFormSettingsChange(normalizeOpenCallFormSettings(nextValue));
+  };
+
+  const updateSectionSetting = (sectionKey, patch) => {
+    updateFormSettings((current) => ({
+      ...current,
+      sections: {
+        ...current.sections,
+        [sectionKey]: {
+          ...current.sections?.[sectionKey],
+          ...patch,
+        },
+      },
+    }));
+  };
+
+  const updateFieldSetting = (fieldKey, patch) => {
+    updateFormSettings((current) => ({
+      ...current,
+      fields: {
+        ...current.fields,
+        [fieldKey]: {
+          ...current.fields?.[fieldKey],
+          ...patch,
+        },
+      },
+    }));
+  };
+
+  const updateCustomFieldSetting = (fieldId, patch) => {
+    updateFormSettings((current) => ({
+      ...current,
+      customFields: (Array.isArray(current.customFields) ? current.customFields : []).map((field) =>
+        field.id === fieldId ? { ...field, ...patch } : field
+      ),
+    }));
+  };
+
+  const moveCustomField = (fieldId, direction) => {
+    updateFormSettings((current) => {
+      const list = (Array.isArray(current.customFields) ? current.customFields : [])
+        .slice()
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      const index = list.findIndex((field) => field.id === fieldId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= list.length) return current;
+      [list[index], list[nextIndex]] = [list[nextIndex], list[index]];
+      return {
+        ...current,
+        customFields: list.map((field, orderIndex) => ({
+          ...field,
+          order: orderIndex + 1,
+        })),
+      };
+    });
+  };
+
+  const addCustomField = () => {
+    updateFormSettings((current) => {
+      const list = (Array.isArray(current.customFields) ? current.customFields : [])
+        .slice()
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+      return {
+        ...current,
+        customFields: [...list, createEditableCustomField(getNextCustomFieldOrder(list))],
+      };
+    });
+  };
+
+  const removeCustomField = (fieldId) => {
+    const ok = window.confirm("이 추가 입력 항목을 삭제할까요?");
+    if (!ok) return;
+
+    updateFormSettings((current) => ({
+      ...current,
+      customFields: (Array.isArray(current.customFields) ? current.customFields : []).filter(
+        (field) => field.id !== fieldId
+      ),
+    }));
+  };
+
+  const renderCustomFieldCard = (field, index) => {
+    const fieldValue = getCustomFieldValue(field, customFieldValues);
+    const fieldError = fieldErrors[field.id];
+    const description = field.description || "";
+    const isEnabled = field.enabled !== false;
+    const fieldList = canEditPreview ? allCustomFields : visibleCustomFields;
+    const maxIndex = fieldList.length - 1;
+    const inputType = getCustomFieldInputType(field.type);
+
+    const previewNode =
+      field.type === "checkbox" ? (
+        <label className="flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
+          <input
+            type="checkbox"
+            checked={fieldValue === true}
+            onChange={(e) => setCustomFieldValue(field, e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
+          />
+          <span className="text-sm font-bold text-zinc-700 break-keep">
+            {field.placeholder || "동의 또는 확인 항목입니다."}
+          </span>
+        </label>
+      ) : field.type === "textarea" ? (
+        <textarea
+          value={String(fieldValue || "")}
+          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+          placeholder={field.placeholder || "답변을 입력해 주세요."}
+          rows={5}
+          maxLength={field.maxLength > 0 ? field.maxLength : undefined}
+          className="w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
+        />
+      ) : field.type === "select" ? (
+        <select
+          value={String(fieldValue || "")}
+          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+          className="w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white"
+        >
+          <option value="">{field.placeholder || "선택해 주세요."}</option>
+          {(Array.isArray(field.options) ? field.options : []).map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <InputBlock
+          label={field.label || "추가 입력 항목"}
+          required={field.required}
+          type={
+            inputType === "url"
+              ? "url"
+              : inputType === "email"
+              ? "email"
+              : inputType === "phone"
+              ? "tel"
+              : "text"
+          }
+          value={String(fieldValue || "")}
+          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+          placeholder={field.placeholder || "답변을 입력해 주세요."}
+          maxLength={field.maxLength > 0 ? field.maxLength : undefined}
+        />
+      );
+
+    if (canEditPreview) {
+      return (
+        <EditableFieldFrame
+          key={field.id}
+          editable
+          title={field.label || "추가 입력 항목"}
+          description={description || "추가 질문을 미리보기 안에서 바로 수정합니다."}
+          enabled={isEnabled}
+          required={typeof field.required === "boolean" ? field.required : undefined}
+          onToggleEnabled={() =>
+            updateCustomFieldSetting(field.id, {
+              enabled: !isEnabled,
+            })
+          }
+          onToggleRequired={
+            typeof field.required === "boolean"
+              ? () =>
+                  updateCustomFieldSetting(field.id, {
+                    required: !field.required,
+                  })
+              : undefined
+          }
+          extraControls={
+            <>
+              <label>
+                <span>질문 제목</span>
+                <input
+                  value={field.label || ""}
+                  onChange={(e) => updateCustomFieldSetting(field.id, { label: e.target.value })}
+                  placeholder="예: 작업에 대한 한 줄 소개"
+                />
+              </label>
+              <label>
+                <span>필드 타입</span>
+                <select
+                  value={field.type || "text"}
+                  onChange={(e) =>
+                    updateCustomFieldSetting(field.id, {
+                      type: e.target.value,
+                      options: e.target.value === "select" ? field.options || [] : [],
+                      maxLength:
+                        ["text", "textarea", "url", "email", "phone"].includes(e.target.value)
+                          ? field.maxLength || 0
+                          : 0,
+                    })
+                  }
+                >
+                  {OPEN_CALL_CUSTOM_FIELD_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>placeholder / 안내문</span>
+                <input
+                  value={field.placeholder || ""}
+                  onChange={(e) =>
+                    updateCustomFieldSetting(field.id, { placeholder: e.target.value })
+                  }
+                  placeholder="답변을 유도하는 짧은 문구"
+                />
+              </label>
+              <label>
+                <span>질문 설명</span>
+                <textarea
+                  rows={3}
+                  value={field.description || ""}
+                  onChange={(e) =>
+                    updateCustomFieldSetting(field.id, { description: e.target.value })
+                  }
+                  placeholder="보조 안내를 적어 주세요."
+                />
+              </label>
+              <label>
+                <span>노출 순서</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={field.order || index + 1}
+                  onChange={(e) =>
+                    updateCustomFieldSetting(field.id, {
+                      order: Math.max(1, Number(e.target.value) || 1),
+                    })
+                  }
+                />
+              </label>
+              {["text", "textarea", "url", "email", "phone"].includes(field.type) ? (
+                <label>
+                  <span>최대 글자 수</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={field.maxLength || 0}
+                    onChange={(e) =>
+                      updateCustomFieldSetting(field.id, {
+                        maxLength: Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                  />
+                </label>
+              ) : null}
+              {field.type === "select" ? (
+                <label className="md:col-span-2">
+                  <span>선택 옵션 (한 줄에 하나)</span>
+                  <textarea
+                    rows={4}
+                    value={(field.options || []).join("\n")}
+                    onChange={(e) =>
+                      updateCustomFieldSetting(field.id, {
+                        options: String(e.target.value || "")
+                          .split(/\r?\n/)
+                          .map((option) => option.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder={"회화\n사진\n설치\n영상"}
+                  />
+                </label>
+              ) : null}
+            </>
+          }
+          disabledNote="이 추가 입력 항목은 사용자 입력폼에서 숨김 처리됩니다."
+        >
+          {previewNode}
+          <FieldError message={fieldError} />
+          {description && field.type !== "checkbox" ? (
+            <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+              {description}
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => moveCustomField(field.id, -1)}
+              disabled={index === 0}
+              className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              위로
+            </button>
+            <button
+              type="button"
+              onClick={() => moveCustomField(field.id, 1)}
+              disabled={index === maxIndex}
+              className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              아래로
+            </button>
+            <button
+              type="button"
+              onClick={() => removeCustomField(field.id)}
+              className="inline-flex items-center justify-center rounded-full border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-red-600"
+            >
+              삭제
+            </button>
+          </div>
+        </EditableFieldFrame>
+      );
+    }
+
+    if (field.type === "checkbox") {
+      return (
+        <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+          <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
+            {field.label || "추가 입력 항목"}
+            {field.required ? <span className="text-red-500">*</span> : null}
+          </span>
+          {description ? (
+            <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+              {description}
+            </p>
+          ) : null}
+          <label className="mt-4 flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
+            <input
+              type="checkbox"
+              checked={fieldValue === true}
+              onChange={(e) => setCustomFieldValue(field, e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
+            />
+            <span className="text-sm font-bold text-zinc-700 break-keep">
+              {field.placeholder || "동의 또는 확인 항목입니다."}
+            </span>
+          </label>
+          <FieldError message={fieldError} />
+        </div>
+      );
+    }
+
+    if (field.type === "textarea") {
+      return (
+        <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+          <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
+            {field.label || "추가 입력 항목"}
+            {field.required ? <span className="text-red-500">*</span> : null}
+          </span>
+          {description ? (
+            <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+              {description}
+            </p>
+          ) : null}
+          <textarea
+            value={String(fieldValue || "")}
+            onChange={(e) => setCustomFieldValue(field, e.target.value)}
+            placeholder={field.placeholder || "답변을 입력해 주세요."}
+            rows={5}
+            maxLength={field.maxLength > 0 ? field.maxLength : undefined}
+            className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
+          />
+          <FieldError message={fieldError} />
+        </div>
+      );
+    }
+
+    if (field.type === "select") {
+      return (
+        <div key={field.id} className="rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
+          <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
+            {field.label || "추가 입력 항목"}
+            {field.required ? <span className="text-red-500">*</span> : null}
+          </span>
+          {description ? (
+            <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+              {description}
+            </p>
+          ) : null}
+          <select
+            value={String(fieldValue || "")}
+            onChange={(e) => setCustomFieldValue(field, e.target.value)}
+            className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white"
+          >
+            <option value="">{field.placeholder || "선택해 주세요."}</option>
+            {(Array.isArray(field.options) ? field.options : []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <FieldError message={fieldError} />
+        </div>
+      );
+    }
+
+    return (
+      <div key={field.id}>
+        <InputBlock
+          label={field.label || "추가 입력 항목"}
+          required={field.required}
+          type={
+            inputType === "url"
+              ? "url"
+              : inputType === "email"
+              ? "email"
+              : inputType === "phone"
+              ? "tel"
+              : "text"
+          }
+          value={String(fieldValue || "")}
+          onChange={(e) => setCustomFieldValue(field, e.target.value)}
+          placeholder={field.placeholder || "답변을 입력해 주세요."}
+          maxLength={field.maxLength > 0 ? field.maxLength : undefined}
+        />
+        {description ? (
+          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+            {description}
+          </p>
+        ) : null}
+        <FieldError message={fieldError} />
+      </div>
+    );
+  };
 
   const [customFieldValues, setCustomFieldValues] = useState({});
 
@@ -280,6 +815,7 @@ const OpenCallApplicationForm = ({
   }, [customFieldValues, customFields, formData, formSettings]);
 
   const worksSectionEnabled = isSectionEnabled(formSettings.sections.works);
+  const renderWorksSection = worksSectionEnabled || canEditPreview;
   const requiredWorkCount = worksSectionEnabled
     ? Math.min(
         formData.works.length,
@@ -297,10 +833,18 @@ const OpenCallApplicationForm = ({
   const showAddressField = isFieldEnabled(formSettings.fields.address);
   const showMediumField = isFieldEnabled(formSettings.fields.medium);
   const showSnsField = isFieldEnabled(formSettings.fields.snsLink);
+  const renderBirthYearField = showBirthYearField || canEditPreview;
+  const renderAddressField = showAddressField || canEditPreview;
+  const renderMediumField = showMediumField || canEditPreview;
+  const renderSnsField = showSnsField || canEditPreview;
   const showStatementSection = isSectionEnabled(formSettings.sections.statement);
+  const renderStatementSection = showStatementSection || canEditPreview;
   const statementMaxLength = Math.max(0, Number(formSettings.sections.statement?.maxLength || 0));
   const showPortfolioSection = isSectionEnabled(formSettings.sections.portfolio);
+  const renderPortfolioSection = showPortfolioSection || canEditPreview;
   const showPrivacySection = isSectionEnabled(formSettings.sections.privacy);
+  const renderPrivacySection = showPrivacySection || canEditPreview;
+  const visibleCustomFieldCount = visibleCustomFields.length;
 
   const clearFieldError = (key) => {
     setFieldErrors((prev) => {
@@ -1054,8 +1598,24 @@ const OpenCallApplicationForm = ({
                 <FieldError message={fieldErrors.email} />
               </div>
 
-              {showBirthYearField ? (
-                <div>
+              {renderBirthYearField ? (
+                <EditableFieldFrame
+                  editable={canEditPreview}
+                  title="출생연도"
+                  description="기본 필드의 사용 여부와 필수 여부를 조정합니다."
+                  enabled={showBirthYearField}
+                  required={isFieldRequired(formSettings.fields.birthYear)}
+                  onToggleEnabled={() =>
+                    updateFieldSetting("birthYear", {
+                      enabled: !showBirthYearField,
+                    })
+                  }
+                  onToggleRequired={() =>
+                    updateFieldSetting("birthYear", {
+                      required: !isFieldRequired(formSettings.fields.birthYear),
+                    })
+                  }
+                >
                   <InputBlock
                     label="출생연도"
                     required={isFieldRequired(formSettings.fields.birthYear)}
@@ -1064,38 +1624,72 @@ const OpenCallApplicationForm = ({
                     placeholder="예: 1994"
                   />
                   <FieldError message={fieldErrors.birthYear} />
-                </div>
+                </EditableFieldFrame>
               ) : null}
             </div>
 
-            {showAddressField || showMediumField || showSnsField ? (
+            {renderAddressField || renderMediumField || renderSnsField ? (
               <div className="mt-5 grid gap-5 md:grid-cols-2">
-                {showAddressField ? (
-                  <>
-                    <div>
-                      <InputBlock
-                        label="주소"
-                        required={isFieldRequired(formSettings.fields.address)}
-                        value={formData.addressMain}
-                        onChange={(e) => setField("addressMain", e.target.value)}
-                        placeholder="기본 주소를 입력해 주세요"
-                      />
-                      <FieldError message={fieldErrors.addressMain} />
-                    </div>
+                {renderAddressField ? (
+                  <EditableFieldFrame
+                    editable={canEditPreview}
+                    title="주소"
+                    description="기본 주소는 필수, 상세주소는 선택으로 유지합니다."
+                    enabled={showAddressField}
+                    required={isFieldRequired(formSettings.fields.address)}
+                    onToggleEnabled={() =>
+                      updateFieldSetting("address", {
+                        enabled: !showAddressField,
+                      })
+                    }
+                    onToggleRequired={() =>
+                      updateFieldSetting("address", {
+                        required: !isFieldRequired(formSettings.fields.address),
+                      })
+                    }
+                  >
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <InputBlock
+                          label="주소"
+                          required={isFieldRequired(formSettings.fields.address)}
+                          value={formData.addressMain}
+                          onChange={(e) => setField("addressMain", e.target.value)}
+                          placeholder="기본 주소를 입력해 주세요"
+                        />
+                        <FieldError message={fieldErrors.addressMain} />
+                      </div>
 
-                    <div>
-                      <InputBlock
-                        label="상세주소"
-                        value={formData.addressDetail}
-                        onChange={(e) => setField("addressDetail", e.target.value)}
-                        placeholder="동, 호수 등 상세 주소"
-                      />
+                      <div>
+                        <InputBlock
+                          label="상세주소"
+                          value={formData.addressDetail}
+                          onChange={(e) => setField("addressDetail", e.target.value)}
+                          placeholder="동, 호수 등 상세 주소"
+                        />
+                      </div>
                     </div>
-                  </>
+                  </EditableFieldFrame>
                 ) : null}
 
-                {showMediumField ? (
-                  <div>
+                {renderMediumField ? (
+                  <EditableFieldFrame
+                    editable={canEditPreview}
+                    title="매체"
+                    description="작품 매체를 보여줄지와 필수 여부를 조정합니다."
+                    enabled={showMediumField}
+                    required={isFieldRequired(formSettings.fields.medium)}
+                    onToggleEnabled={() =>
+                      updateFieldSetting("medium", {
+                        enabled: !showMediumField,
+                      })
+                    }
+                    onToggleRequired={() =>
+                      updateFieldSetting("medium", {
+                        required: !isFieldRequired(formSettings.fields.medium),
+                      })
+                    }
+                  >
                     <InputBlock
                       label="매체"
                       required={isFieldRequired(formSettings.fields.medium)}
@@ -1104,11 +1698,27 @@ const OpenCallApplicationForm = ({
                       placeholder="예: 회화 / 설치 / 사진"
                     />
                     <FieldError message={fieldErrors.medium} />
-                  </div>
+                  </EditableFieldFrame>
                 ) : null}
 
-                {showSnsField ? (
-                  <div>
+                {renderSnsField ? (
+                  <EditableFieldFrame
+                    editable={canEditPreview}
+                    title="SNS 또는 웹사이트"
+                    description="외부 링크를 보여줄지와 필수 여부를 조정합니다."
+                    enabled={showSnsField}
+                    required={isFieldRequired(formSettings.fields.snsLink)}
+                    onToggleEnabled={() =>
+                      updateFieldSetting("snsLink", {
+                        enabled: !showSnsField,
+                      })
+                    }
+                    onToggleRequired={() =>
+                      updateFieldSetting("snsLink", {
+                        required: !isFieldRequired(formSettings.fields.snsLink),
+                      })
+                    }
+                  >
                     <InputBlock
                       label="SNS 또는 웹사이트 링크"
                       required={isFieldRequired(formSettings.fields.snsLink)}
@@ -1117,13 +1727,13 @@ const OpenCallApplicationForm = ({
                       placeholder="@instagram / https://"
                     />
                     <FieldError message={fieldErrors.snsLink} />
-                  </div>
+                  </EditableFieldFrame>
                 ) : null}
               </div>
             ) : null}
           </div>
 
-          {customFields.length > 0 ? (
+          {visibleCustomFieldCount > 0 || canEditPreview ? (
             <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
               <div className="mb-5 flex items-center gap-3">
                 <Sparkles size={18} className="text-[#004AAD]" />
@@ -1132,142 +1742,114 @@ const OpenCallApplicationForm = ({
                 </h2>
               </div>
 
+              {canEditPreview ? (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-[#004aad]/10 bg-[#004aad]/5 px-4 py-3">
+                  <p className="text-sm font-bold text-zinc-600 break-keep">
+                    관리자 인라인 편집 모드입니다. 숨김 항목도 아래 카드에서 바로 수정할 수 있습니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={addCustomField}
+                    className="inline-flex items-center justify-center rounded-full bg-[#004AAD] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
+                  >
+                    + 추가 질문 만들기
+                  </button>
+                </div>
+              ) : null}
+
               <div className="grid gap-5 md:grid-cols-2">
-                {customFields.map((field) => {
-                  const fieldValue = getCustomFieldValue(field, customFieldValues);
-                  const fieldError = fieldErrors[field.id];
-                  const description = field.description || "";
-                  const baseLabel = (
-                    <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
-                      {field.label || "추가 입력 항목"}
-                      {field.required ? <span className="text-red-500">*</span> : null}
-                    </span>
-                  );
-
-                  if (field.type === "checkbox") {
-                    return (
-                      <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
-                        {baseLabel}
-                        {description ? (
-                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                            {description}
-                          </p>
-                        ) : null}
-                        <label className="mt-4 flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
-                          <input
-                            type="checkbox"
-                            checked={fieldValue === true}
-                            onChange={(e) => setCustomFieldValue(field, e.target.checked)}
-                            className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
-                          />
-                          <span className="text-sm font-bold text-zinc-700 break-keep">
-                            {field.placeholder || "동의 또는 확인 항목입니다."}
-                          </span>
-                        </label>
-                        <FieldError message={fieldError} />
-                      </div>
-                    );
-                  }
-
-                  if (field.type === "textarea") {
-                    return (
-                      <div key={field.id} className="md:col-span-2 rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
-                        {baseLabel}
-                        {description ? (
-                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                            {description}
-                          </p>
-                        ) : null}
-                        <textarea
-                          value={String(fieldValue || "")}
-                          onChange={(e) => setCustomFieldValue(field, e.target.value)}
-                          placeholder={field.placeholder || "답변을 입력해 주세요."}
-                          rows={5}
-                          maxLength={field.maxLength > 0 ? field.maxLength : undefined}
-                          className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
-                        />
-                        <FieldError message={fieldError} />
-                      </div>
-                    );
-                  }
-
-                  if (field.type === "select") {
-                    return (
-                      <div key={field.id} className="rounded-[24px] border border-zinc-100 bg-zinc-50/70 px-4 py-4">
-                        <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.3em] text-[#004aad] flex items-center gap-2 font-bold text-left">
-                          {field.label || "추가 입력 항목"}
-                          {field.required ? <span className="text-red-500">*</span> : null}
-                        </span>
-                        {description ? (
-                          <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                            {description}
-                          </p>
-                        ) : null}
-                        <select
-                          value={String(fieldValue || "")}
-                          onChange={(e) => setCustomFieldValue(field, e.target.value)}
-                          className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white"
-                        >
-                          <option value="">{field.placeholder || "선택해 주세요."}</option>
-                          {(Array.isArray(field.options) ? field.options : []).map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                        <FieldError message={fieldError} />
-                      </div>
-                    );
-                  }
-
-                  const inputType =
-                    getCustomFieldInputType(field.type) === "url"
-                      ? "url"
-                      : getCustomFieldInputType(field.type) === "email"
-                      ? "email"
-                      : getCustomFieldInputType(field.type) === "phone"
-                      ? "tel"
-                      : "text";
-
-                  return (
-                    <div key={field.id}>
-                      <InputBlock
-                        label={field.label || "추가 입력 항목"}
-                        required={field.required}
-                        type={inputType}
-                        value={String(fieldValue || "")}
-                        onChange={(e) => setCustomFieldValue(field, e.target.value)}
-                        placeholder={field.placeholder || "답변을 입력해 주세요."}
-                        maxLength={field.maxLength > 0 ? field.maxLength : undefined}
-                      />
-                      {description ? (
-                        <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                          {description}
-                        </p>
-                      ) : null}
-                      <FieldError message={fieldError} />
-                    </div>
-                  );
-                })}
+                {(canEditPreview ? allCustomFields : visibleCustomFields).map((field, index) =>
+                  renderCustomFieldCard(field, index)
+                )}
               </div>
             </div>
           ) : null}
 
-          {worksSectionEnabled ? (
-            <div className="space-y-5">
-              <div className="flex items-center gap-3">
-                <Palette size={18} className="text-[#004AAD]" />
-                <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                  대표 작품
-                </h2>
-              </div>
+          {renderWorksSection ? (
+            <EditableFieldFrame
+              editable={canEditPreview}
+              title="대표 작품"
+              description="대표 작품의 노출 여부와 필수 개수를 조정합니다."
+              enabled={worksSectionEnabled}
+              onToggleEnabled={() =>
+                updateSectionSetting("works", {
+                  enabled: !worksSectionEnabled,
+                })
+              }
+              extraControls={
+                <>
+                  <label>
+                    <span>필수 개수</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="3"
+                      value={formSettings.sections.works?.requiredCount || 0}
+                      onChange={(e) =>
+                        updateSectionSetting("works", {
+                          requiredCount: Math.max(0, Number(e.target.value) || 0),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>최대 개수</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="3"
+                      value={formSettings.sections.works?.maxCount || 3}
+                      onChange={(e) =>
+                        updateSectionSetting("works", {
+                          maxCount: Math.max(1, Number(e.target.value) || 1),
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              }
+            >
+              <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <Palette size={18} className="text-[#004AAD]" />
+                  <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
+                    대표 작품
+                  </h2>
+                </div>
 
-              {visibleWorks.map((work, index) => renderWorkCard(work, index))}
-            </div>
+                {visibleWorks.map((work, index) => renderWorkCard(work, index))}
+              </div>
+            </EditableFieldFrame>
           ) : null}
 
-          {showStatementSection ? (
-            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+          {renderStatementSection ? (
+            <EditableFieldFrame
+              editable={canEditPreview}
+              title="작업 소개"
+              description="최대 글자 수를 조정하고, 항목 노출 여부를 제어합니다."
+              enabled={showStatementSection}
+              onToggleEnabled={() =>
+                updateSectionSetting("statement", {
+                  enabled: !showStatementSection,
+                })
+              }
+              extraControls={
+                <label>
+                  <span>최대 글자 수</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={statementMaxLength}
+                    onChange={(e) =>
+                      updateSectionSetting("statement", {
+                        maxLength: Math.max(0, Number(e.target.value) || 0),
+                      })
+                    }
+                  />
+                </label>
+              }
+            >
               <div className="mb-5 flex items-center gap-3">
                 <FileText size={18} className="text-[#004AAD]" />
                 <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
@@ -1301,11 +1883,27 @@ const OpenCallApplicationForm = ({
                 </span>
               </div>
               <FieldError message={fieldErrors.artistStatement} />
-            </div>
+            </EditableFieldFrame>
           ) : null}
 
-          {showPortfolioSection ? (
-            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+          {renderPortfolioSection ? (
+            <EditableFieldFrame
+              editable={canEditPreview}
+              title="포트폴리오"
+              description="포트폴리오 노출 여부와 필수 여부를 조정합니다."
+              enabled={showPortfolioSection}
+              required={!!formSettings.sections.portfolio?.required}
+              onToggleEnabled={() =>
+                updateSectionSetting("portfolio", {
+                  enabled: !showPortfolioSection,
+                })
+              }
+              onToggleRequired={() =>
+                updateSectionSetting("portfolio", {
+                  required: !formSettings.sections.portfolio?.required,
+                })
+              }
+            >
               <div className="mb-5 flex items-center gap-3">
                 <ImageIcon size={18} className="text-[#004AAD]" />
                 <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
@@ -1369,7 +1967,7 @@ const OpenCallApplicationForm = ({
 
                 <FieldError message={errors.portfolioUrl || fieldErrors.portfolioUrl} />
               </div>
-            </div>
+            </EditableFieldFrame>
           ) : null}
 
           {Object.keys(fieldErrors).length > 0 ? (
@@ -1393,8 +1991,24 @@ const OpenCallApplicationForm = ({
             </div>
           ) : null}
 
-          {showPrivacySection ? (
-            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+          {renderPrivacySection ? (
+            <EditableFieldFrame
+              editable={canEditPreview}
+              title="개인정보 수집 및 이용 동의"
+              description="운영상 필수 권장 항목입니다. 필요하면 노출 여부와 필수 여부를 조정할 수 있습니다."
+              enabled={showPrivacySection}
+              required={!!formSettings.sections.privacy?.required}
+              onToggleEnabled={() =>
+                updateSectionSetting("privacy", {
+                  enabled: !showPrivacySection,
+                })
+              }
+              onToggleRequired={() =>
+                updateSectionSetting("privacy", {
+                  required: !formSettings.sections.privacy?.required,
+                })
+              }
+            >
               <div className="mb-4 flex items-center gap-3">
                 <AlertCircle size={18} className="text-[#004AAD]" />
                 <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
@@ -1415,6 +2029,12 @@ const OpenCallApplicationForm = ({
               </label>
               <FieldError message={fieldErrors.privacyAgreed} />
 
+              {canEditPreview ? (
+                <p className="mt-3 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 break-keep">
+                  개인정보 동의는 접수 운영상 필수 권장 항목입니다.
+                </p>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => setShowPrivacy((prev) => !prev)}
@@ -1431,7 +2051,7 @@ const OpenCallApplicationForm = ({
                   </pre>
                 </div>
               )}
-            </div>
+            </EditableFieldFrame>
           ) : null}
         </div>
 

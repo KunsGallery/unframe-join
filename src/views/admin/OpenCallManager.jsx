@@ -1588,6 +1588,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
   );
   const activeManagerTab =
     OPEN_CALL_MANAGER_TABS.find((tab) => tab.id === activeOpenCallTab) || OPEN_CALL_MANAGER_TABS[0];
+  const handleFormSettingsChange = (nextSettings) => {
+    if (!previewedOpenCall?.id) return;
+    updateFormSettings(previewedOpenCall.id, () => nextSettings);
+  };
 
   useEffect(() => {
     if (activeOpenCallTab === "applications" && !selectedOpenCallId && previewedOpenCall?.id) {
@@ -2037,9 +2041,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
                 db={db}
                 appId={appId}
                 initialProfileData={null}
+                formSettings={previewedOpenCallView.formSettings}
+                onFormSettingsChange={handleFormSettingsChange}
                 previewMode
                 adminMode
                 bypassPeriodCheck
+                editablePreview
               />
             </div>
           </div>
@@ -3165,11 +3172,11 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
                           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                            신청 입력양식 설정
+                            고급 설정
                           </p>
                           <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
-                            JoinHome 오픈콜 폼에서 보이는 항목을 조정합니다. 저장 구조는
-                            유지되지만, 비활성 항목은 화면과 검증에서 제외됩니다.
+                            인라인 편집으로 대부분의 항목을 수정할 수 있고, 이 영역은 raw 설정을
+                            직접 다루고 싶을 때만 사용합니다.
                           </p>
                         </div>
                       </div>
