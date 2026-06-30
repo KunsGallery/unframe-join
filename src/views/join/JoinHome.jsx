@@ -34,8 +34,6 @@ const TRACK_ICON_MAP = {
   collaboration: MessageSquare,
 };
 
-const TRACK_ALERT_MESSAGE = "준비 중입니다.";
-
 const isVisibleText = (value) => typeof value === "string" && value.trim().length > 0;
 
 const formatCountLabel = (template, count) => {
@@ -85,7 +83,9 @@ const getTrackShortLabel = (track) =>
   track?.shortLabel?.trim() || getEntryLabel(track?.routeTrack);
 
 const getTrackStatusLabel = (track) =>
-  track?.statusLabel?.trim() ||
+  track?.entryStatus === "preparing"
+    ? "PREPARING"
+    : track?.statusLabel?.trim() ||
   track?.badgeText?.trim() ||
   (track?.routeTrack === "rental"
     ? "신청하기"
@@ -94,7 +94,9 @@ const getTrackStatusLabel = (track) =>
     : "PREPARING");
 
 const getTrackCtaLabel = (track) =>
-  track?.ctaLabel?.trim() || getDefaultCtaLabel(track?.routeTrack);
+  track?.entryStatus === "preparing"
+    ? "준비 중"
+    : track?.ctaLabel?.trim() || getDefaultCtaLabel(track?.routeTrack);
 
 const getPanelBasis = (track, hoveredTrackId, trackCount) => {
   if (trackCount <= 1 || !hoveredTrackId) {
@@ -457,7 +459,11 @@ const FeaturedProjectSlider = ({
 };
 
 const BrandHero = ({ content }) => (
-  <section className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
+  <section
+    className={`grid gap-8 ${
+      content.brandNoteEnabled ? "lg:grid-cols-[1.15fr_0.85fr] lg:items-end" : "grid-cols-1"
+    }`}
+  >
     <div className="max-w-4xl">
       {isVisibleText(content.heroBadgeText) ? (
         <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
@@ -497,8 +503,8 @@ const BrandHero = ({ content }) => (
       </div>
     </div>
 
-    <div className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-5 shadow-sm md:p-6">
-      {content.brandNoteEnabled ? (
+    {content.brandNoteEnabled ? (
+      <div className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-5 shadow-sm md:p-6">
         <>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -555,12 +561,8 @@ const BrandHero = ({ content }) => (
             ) : null}
           </div>
         </>
-      ) : (
-        <div className="rounded-[24px] border border-dashed border-zinc-200 bg-white px-4 py-5 text-sm font-bold text-zinc-400">
-          Brand Note 블록이 숨김 상태입니다.
-        </div>
-      )}
-    </div>
+      </div>
+    ) : null}
   </section>
 );
 
@@ -816,6 +818,42 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
   );
 };
 
+const PreparingDialog = ({ track, onClose }) => {
+  if (!track) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-950/45 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="preparing-dialog-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-[32px] border border-zinc-950/10 bg-[#F6F4EE] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.3)] md:p-8">
+        <div className="inline-flex rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-[#004AAD]">
+          PREPARING
+        </div>
+        <h2 id="preparing-dialog-title" className="mt-5 text-2xl font-black tracking-tight text-zinc-950 break-keep">
+          {track.preparingTitle || "준비 중입니다."}
+        </h2>
+        <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+          {track.preparingMessage || "현재 해당 접수는 준비 중입니다."}
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          autoFocus
+          className="mt-7 w-full rounded-2xl bg-zinc-950 px-5 py-4 text-sm font-black text-white transition-opacity hover:opacity-90"
+        >
+          {track.preparingConfirmLabel || "확인"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
   const [joinPopupDocs, setJoinPopupDocs] = useState([]);
@@ -828,6 +866,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const [dismissedPopupIdsThisSession, setDismissedPopupIdsThisSession] = useState([]);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [preparingTrack, setPreparingTrack] = useState(null);
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", JOIN_TRACK_COLLECTION);
@@ -894,7 +933,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const currentTime = useMemo(() => new Date(nowTick), [nowTick]);
   const mergedTracks = useMemo(() => mergeJoinTracks(joinTrackDocs), [joinTrackDocs]);
   const visibleTracks = useMemo(
-    () => mergedTracks.filter((track) => track.enabled !== false),
+    () => mergedTracks.filter((track) => track.entryStatus !== "hidden"),
     [mergedTracks]
   );
   const primaryTracks = visibleTracks.slice(0, 4);
@@ -955,6 +994,13 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   }, [activePopup, featuredProjects, joinPopupDocs, popupCandidates, popupStatuses]);
 
   const handleTrackSelect = (routeTrack) => {
+    const targetTrack = mergedTracks.find((track) => track.routeTrack === routeTrack);
+    if (targetTrack?.entryStatus === "hidden") return;
+    if (targetTrack?.entryStatus === "preparing") {
+      setPreparingTrack(targetTrack);
+      return;
+    }
+
     if (routeTrack === "rental") {
       onSelectRental?.();
       return;
@@ -970,7 +1016,6 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       return;
     }
 
-    window.alert(TRACK_ALERT_MESSAGE);
   };
 
   const dismissPopupForSession = (popup) => {
@@ -1038,7 +1083,27 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
     };
   }, [popupToShow]);
 
+  useEffect(() => {
+    if (!preparingTrack) return undefined;
+
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setPreparingTrack(null);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [preparingTrack]);
+
   const handleTrackClick = (track) => {
+    if (track.entryStatus === "preparing") {
+      setPreparingTrack(track);
+      return;
+    }
     handleTrackSelect(track.routeTrack);
   };
 
@@ -1091,6 +1156,8 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
           ) : null}
         </div>
       </footer>
+
+      <PreparingDialog track={preparingTrack} onClose={() => setPreparingTrack(null)} />
 
       <JoinPopupModal
         popup={popupToShow}

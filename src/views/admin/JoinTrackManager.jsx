@@ -11,6 +11,7 @@ import {
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   DEFAULT_JOIN_TRACKS,
+  JOIN_TRACK_ENTRY_STATUSES,
   JOIN_TRACK_COLLECTION,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
@@ -145,6 +146,10 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
             backgroundImageUrl: track.backgroundImageUrl || "",
             order: track.order ?? 0,
             enabled: track.enabled !== false,
+            entryStatus: track.entryStatus || (track.enabled === false ? "hidden" : "active"),
+            preparingTitle: track.preparingTitle || "준비 중입니다.",
+            preparingMessage: track.preparingMessage || "현재 해당 접수는 준비 중입니다.",
+            preparingConfirmLabel: track.preparingConfirmLabel || "확인",
           };
         }
       });
@@ -221,6 +226,9 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
 
   const handleSave = async (track) => {
     const draft = drafts[track.id] || {};
+    const entryStatus = JOIN_TRACK_ENTRY_STATUSES.includes(draft.entryStatus)
+      ? draft.entryStatus
+      : track.entryStatus || (track.enabled === false ? "hidden" : "active");
     const payload = {
       ...track,
       title: normalizeText(draft.title, track.title || ""),
@@ -242,7 +250,14 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
         track.backgroundImageUrl || ""
       ),
       order: normalizeOrderValue(draft.order, track.order || 0),
-      enabled: (draft.enabled ?? track.enabled) === true,
+      enabled: entryStatus !== "hidden",
+      entryStatus,
+      preparingTitle: normalizeText(draft.preparingTitle, "준비 중입니다."),
+      preparingMessage: normalizeText(
+        draft.preparingMessage,
+        "현재 해당 접수는 준비 중입니다."
+      ),
+      preparingConfirmLabel: normalizeText(draft.preparingConfirmLabel, "확인"),
       routeTrack: track.routeTrack || track.id,
       trackType: "join-track",
       updatedAt: serverTimestamp(),
@@ -338,12 +353,13 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
               backgroundImageUrl: draft.backgroundImageUrl || track.backgroundImageUrl,
             });
             const feedback = saveFeedbacks[track.id];
+            const entryStatus = draft.entryStatus || track.entryStatus || "active";
 
             return (
               <div
                 key={track.id}
                 className={`overflow-hidden rounded-[32px] border ${
-                  draft.enabled ?? track.enabled
+                  entryStatus !== "hidden"
                     ? "border-zinc-100 bg-zinc-50/70"
                     : "border-zinc-200 bg-zinc-50/40 opacity-90"
                 }`}
@@ -361,7 +377,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                                     {draft.shortLabel || track.shortLabel || track.routeTrack || track.id}
                                   </span>
                                   <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                                    {draft.enabled ?? track.enabled ? (
+                                    {entryStatus !== "hidden" ? (
                                       <>
                                         <Eye size={12} />
                                         visible
@@ -398,32 +414,55 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                             </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          enabled
+                      <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-4 sm:col-span-2">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          진입 상태
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => updateDraft(track.id, "enabled", !(draft.enabled ?? track.enabled))}
-                          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
-                            draft.enabled ?? track.enabled
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-zinc-100 text-zinc-500"
-                          }`}
-                        >
-                          {draft.enabled ?? track.enabled ? (
-                            <>
-                              <Eye size={12} />
-                              활성화
-                            </>
-                          ) : (
-                            <>
-                              <EyeOff size={12} />
-                              비활성화
-                            </>
-                          )}
-                        </button>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            ["active", "정상 진입"],
+                            ["preparing", "준비중"],
+                            ["hidden", "숨김"],
+                          ].map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => updateDraft(track.id, "entryStatus", value)}
+                              className={`rounded-2xl px-3 py-3 text-xs font-black transition-colors ${
+                                entryStatus === value
+                                  ? "bg-[#004AAD] text-white"
+                                  : "border border-zinc-200 bg-zinc-50 text-zinc-500"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-[11px] font-semibold leading-relaxed text-zinc-400 break-keep">
+                          정상 진입: 신청 페이지로 이동 · 준비중: 카드는 보이고 안내 팝업 표시 · 숨김: 메인에서 완전히 제거
+                        </p>
                       </div>
+
+                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          준비중 팝업 제목
+                        </span>
+                        <input value={draft.preparingTitle || ""} onChange={(e) => updateDraft(track.id, "preparingTitle", e.target.value)} className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20 focus:bg-white" />
+                      </label>
+
+                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          준비중 팝업 문구
+                        </span>
+                        <textarea rows={3} value={draft.preparingMessage || ""} onChange={(e) => updateDraft(track.id, "preparingMessage", e.target.value)} className="w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none focus:border-[#004aad]/20 focus:bg-white" />
+                      </label>
+
+                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
+                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          확인 버튼 문구
+                        </span>
+                        <input value={draft.preparingConfirmLabel || ""} onChange={(e) => updateDraft(track.id, "preparingConfirmLabel", e.target.value)} className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20 focus:bg-white" />
+                      </label>
 
                       <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
                         <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
@@ -557,12 +596,12 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
 
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                          draft.enabled ?? track.enabled
+                          entryStatus !== "hidden"
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                             : "border-zinc-200 bg-zinc-100 text-zinc-500"
                         }`}
                       >
-                        {draft.enabled ?? track.enabled ? "visible" : "hidden"}
+                        {entryStatus}
                       </span>
                     </div>
 

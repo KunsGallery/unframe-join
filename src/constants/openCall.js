@@ -281,6 +281,7 @@ const cloneCustomField = (field = {}, fallbackOrder = 1) => {
     required: toBoolean(field?.required, false),
     enabled: toBoolean(field?.enabled, true),
     order: toNumber(field?.order, fallbackOrder),
+    maxLength: Math.max(0, toNumber(field?.maxLength, 0)),
     options:
       type === "select"
         ? Array.isArray(field?.options)

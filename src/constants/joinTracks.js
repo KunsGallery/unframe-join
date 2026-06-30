@@ -6,6 +6,10 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "rental",
     order: 1,
     enabled: true,
+    entryStatus: "active",
+    preparingTitle: "준비 중입니다.",
+    preparingMessage: "현재 해당 접수는 준비 중입니다.",
+    preparingConfirmLabel: "확인",
     title: "공간 대관 / 파트너십 신청",
     eyebrow: "Open Now",
     description: "전시, 팝업, 브랜드 협업,\n공간 활용 제안",
@@ -21,6 +25,10 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "open-call",
     order: 2,
     enabled: true,
+    entryStatus: "active",
+    preparingTitle: "준비 중입니다.",
+    preparingMessage: "현재 해당 접수는 준비 중입니다.",
+    preparingConfirmLabel: "확인",
     title: "공개 모집 / 오픈콜 지원",
     eyebrow: "Open Call",
     description: "언프레임이 기획하는 전시와\n프로젝트에 지원",
@@ -36,6 +44,10 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "salon",
     order: 3,
     enabled: true,
+    entryStatus: "active",
+    preparingTitle: "준비 중입니다.",
+    preparingMessage: "현재 해당 접수는 준비 중입니다.",
+    preparingConfirmLabel: "확인",
     title: "프로그램 / 살롱 참여",
     eyebrow: "Preparing",
     description: "모임, 워크숍, 토크, 네트워킹\n프로그램 참여",
@@ -51,6 +63,10 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "collaboration",
     order: 4,
     enabled: true,
+    entryStatus: "preparing",
+    preparingTitle: "준비 중입니다.",
+    preparingMessage: "현재 협업 제안 접수는 준비 중입니다.",
+    preparingConfirmLabel: "확인",
     title: "기타 협업 제안",
     eyebrow: "Preparing",
     description: "브랜드, 매체, 플랫폼,\n콘텐츠 협업",
@@ -79,6 +95,15 @@ const normalizeOrder = (value, fallback = 0) => {
 const normalizeEnabled = (value, fallback = true) =>
   typeof value === "boolean" ? value : fallback;
 
+export const JOIN_TRACK_ENTRY_STATUSES = ["active", "preparing", "hidden"];
+
+const normalizeEntryStatus = (value, enabled) =>
+  JOIN_TRACK_ENTRY_STATUSES.includes(value)
+    ? value
+    : enabled === false
+    ? "hidden"
+    : "active";
+
 const normalizeColor = (value, fallback = "#004AAD") => {
   const color = normalizeString(value, fallback);
   return color || fallback;
@@ -86,12 +111,27 @@ const normalizeColor = (value, fallback = "#004AAD") => {
 
 export const normalizeJoinTrack = (track = {}) => {
   const base = DEFAULT_JOIN_TRACK_MAP[track.id] || {};
+  const enabled = normalizeEnabled(track.enabled, base.enabled !== false);
+  const entryStatus = normalizeEntryStatus(track.entryStatus, enabled);
 
   return {
     id: normalizeString(track.id || base.id),
     routeTrack: normalizeString(track.routeTrack || base.routeTrack || track.id || base.id),
     order: normalizeOrder(track.order, base.order || 0),
-    enabled: normalizeEnabled(track.enabled, base.enabled !== false),
+    enabled: entryStatus !== "hidden",
+    entryStatus,
+    preparingTitle: normalizeString(
+      track.preparingTitle || base.preparingTitle,
+      "준비 중입니다."
+    ),
+    preparingMessage: normalizeString(
+      track.preparingMessage || base.preparingMessage,
+      "현재 해당 접수는 준비 중입니다."
+    ),
+    preparingConfirmLabel: normalizeString(
+      track.preparingConfirmLabel || base.preparingConfirmLabel,
+      "확인"
+    ),
     title: normalizeString(track.title || base.title),
     eyebrow: normalizeString(track.eyebrow || base.eyebrow),
     description: normalizeString(track.description || base.description),

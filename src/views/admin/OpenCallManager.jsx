@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   BadgeCheck,
   Eye,
   EyeOff,
@@ -460,13 +462,13 @@ const normalizeFaqPayload = (faqs) =>
     .filter((faq) => faq.question || faq.answer);
 
 const CUSTOM_FIELD_TYPE_LABELS = {
-  text: "text",
-  textarea: "textarea",
-  url: "url",
-  email: "email",
-  phone: "phone",
-  select: "select",
-  checkbox: "checkbox",
+  text: "짧은 답변",
+  textarea: "긴 답변",
+  url: "URL",
+  email: "이메일",
+  phone: "전화번호",
+  select: "선택 목록",
+  checkbox: "체크박스",
 };
 
 const createCustomFieldId = () =>
@@ -482,6 +484,7 @@ const createEmptyCustomField = (order = 1) => ({
   enabled: true,
   order,
   options: [],
+  maxLength: 0,
 });
 
 const normalizeCustomFieldDrafts = (customFields) =>
@@ -497,6 +500,7 @@ const normalizeCustomFieldDrafts = (customFields) =>
     options: Array.isArray(field?.options)
       ? field.options.map((option) => String(option || "").trim()).filter(Boolean)
       : [],
+    maxLength: Math.max(0, Number(field?.maxLength) || 0),
   }));
 
 const parseCustomFieldOptions = (value) =>
@@ -807,6 +811,17 @@ const OpenCallManager = ({ db, appId, applications }) => {
     updateCustomFields(callId, (list) =>
       list.filter((_, fieldIndex) => fieldIndex !== index)
     );
+  };
+
+  const moveCustomField = (callId, index, direction) => {
+    updateCustomFields(callId, (list) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= list.length) return list;
+
+      const next = [...list];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next.map((field, fieldIndex) => ({ ...field, order: fieldIndex + 1 }));
+    });
   };
 
   const updateCompletionSettings = (callId, key, value) => {
@@ -2720,9 +2735,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
+                    <div className="flex flex-col xl:col-span-2">
                     <div
                       id={completionEditId}
-                      className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2"
+                      className="order-2 mt-4 rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -2751,6 +2767,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                             <p className="text-sm font-bold text-zinc-400">
                               아직 추가 입력 항목이 없습니다.
                             </p>
+                            <p className="mt-1 text-xs font-medium text-zinc-400">
+                              필요할 때만 질문을 추가해 주세요.
+                            </p>
                           </div>
                         ) : (
                           customFields.map((field, index) => (
@@ -2765,6 +2784,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       field {index + 1}
                                     </p>
                                     <div className="flex flex-wrap gap-2">
+                                      <button type="button" aria-label="위로 이동" disabled={index === 0} onClick={() => moveCustomField(call.id, index, -1)} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black text-zinc-500 disabled:opacity-30">
+                                        <ArrowUp size={13} /> 위로
+                                      </button>
+                                      <button type="button" aria-label="아래로 이동" disabled={index === customFields.length - 1} onClick={() => moveCustomField(call.id, index, 1)} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black text-zinc-500 disabled:opacity-30">
+                                        <ArrowDown size={13} /> 아래로
+                                      </button>
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -2805,7 +2830,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                                     <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                       <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        label
+                                        질문 라벨
                                       </span>
                                       <input
                                         value={field.label || ""}
@@ -2818,7 +2843,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                     <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                       <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        type
+                                        필드 타입
                                       </span>
                                       <select
                                         value={field.type || "text"}
@@ -2837,7 +2862,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                     <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                       <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        placeholder
+                                        도움말 / placeholder
                                       </span>
                                       <input
                                         value={field.placeholder || ""}
@@ -2855,7 +2880,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                     <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                       <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        order
+                                        노출 순서
                                       </span>
                                       <input
                                         type="number"
@@ -2871,7 +2896,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                   <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                     <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                      description
+                                      질문 설명
                                     </span>
                                     <textarea
                                       rows={3}
@@ -2891,7 +2916,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   {field.type === "select" ? (
                                     <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
                                       <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        options
+                                        선택 옵션 (한 줄에 하나)
                                       </span>
                                       <textarea
                                         rows={4}
@@ -2909,6 +2934,15 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       />
                                     </label>
                                   ) : null}
+
+                                  {["text", "textarea", "url", "email", "phone"].includes(field.type) ? (
+                                    <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                        최대 글자 수 (0은 제한 없음)
+                                      </span>
+                                      <input type="number" min="0" value={field.maxLength || 0} onChange={(e) => updateCustomField(call.id, index, "maxLength", Math.max(0, Number(e.target.value) || 0))} className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20" />
+                                    </label>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
@@ -2917,11 +2951,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <SaveStatusRow call={call} />
-
                     <div
                       id={formEditId}
-                      className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4 xl:col-span-2"
+                      className="order-1 rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
@@ -3238,6 +3270,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           </div>
                         </div>
                       </div>
+                    </div>
                     </div>
 
                     <SaveStatusRow call={call} />

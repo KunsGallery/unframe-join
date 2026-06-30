@@ -410,7 +410,7 @@ const OpenCallApplicationForm = ({
     }
 
     (Array.isArray(customFieldsToValidate) ? customFieldsToValidate : []).forEach((field) => {
-      if (field?.enabled === false || !field?.required) return;
+      if (field?.enabled === false) return;
 
       const fieldValue = getCustomFieldValue(field, customFieldValuesToValidate);
       const isMissing =
@@ -418,8 +418,18 @@ const OpenCallApplicationForm = ({
           ? fieldValue !== true
           : !String(fieldValue || "").trim();
 
-      if (isMissing) {
+      if (field.required && isMissing) {
         nextErrors[field.id] = getCustomFieldErrorMessage(field);
+        return;
+      }
+
+      const maxLength = Math.max(0, Number(field.maxLength || 0));
+      if (
+        maxLength > 0 &&
+        field.type !== "checkbox" &&
+        String(fieldValue || "").length > maxLength
+      ) {
+        nextErrors[field.id] = `${field.label || "추가 입력 항목"}은 ${maxLength}자 이내로 입력해 주세요.`;
       }
     });
 
@@ -1122,6 +1132,7 @@ const OpenCallApplicationForm = ({
                           onChange={(e) => setCustomFieldValue(field, e.target.value)}
                           placeholder={field.placeholder || "답변을 입력해 주세요."}
                           rows={5}
+                          maxLength={field.maxLength > 0 ? field.maxLength : undefined}
                           className="mt-4 w-full rounded-[24px] border border-zinc-100 bg-white px-5 py-4 text-sm md:text-base font-medium leading-relaxed text-zinc-800 outline-none transition-all focus:border-[#004AAD]/25 focus:bg-white resize-none"
                         />
                         <FieldError message={fieldError} />
@@ -1176,6 +1187,7 @@ const OpenCallApplicationForm = ({
                         value={String(fieldValue || "")}
                         onChange={(e) => setCustomFieldValue(field, e.target.value)}
                         placeholder={field.placeholder || "답변을 입력해 주세요."}
+                        maxLength={field.maxLength > 0 ? field.maxLength : undefined}
                       />
                       {description ? (
                         <p className="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-zinc-500 break-keep">
