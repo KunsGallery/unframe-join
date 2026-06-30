@@ -299,6 +299,7 @@ const OpenCallApplicationForm = ({
   adminMode = false,
   bypassPeriodCheck = false,
   editablePreview = false,
+  wideLayout = false,
   formSettings: formSettingsOverride,
   onFormSettingsChange,
 }) => {
@@ -1436,7 +1437,11 @@ const OpenCallApplicationForm = ({
   };
 
   return (
-    <section className="relative mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8 text-zinc-900">
+    <section
+      className={`relative w-full px-4 py-6 text-zinc-900 md:px-6 md:py-8 ${
+        wideLayout ? "max-w-none" : "mx-auto max-w-5xl"
+      }`}
+    >
       <div className="rounded-[34px] border border-white/70 bg-white/70 px-5 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.05)] backdrop-blur-xl md:px-8 md:py-8">
         <div className="flex items-center justify-between gap-4">
           {typeof onBack === "function" ? (

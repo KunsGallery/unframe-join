@@ -1618,6 +1618,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
     }
   };
 
+  const handleRefreshFormPreview = () => {
+    setFormPreviewVersion((prev) => prev + 1);
+  };
+
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
       {activeOpenCallTab === "landing" ? (
@@ -1951,56 +1955,23 @@ const OpenCallManager = ({ db, appId, applications }) => {
       </div>
 
       {activeOpenCallTab === "form" && previewedOpenCallView ? (
-        <div className="mb-6 rounded-[32px] border border-[#004aad]/12 bg-[#004aad]/5 p-5 md:p-6">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 xl:max-w-[360px]">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-                입력폼 관리
-              </p>
-              <h4 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep">
-                {previewedOpenCallView.title || OPEN_CALL_FALLBACK.title}
-              </h4>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-600 break-keep">
-                실제 지원자가 보게 될 입력폼을 그대로 미리 확인합니다. 이 미리보기에서는 제출과 업로드가 저장되지 않습니다.
-              </p>
-
-              <div className="mt-4 grid gap-3">
-                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                    현재 선택된 오픈콜
-                  </p>
-                  <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-                    {previewedOpenCallView.id || "-"}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                    공개 상태
-                  </p>
-                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                    {getPublicationStateLabel(previewedOpenCallView)}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                    접수 기간
-                  </p>
-                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                    {formatDateTime(previewedOpenCallView.applicationStartAt)} ~{" "}
-                    {formatDateTime(previewedOpenCallView.applicationEndAt)}
-                  </p>
-                </div>
-                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                    폼 딥링크
-                  </p>
-                  <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-                    {previewFormLink}
-                  </p>
-                </div>
+        <div className="mb-6 space-y-5">
+          <div className="sticky top-4 z-30 rounded-[32px] border border-[#004aad]/12 bg-white/90 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
+                  입력폼 관리
+                </p>
+                <h4 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep md:text-3xl">
+                  {previewedOpenCallView.title || OPEN_CALL_FALLBACK.title}
+                </h4>
+                <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+                  실제 지원자가 보게 될 입력폼을 넓게 확인하면서 항목을 바로 수정합니다. 이
+                  미리보기에서는 제출과 업로드가 저장되지 않습니다.
+                </p>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 xl:justify-end">
                 <button
                   type="button"
                   onClick={() => handleOpenFormWindow(previewedOpenCallView.id)}
@@ -2017,7 +1988,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormPreviewVersion((prev) => prev + 1)}
+                  onClick={handleRefreshFormPreview}
                   className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
                 >
                   미리보기 새로고침
@@ -2026,7 +1997,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                   type="button"
                   onClick={() => previewedOpenCall && handleSave(previewedOpenCall)}
                   disabled={!previewedOpenCall}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad] transition-colors hover:border-[#004aad]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_28px_rgba(0,74,173,0.22)] transition-colors hover:bg-[#003c8d] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Save size={14} />
                   폼 설정 저장
@@ -2034,21 +2005,58 @@ const OpenCallManager = ({ db, appId, applications }) => {
               </div>
             </div>
 
-            <div className="min-w-0 flex-1 rounded-[28px] border border-white bg-white/90 p-3 md:p-4">
-              <OpenCallApplicationForm
-                key={`${previewedOpenCallView.id || "preview"}-${formPreviewVersion}`}
-                openCall={previewedOpenCallView}
-                db={db}
-                appId={appId}
-                initialProfileData={null}
-                formSettings={previewedOpenCallView.formSettings}
-                onFormSettingsChange={handleFormSettingsChange}
-                previewMode
-                adminMode
-                bypassPeriodCheck
-                editablePreview
-              />
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  현재 선택된 오픈콜
+                </p>
+                <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+                  {previewedOpenCallView.id || "-"}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  공개 상태
+                </p>
+                <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                  {getPublicationStateLabel(previewedOpenCallView)}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  접수 기간
+                </p>
+                <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                  {formatDateTime(previewedOpenCallView.applicationStartAt)} ~{" "}
+                  {formatDateTime(previewedOpenCallView.applicationEndAt)}
+                </p>
+              </div>
+              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                  폼 링크
+                </p>
+                <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+                  {previewFormLink}
+                </p>
+              </div>
             </div>
+          </div>
+
+          <div className="w-full overflow-hidden rounded-[32px] border border-white bg-white/90 p-0 shadow-sm">
+            <OpenCallApplicationForm
+              key={`${previewedOpenCallView.id || "preview"}-${formPreviewVersion}`}
+              openCall={previewedOpenCallView}
+              db={db}
+              appId={appId}
+              initialProfileData={null}
+              formSettings={previewedOpenCallView.formSettings}
+              onFormSettingsChange={handleFormSettingsChange}
+              previewMode
+              adminMode
+              bypassPeriodCheck
+              editablePreview
+              wideLayout
+            />
           </div>
         </div>
       ) : null}
