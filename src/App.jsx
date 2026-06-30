@@ -24,7 +24,7 @@ import JoinHome from "./views/join/JoinHome";
 import OpenCallLanding from "./views/open-call/OpenCallLanding";
 import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
 import SalonLanding from "./views/salon/SalonLanding";
-import { createFallbackOpenCall } from "./constants/openCall";
+import { createFallbackOpenCall, pickActiveOpenCall } from "./constants/openCall";
 
 const EMPTY_FORM_DATA = {
   name: "",
@@ -63,13 +63,21 @@ const EMPTY_PROFILE_DATA = {
 };
 
 const getSelectedTrackFromPathname = (pathname) => {
-  if (pathname === "/opencall") return "open-call";
+  if (pathname === "/opencall" || pathname === "/opencall/apply") return "open-call";
   if (pathname === "/salon") return "salon";
   return null;
 };
 
-const getPathnameForSelectedTrack = (selectedTrack) => {
-  if (selectedTrack === "open-call") return "/opencall";
+const getOpenCallModeFromUrl = (pathname, params) => {
+  if (pathname === "/opencall/apply") return "form";
+  if (params.get("mode") === "form") return "form";
+  return "landing";
+};
+
+const getPathnameForSelectedTrack = (selectedTrack, openCallMode = "landing") => {
+  if (selectedTrack === "open-call") {
+    return openCallMode === "form" ? "/opencall/apply" : "/opencall";
+  }
   if (selectedTrack === "salon") return "/salon";
   return "/";
 };
@@ -80,11 +88,19 @@ const getUrlState = () => {
     selectedTrack: getSelectedTrackFromPathname(window.location.pathname),
     view: params.get("view") || "user",
     app: params.get("app") || "",
+    openCallMode: getOpenCallModeFromUrl(window.location.pathname, params),
+    openCallId: params.get("openCallId") || "",
   };
 };
 
-const buildUrl = ({ selectedTrack, view = "user", app = "" }) => {
-  const pathname = getPathnameForSelectedTrack(selectedTrack);
+const buildUrl = ({
+  selectedTrack,
+  view = "user",
+  app = "",
+  openCallMode = "landing",
+  openCallId = "",
+}) => {
+  const pathname = getPathnameForSelectedTrack(selectedTrack, openCallMode);
   const params = new URLSearchParams();
 
   if (view && view !== "user") {
@@ -93,6 +109,10 @@ const buildUrl = ({ selectedTrack, view = "user", app = "" }) => {
 
   if (app) {
     params.set("app", app);
+  }
+
+  if (selectedTrack === "open-call" && openCallMode === "form" && openCallId) {
+    params.set("openCallId", openCallId);
   }
 
   const query = params.toString();
@@ -107,8 +127,10 @@ const App = () => {
   const [selectedTrack, setSelectedTrack] = useState(initialUrlState.selectedTrack);
   const [viewMode, setViewMode] = useState(initialUrlState.view);
   const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
-  const [openCallMode, setOpenCallMode] = useState("landing");
+  const [openCallMode, setOpenCallMode] = useState(initialUrlState.openCallMode);
+  const [requestedOpenCallId, setRequestedOpenCallId] = useState(initialUrlState.openCallId);
   const [selectedOpenCall, setSelectedOpenCall] = useState(null);
+  const [openCalls, setOpenCalls] = useState([]);
   const [currentStep, setCurrentStep] = useState(1);
   const [reservations, setReservations] = useState({});
   const [applications, setApplications] = useState([]);
@@ -128,9 +150,22 @@ const App = () => {
     return applications.filter((app) => app.userId === user.uid);
   }, [applications, user]);
 
+  const resolvedOpenCall = useMemo(() => {
+    if (!Array.isArray(openCalls) || openCalls.length === 0) return null;
+
+    if (requestedOpenCallId) {
+      return openCalls.find((call) => call.id === requestedOpenCallId) || null;
+    }
+
+    return pickActiveOpenCall(openCalls) || openCalls[0] || null;
+  }, [openCalls, requestedOpenCallId]);
+
   const selectedOpenCallView = useMemo(
-    () => (selectedOpenCall ? createFallbackOpenCall(selectedOpenCall) : null),
-    [selectedOpenCall]
+    () => {
+      const source = selectedOpenCall || resolvedOpenCall;
+      return source ? createFallbackOpenCall(source) : null;
+    },
+    [resolvedOpenCall, selectedOpenCall]
   );
 
   useEffect(() => {
@@ -157,6 +192,9 @@ const App = () => {
       setSelectedTrack(next.selectedTrack);
       setViewMode(next.view);
       setFocusedApplicationId(next.app);
+      setOpenCallMode(next.openCallMode);
+      setRequestedOpenCallId(next.openCallId);
+      setSelectedOpenCall(null);
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -168,13 +206,46 @@ const App = () => {
       selectedTrack,
       view: viewMode,
       app: focusedApplicationId,
+      openCallMode,
+      openCallId:
+        selectedTrack === "open-call" && openCallMode === "form"
+          ? selectedOpenCallView?.id || requestedOpenCallId
+          : "",
     });
     const currentUrl = `${window.location.pathname}${window.location.search}`;
 
     if (nextUrl !== currentUrl) {
       window.history.pushState({}, "", nextUrl);
     }
-  }, [focusedApplicationId, selectedTrack, viewMode]);
+  }, [
+    focusedApplicationId,
+    openCallMode,
+    requestedOpenCallId,
+    selectedOpenCallView?.id,
+    selectedTrack,
+    viewMode,
+  ]);
+
+  useEffect(() => {
+    if (selectedTrack !== "open-call") {
+      setOpenCalls([]);
+      return;
+    }
+
+    const ref = collection(db, "artifacts", appId, "public", "data", "openCalls");
+    const unsubscribe = onSnapshot(
+      ref,
+      (snapshot) => {
+        setOpenCalls(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+      },
+      (error) => {
+        console.error(error);
+        setOpenCalls([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [selectedTrack]);
 
   useEffect(() => {
     if (!user || user.isAnonymous) {
@@ -267,6 +338,7 @@ const App = () => {
   const handleSelectRentalTrack = () => {
     setSelectedTrack("rental");
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
@@ -280,6 +352,7 @@ const App = () => {
   const handleSelectOpenCallTrack = () => {
     setSelectedTrack("open-call");
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
@@ -294,6 +367,7 @@ const App = () => {
   const handleSelectSalonTrack = () => {
     setSelectedTrack("salon");
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
@@ -308,6 +382,7 @@ const App = () => {
   const handleReturnToJoinHome = () => {
     setSelectedTrack(null);
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
@@ -322,6 +397,7 @@ const App = () => {
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -332,6 +408,7 @@ const App = () => {
     setCurrentStep(1);
     setSelectedTrack(null);
     setOpenCallMode("landing");
+    setRequestedOpenCallId("");
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
@@ -364,6 +441,7 @@ const App = () => {
           if (v === "user") {
             setSelectedTrack(null);
             setOpenCallMode("landing");
+            setRequestedOpenCallId("");
             setSelectedOpenCall(null);
             setCurrentStep(1);
             setIsSubmitSuccess(false);
@@ -429,6 +507,7 @@ const App = () => {
                   onBack={handleReturnToJoinHome}
                   onApply={(openCall) => {
                     setSelectedOpenCall(openCall || null);
+                    setRequestedOpenCallId(openCall?.id || "");
                     setOpenCallMode("form");
                   }}
                 />
@@ -440,7 +519,7 @@ const App = () => {
                   user={user}
                   handleLogin={handleLogin}
                   initialProfileData={savedProfileData}
-                  onBack={() => setOpenCallMode("landing")}
+                  onBack={handleReturnToOpenCallLanding}
                   onSubmitSuccess={(successContext) => {
                     window.scrollTo({ top: 0, behavior: "smooth" });
                     setSuccessTemplateContext(successContext || null);

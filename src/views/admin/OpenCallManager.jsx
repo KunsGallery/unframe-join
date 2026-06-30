@@ -44,8 +44,26 @@ import {
   normalizeOpenCallNotificationSettings,
   renderOpenCallTemplate,
 } from "../../constants/openCall";
+import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
 
 const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
+const OPEN_CALL_MANAGER_TABS = [
+  {
+    id: "landing",
+    label: "공고/랜딩 설정",
+    description: "공고 소개, 노출 상태, FAQ와 외부 랜딩 흐름을 관리합니다.",
+  },
+  {
+    id: "form",
+    label: "입력폼 관리",
+    description: "실제 신청 폼 미리보기와 입력 항목 구성을 함께 관리합니다.",
+  },
+  {
+    id: "applications",
+    label: "접수 데이터",
+    description: "공고별 지원서 목록, 메모, 심사 상태를 관리합니다.",
+  },
+];
 const OPEN_CALL_REVIEW_STATUS_OPTIONS = [
   "review",
   "shortlisted",
@@ -566,11 +584,23 @@ const getCustomFieldCsvValue = (answer) => {
   return String(answer.value ?? "");
 };
 
+const getOpenCallApplyPath = (openCallId = "") => {
+  const params = new URLSearchParams();
+  if (openCallId) {
+    params.set("openCallId", openCallId);
+  }
+
+  const query = params.toString();
+  return query ? `/opencall/apply?${query}` : "/opencall/apply";
+};
+
 const OpenCallManager = ({ db, appId, applications }) => {
   const [openCalls, setOpenCalls] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeOpenCallTab, setActiveOpenCallTab] = useState("landing");
   const [selectedOpenCallId, setSelectedOpenCallId] = useState("");
   const [previewOpenCallId, setPreviewOpenCallId] = useState("");
+  const [formPreviewVersion, setFormPreviewVersion] = useState(0);
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
@@ -1548,9 +1578,46 @@ const OpenCallManager = ({ db, appId, applications }) => {
     activePublicationState === "featured" &&
     activeOpenCall?.isVisible !== false &&
     (activeDisplayStatus.key === "open" || activeDisplayStatus.key === "upcoming");
+  const previewedOpenCallView = useMemo(
+    () => (editingOpenCall ? createFallbackOpenCall(editingOpenCall) : null),
+    [editingOpenCall]
+  );
+  const previewFormLink = useMemo(
+    () => getOpenCallApplyPath(previewedOpenCallView?.id || ""),
+    [previewedOpenCallView?.id]
+  );
+  const activeManagerTab =
+    OPEN_CALL_MANAGER_TABS.find((tab) => tab.id === activeOpenCallTab) || OPEN_CALL_MANAGER_TABS[0];
+
+  useEffect(() => {
+    if (activeOpenCallTab === "applications" && !selectedOpenCallId && previewedOpenCall?.id) {
+      setSelectedOpenCallId(previewedOpenCall.id);
+    }
+  }, [activeOpenCallTab, previewedOpenCall?.id, selectedOpenCallId]);
+
+  const handleOpenFormWindow = (openCallId) => {
+    if (typeof window === "undefined") return;
+    window.open(getOpenCallApplyPath(openCallId), "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyFormLink = async (openCallId) => {
+    if (typeof window === "undefined") return;
+
+    const absoluteUrl = `${window.location.origin}${getOpenCallApplyPath(openCallId)}`;
+
+    try {
+      await navigator.clipboard.writeText(absoluteUrl);
+      setManagerNotice("입력폼 딥링크를 복사했습니다.");
+    } catch (error) {
+      console.error(error);
+      window.prompt("아래 입력폼 링크를 복사해 주세요.", absoluteUrl);
+    }
+  };
 
   return (
     <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
+      {activeOpenCallTab === "landing" ? (
+        <>
       <div className="mb-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1817,6 +1884,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
           ))}
         </div>
       </div>
+        </>
+      ) : null}
 
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -1828,8 +1897,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             오픈콜 관리
           </h3>
           <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-            공고를 생성하고, 공개 상태와 대표 공고 여부를 관리합니다. 지원서는
-            대관 예약과 분리된 `applications`에서 필터링합니다.
+            {activeManagerTab.description}
           </p>
         </div>
 
@@ -1857,6 +1925,137 @@ const OpenCallManager = ({ db, appId, applications }) => {
           </button>
         </div>
       </div>
+
+      <div className="mb-5 flex flex-wrap gap-2">
+        {OPEN_CALL_MANAGER_TABS.map((tab) => {
+          const isActive = activeOpenCallTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveOpenCallTab(tab.id)}
+              className={`inline-flex items-center rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${
+                isActive
+                  ? "bg-[#004aad] text-white shadow-lg shadow-[#004aad]/15"
+                  : "border border-zinc-200 bg-white text-zinc-600 hover:border-[#004aad]/20 hover:text-[#004aad]"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeOpenCallTab === "form" && previewedOpenCallView ? (
+        <div className="mb-6 rounded-[32px] border border-[#004aad]/12 bg-[#004aad]/5 p-5 md:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 xl:max-w-[360px]">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
+                입력폼 관리
+              </p>
+              <h4 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep">
+                {previewedOpenCallView.title || OPEN_CALL_FALLBACK.title}
+              </h4>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-600 break-keep">
+                실제 지원자가 보게 될 입력폼을 그대로 미리 확인합니다. 이 미리보기에서는 제출과 업로드가 저장되지 않습니다.
+              </p>
+
+              <div className="mt-4 grid gap-3">
+                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    현재 선택된 오픈콜
+                  </p>
+                  <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+                    {previewedOpenCallView.id || "-"}
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    공개 상태
+                  </p>
+                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                    {getPublicationStateLabel(previewedOpenCallView)}
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    접수 기간
+                  </p>
+                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
+                    {formatDateTime(previewedOpenCallView.applicationStartAt)} ~{" "}
+                    {formatDateTime(previewedOpenCallView.applicationEndAt)}
+                  </p>
+                </div>
+                <div className="rounded-[22px] border border-white bg-white px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                    폼 딥링크
+                  </p>
+                  <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
+                    {previewFormLink}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenFormWindow(previewedOpenCallView.id)}
+                  className="inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90"
+                >
+                  실제 입력폼 열기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyFormLink(previewedOpenCallView.id)}
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                >
+                  링크 복사
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormPreviewVersion((prev) => prev + 1)}
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                >
+                  미리보기 새로고침
+                </button>
+                <button
+                  type="button"
+                  onClick={() => previewedOpenCall && handleSave(previewedOpenCall)}
+                  disabled={!previewedOpenCall}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad] transition-colors hover:border-[#004aad]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Save size={14} />
+                  폼 설정 저장
+                </button>
+              </div>
+            </div>
+
+            <div className="min-w-0 flex-1 rounded-[28px] border border-white bg-white/90 p-3 md:p-4">
+              <OpenCallApplicationForm
+                key={`${previewedOpenCallView.id || "preview"}-${formPreviewVersion}`}
+                openCall={previewedOpenCallView}
+                db={db}
+                appId={appId}
+                initialProfileData={null}
+                previewMode
+                adminMode
+                bypassPeriodCheck
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeOpenCallTab === "applications" ? (
+        <div className="mb-6 rounded-[28px] border border-zinc-100 bg-zinc-50/70 px-5 py-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+            접수 데이터 안내
+          </p>
+          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-600 break-keep">
+            아래 공고 카드에서 지원서 보기를 눌러 공고별 신청 데이터를 확인합니다. 처음 진입하면 현재 미리보기 공고의 지원서를 자동으로 선택합니다.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mb-5 grid gap-3 rounded-[28px] border border-zinc-100 bg-zinc-50/80 p-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-[22px] border border-white bg-white px-4 py-3">
@@ -2123,16 +2322,24 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => setPreviewOpenCallId(call.id)}
+                        onClick={() => {
+                          setPreviewOpenCallId(call.id);
+                          if (activeOpenCallTab === "applications") {
+                            setActiveOpenCallTab("landing");
+                          }
+                        }}
                         className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
                       >
                         <Megaphone size={14} />
-                        프리뷰 보기
+                        {activeOpenCallTab === "form" ? "이 공고 폼 미리보기" : "프리뷰 보기"}
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => setSelectedOpenCallId(isSelected ? "" : call.id)}
+                        onClick={() => {
+                          setSelectedOpenCallId(isSelected ? "" : call.id);
+                          setActiveOpenCallTab("applications");
+                        }}
                         className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
                       >
                         <Users size={14} />
@@ -3271,7 +3478,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
                         </div>
                       </div>
                     </div>
-                    </div>
 
                     <SaveStatusRow call={call} />
 
@@ -3291,6 +3497,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
 
                     <SaveStatusRow call={call} />
+                    </div>
 
                     <div
                       id={faqEditId}

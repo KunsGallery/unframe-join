@@ -195,6 +195,9 @@ const OpenCallApplicationForm = ({
   initialProfileData,
   onBack,
   onSubmitSuccess,
+  previewMode = false,
+  adminMode = false,
+  bypassPeriodCheck = false,
 }) => {
   const [formData, setFormData] = useState(() => ({
     ...EMPTY_FORM,
@@ -206,6 +209,7 @@ const OpenCallApplicationForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [profileLoadedBanner, setProfileLoadedBanner] = useState(false);
+  const [previewNotice, setPreviewNotice] = useState("");
 
   const currentOpenCall = useMemo(
     () => createFallbackOpenCall(openCall || OPEN_CALL_FALLBACK),
@@ -227,6 +231,8 @@ const OpenCallApplicationForm = ({
     [currentOpenCall]
   );
   const canSubmitOpenCall = openCallStatus.canApply;
+  const canAccessBeforePeriod = previewMode || adminMode || bypassPeriodCheck;
+  const showClosedNotice = !canAccessBeforePeriod && !canSubmitOpenCall;
 
   const workImageRefs = [useRef(null), useRef(null), useRef(null)];
   const portfolioRef = useRef(null);
@@ -470,6 +476,12 @@ const OpenCallApplicationForm = ({
   };
 
   const handleImageUpload = async (event, index) => {
+    if (previewMode) {
+      setPreviewNotice("관리자 미리보기에서는 이미지 업로드가 비활성화됩니다.");
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -501,6 +513,12 @@ const OpenCallApplicationForm = ({
   };
 
   const handlePortfolioUpload = async (event) => {
+    if (previewMode) {
+      setPreviewNotice("관리자 미리보기에서는 포트폴리오 업로드가 비활성화됩니다.");
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -536,16 +554,6 @@ const OpenCallApplicationForm = ({
   };
 
   const handleSubmit = async () => {
-    if (!user) {
-      alert("잠시 후 다시 시도해 주세요.");
-      return;
-    }
-
-    if (!canSubmitOpenCall) {
-      alert("현재 접수 가능한 오픈콜이 아닙니다.");
-      return;
-    }
-
     const works = formData.works.map(normalizeWork);
     const nextErrors = getValidationErrors(
       formData,
@@ -567,6 +575,21 @@ const OpenCallApplicationForm = ({
           block: "center",
         });
       }, 50);
+      return;
+    }
+
+    if (previewMode) {
+      setPreviewNotice("관리자 미리보기 모드에서는 제출되지 않습니다.");
+      return;
+    }
+
+    if (!user) {
+      alert("잠시 후 다시 시도해 주세요.");
+      return;
+    }
+
+    if (!canSubmitOpenCall) {
+      alert("현재 접수 가능한 오픈콜이 아닙니다.");
       return;
     }
 
@@ -768,14 +791,19 @@ const OpenCallApplicationForm = ({
           <button
             type="button"
             onClick={() => workImageRefs[index].current?.click()}
+            disabled={previewMode}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.14em] transition-all ${
               isRequiredWork
                 ? "bg-[#004AAD] text-white"
                 : "border border-zinc-200 bg-zinc-50 text-zinc-600"
-            }`}
+            } disabled:cursor-not-allowed disabled:opacity-50`}
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {work.imageUrl ? "이미지 변경" : "이미지 업로드"}
+            {previewMode
+              ? "미리보기에서는 업로드 불가"
+              : work.imageUrl
+              ? "이미지 변경"
+              : "이미지 업로드"}
           </button>
         </div>
 
@@ -784,6 +812,7 @@ const OpenCallApplicationForm = ({
           type="file"
           accept="image/*"
           className="hidden"
+          disabled={previewMode}
           onChange={(event) => handleImageUpload(event, index)}
         />
 
@@ -866,18 +895,22 @@ const OpenCallApplicationForm = ({
     <section className="relative mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8 text-zinc-900">
       <div className="rounded-[34px] border border-white/70 bg-white/70 px-5 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.05)] backdrop-blur-xl md:px-8 md:py-8">
         <div className="flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 shadow-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-          >
-            <ArrowLeft size={14} />
-            Back
-          </button>
+          {typeof onBack === "function" ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 shadow-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+            >
+              <ArrowLeft size={14} />
+              Back
+            </button>
+          ) : (
+            <div />
+          )}
 
           <div className="hidden md:flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
             <Sparkles size={12} />
-            OPEN CALL
+            {previewMode ? "FORM PREVIEW" : "OPEN CALL"}
           </div>
         </div>
 
@@ -891,7 +924,17 @@ const OpenCallApplicationForm = ({
           <p className="mt-3 whitespace-pre-line text-sm md:text-base font-medium leading-relaxed text-zinc-600 break-keep">
             {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
           </p>
-          {!canSubmitOpenCall ? (
+          {previewMode ? (
+            <div className="mt-4 rounded-2xl border border-[#004AAD]/15 bg-white/80 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
+                Preview Mode
+              </p>
+              <p className="mt-1 text-sm font-bold text-zinc-700 break-keep">
+                관리자 미리보기 모드입니다. 기간 전에도 폼을 확인할 수 있지만 제출과 업로드는 저장되지 않습니다.
+              </p>
+            </div>
+          ) : null}
+          {showClosedNotice ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
                 Notice
@@ -899,6 +942,14 @@ const OpenCallApplicationForm = ({
               <p className="mt-1 text-sm font-bold text-amber-800 break-keep">
                 현재 접수 가능한 오픈콜이 아닙니다.
               </p>
+            </div>
+          ) : null}
+          {previewNotice ? (
+            <div className="mt-4 rounded-2xl border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
+                Preview Notice
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#597400] break-keep">{previewNotice}</p>
             </div>
           ) : null}
         </div>
@@ -1284,14 +1335,19 @@ const OpenCallApplicationForm = ({
                   <button
                     type="button"
                     onClick={() => portfolioRef.current?.click()}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-all hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+                    disabled={previewMode}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-all hover:border-[#004AAD]/20 hover:text-[#004AAD] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {uploadingMap.portfolioUrl ? (
                       <Loader2 size={14} className="animate-spin" />
                     ) : (
                       <Upload size={14} />
                     )}
-                    {formData.portfolioUrl ? "업로드 변경" : "업로드"}
+                    {previewMode
+                      ? "미리보기에서는 업로드 불가"
+                      : formData.portfolioUrl
+                      ? "업로드 변경"
+                      : "업로드"}
                   </button>
                 </div>
 
@@ -1388,14 +1444,14 @@ const OpenCallApplicationForm = ({
             type="button"
             onClick={handleSubmit}
             disabled={
-              !canSubmitOpenCall ||
+              (!previewMode && !canSubmitOpenCall) ||
               isSubmitting ||
               Object.values(uploadingMap).some(Boolean)
             }
             className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-6 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_18px_35px_rgba(0,74,173,0.2)] transition-all hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-50"
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            {canSubmitOpenCall ? "지원서 제출" : "접수 불가"}
+            {previewMode ? "미리보기 검토" : canSubmitOpenCall ? "지원서 제출" : "접수 불가"}
           </button>
         </div>
       </div>
