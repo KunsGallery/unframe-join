@@ -3,17 +3,11 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Download,
   FileText,
-  Globe2,
   Image as ImageIcon,
   Loader2,
-  Mail,
-  MapPin,
   Palette,
-  Phone,
   Save,
   Sparkles,
   Upload,
@@ -40,7 +34,7 @@ import {
   normalizeOpenCallNotificationSettings,
   renderOpenCallTemplate,
 } from "../../constants/openCall";
-import { OPEN_CALL_PRIVACY_TEXT } from "../../constants/openCallPrivacy";
+import AddressField from "./AddressField";
 
 const EMPTY_WORK = {
   imageUrl: "",
@@ -57,6 +51,7 @@ const EMPTY_FORM = {
   birthYear: "",
   addressMain: "",
   addressDetail: "",
+  postalCode: "",
   medium: "",
   snsLink: "",
   artistStatement: "",
@@ -311,7 +306,6 @@ const OpenCallApplicationForm = ({
   const [errors, setErrors] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
   const [profileLoadedBanner, setProfileLoadedBanner] = useState(false);
   const [previewNotice, setPreviewNotice] = useState("");
 
@@ -355,6 +349,7 @@ const OpenCallApplicationForm = ({
         initialProfileData.phone ||
         initialProfileData.addressMain ||
         initialProfileData.addressDetail ||
+        initialProfileData.postalCode ||
         initialProfileData.snsLink
     );
   }, [initialProfileData]);
@@ -846,6 +841,13 @@ const OpenCallApplicationForm = ({
   const showPrivacySection = isSectionEnabled(formSettings.sections.privacy);
   const renderPrivacySection = showPrivacySection || canEditPreview;
   const visibleCustomFieldCount = visibleCustomFields.length;
+  const addressSettings = formSettings.fields.address || {};
+  const privacySettings = formSettings.sections.privacy || {};
+  const privacyTitle = privacySettings.title || "개인정보 수집 및 이용 동의";
+  const privacyBody = privacySettings.body || "";
+  const privacyCheckboxLabel =
+    privacySettings.checkboxLabel ||
+    "위 개인정보 수집 및 이용 내용을 확인하였으며 이에 동의합니다.";
 
   const clearFieldError = (key) => {
     setFieldErrors((prev) => {
@@ -859,6 +861,11 @@ const OpenCallApplicationForm = ({
   const setField = (key, value) => {
     clearFieldError(key);
     setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setAddressFields = (patch) => {
+    ["addressMain", "addressDetail", "postalCode"].forEach(clearFieldError);
+    setFormData((prev) => ({ ...prev, ...patch }));
   };
 
   const setCustomFieldValue = (field, value) => {
@@ -1014,6 +1021,7 @@ const OpenCallApplicationForm = ({
       email: user?.email || prev.email,
       addressMain: initialProfileData.addressMain || prev.addressMain,
       addressDetail: initialProfileData.addressDetail || prev.addressDetail,
+      postalCode: initialProfileData.postalCode || prev.postalCode,
       snsLink: initialProfileData.snsLink || prev.snsLink,
     }));
 
@@ -1175,7 +1183,14 @@ const OpenCallApplicationForm = ({
             ? trimValue(formData.addressMain)
             : "",
           addressDetail: isFieldEnabled(formSettings.fields.address)
-            ? trimValue(formData.addressDetail)
+            ? addressSettings.mode === "search"
+              ? trimValue(formData.addressDetail)
+              : ""
+            : "",
+          postalCode: isFieldEnabled(formSettings.fields.address)
+            ? addressSettings.mode === "search"
+              ? trimValue(formData.postalCode)
+              : ""
             : "",
           medium: isFieldEnabled(formSettings.fields.medium)
             ? trimValue(formData.medium)
@@ -1639,7 +1654,7 @@ const OpenCallApplicationForm = ({
                   <EditableFieldFrame
                     editable={canEditPreview}
                     title="주소"
-                    description="기본 주소는 필수, 상세주소는 선택으로 유지합니다."
+                    description="입력 방식과 필수 여부를 조정합니다."
                     enabled={showAddressField}
                     required={isFieldRequired(formSettings.fields.address)}
                     onToggleEnabled={() =>
@@ -1652,28 +1667,91 @@ const OpenCallApplicationForm = ({
                         required: !isFieldRequired(formSettings.fields.address),
                       })
                     }
-                  >
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <InputBlock
-                          label="주소"
-                          required={isFieldRequired(formSettings.fields.address)}
-                          value={formData.addressMain}
-                          onChange={(e) => setField("addressMain", e.target.value)}
-                          placeholder="기본 주소를 입력해 주세요"
-                        />
-                        <FieldError message={fieldErrors.addressMain} />
-                      </div>
+                    extraControls={
+                      <>
+                        <label>
+                          <span>입력 방식</span>
+                          <select
+                            value={addressSettings.mode === "search" ? "search" : "text"}
+                            onChange={(e) => {
+                              const nextMode = e.target.value;
+                              const currentPlaceholder = String(
+                                addressSettings.placeholder || ""
+                              ).trim();
+                              const nextPlaceholder =
+                                nextMode === "search"
+                                  ? !currentPlaceholder ||
+                                    currentPlaceholder === "주소를 입력해 주세요."
+                                    ? "주소를 검색해 주세요"
+                                    : currentPlaceholder
+                                  : !currentPlaceholder ||
+                                    currentPlaceholder === "주소를 검색해 주세요."
+                                  ? "주소를 입력해 주세요."
+                                  : currentPlaceholder;
 
-                      <div>
-                        <InputBlock
-                          label="상세주소"
-                          value={formData.addressDetail}
-                          onChange={(e) => setField("addressDetail", e.target.value)}
-                          placeholder="동, 호수 등 상세 주소"
-                        />
-                      </div>
-                    </div>
+                              updateFieldSetting("address", {
+                                mode: nextMode,
+                                placeholder: nextPlaceholder,
+                              });
+                            }}
+                          >
+                            <option value="text">직접 입력</option>
+                            <option value="search">주소검색</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>라벨</span>
+                          <input
+                            value={addressSettings.label || ""}
+                            onChange={(e) =>
+                              updateFieldSetting("address", {
+                                label: e.target.value,
+                              })
+                            }
+                            placeholder="주소"
+                          />
+                        </label>
+                        <label>
+                          <span>placeholder</span>
+                          <input
+                            value={addressSettings.placeholder || ""}
+                            onChange={(e) =>
+                              updateFieldSetting("address", {
+                                placeholder: e.target.value,
+                              })
+                            }
+                            placeholder="주소를 검색해 주세요"
+                          />
+                        </label>
+                        <label>
+                          <span>상세주소 placeholder</span>
+                          <input
+                            value={addressSettings.detailPlaceholder || ""}
+                            onChange={(e) =>
+                              updateFieldSetting("address", {
+                                detailPlaceholder: e.target.value,
+                              })
+                            }
+                            placeholder="상세 주소를 입력해 주세요"
+                          />
+                        </label>
+                      </>
+                    }
+                  >
+                    <AddressField
+                      label={addressSettings.label || "주소"}
+                      required={isFieldRequired(formSettings.fields.address)}
+                      mode={addressSettings.mode || "text"}
+                      value={formData.addressMain}
+                      detailValue={formData.addressDetail}
+                      postalCode={formData.postalCode}
+                      placeholder={addressSettings.placeholder || "주소를 입력해 주세요."}
+                      detailPlaceholder={
+                        addressSettings.detailPlaceholder || "상세 주소를 입력해 주세요."
+                      }
+                      onChange={setAddressFields}
+                    />
+                    <FieldError message={fieldErrors.addressMain} />
                   </EditableFieldFrame>
                 ) : null}
 
@@ -1999,8 +2077,8 @@ const OpenCallApplicationForm = ({
           {renderPrivacySection ? (
             <EditableFieldFrame
               editable={canEditPreview}
-              title="개인정보 수집 및 이용 동의"
-              description="운영상 필수 권장 항목입니다. 필요하면 노출 여부와 필수 여부를 조정할 수 있습니다."
+              title={privacyTitle}
+              description="운영상 필수 권장 항목입니다. 필요하면 노출 여부와 필수 여부, 문구를 조정할 수 있습니다."
               enabled={showPrivacySection}
               required={!!formSettings.sections.privacy?.required}
               onToggleEnabled={() =>
@@ -2013,15 +2091,62 @@ const OpenCallApplicationForm = ({
                   required: !formSettings.sections.privacy?.required,
                 })
               }
+              extraControls={
+                <>
+                  <label>
+                    <span>개인정보 동의 제목</span>
+                    <input
+                      value={privacySettings.title || ""}
+                      onChange={(e) =>
+                        updateSectionSetting("privacy", {
+                          title: e.target.value,
+                        })
+                      }
+                      placeholder="개인정보 수집 및 이용 동의"
+                    />
+                  </label>
+                  <label className="md:col-span-2">
+                    <span>상세 내용</span>
+                    <textarea
+                      rows={7}
+                      value={privacySettings.body || ""}
+                      onChange={(e) =>
+                        updateSectionSetting("privacy", {
+                          body: e.target.value,
+                        })
+                      }
+                      placeholder="개인정보 수집 및 이용 내용을 입력해 주세요."
+                    />
+                  </label>
+                  <label className="md:col-span-2">
+                    <span>체크박스 문구</span>
+                    <input
+                      value={privacySettings.checkboxLabel || ""}
+                      onChange={(e) =>
+                        updateSectionSetting("privacy", {
+                          checkboxLabel: e.target.value,
+                        })
+                      }
+                      placeholder="위 내용을 확인하였으며 이에 동의합니다."
+                    />
+                  </label>
+                </>
+              }
             >
               <div className="mb-4 flex items-center gap-3">
                 <AlertCircle size={18} className="text-[#004AAD]" />
                 <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
-                  개인정보 수집 및 이용 동의
+                  {privacyTitle}
                 </h2>
               </div>
 
-              <label className="flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4">
+              <div className="rounded-[24px] border border-zinc-100 bg-zinc-50 px-4 py-4">
+                <pre className="whitespace-pre-line break-keep text-[13px] font-medium leading-7 text-zinc-600">
+                  {privacyBody}
+                </pre>
+              </div>
+
+              <label className="mt-4 flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
                 <input
                   type="checkbox"
                   checked={formData.privacyAgreed}
@@ -2029,7 +2154,7 @@ const OpenCallApplicationForm = ({
                   className="mt-1 h-4 w-4 rounded border-zinc-300 text-[#004AAD] focus:ring-[#004AAD]"
                 />
                 <span className="text-sm font-bold text-zinc-700 break-keep">
-                  개인정보 수집 및 이용에 동의합니다.
+                  {privacyCheckboxLabel}
                 </span>
               </label>
               <FieldError message={fieldErrors.privacyAgreed} />
@@ -2039,23 +2164,6 @@ const OpenCallApplicationForm = ({
                   개인정보 동의는 접수 운영상 필수 권장 항목입니다.
                 </p>
               ) : null}
-
-              <button
-                type="button"
-                onClick={() => setShowPrivacy((prev) => !prev)}
-                className="mt-4 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
-              >
-                {showPrivacy ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                자세히 보기
-              </button>
-
-              {showPrivacy && (
-                <div className="mt-4 max-h-72 overflow-y-auto rounded-[24px] border border-zinc-100 bg-zinc-50 p-4">
-                  <pre className="whitespace-pre-line break-keep text-[12px] font-medium leading-6 text-zinc-600">
-                    {OPEN_CALL_PRIVACY_TEXT}
-                  </pre>
-                </div>
-              )}
             </EditableFieldFrame>
           ) : null}
         </div>

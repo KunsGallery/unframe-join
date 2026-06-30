@@ -1345,6 +1345,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       "연락처",
       "출생연도",
       "주소",
+      "우편번호",
       "상세주소",
       "매체",
       "SNS",
@@ -1386,6 +1387,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
           app.phone || "",
           app.birthYear || "",
           app.addressMain || "",
+          app.postalCode || "",
           app.addressDetail || "",
           app.medium || "",
           app.snsLink || "",
@@ -2294,6 +2296,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const formEditId = `open-call-${call.id}-form`;
             const completionEditId = `open-call-${call.id}-completion`;
             const notificationEditId = `open-call-${call.id}-notification`;
+            const privacyEditId = `open-call-${call.id}-privacy`;
 
             return (
               <div
@@ -2423,6 +2426,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
                         >
                           신청 입력양식 [수정]
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollToOpenCallSection(privacyEditId)}
+                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
+                        >
+                          개인정보 동의 [수정]
                         </button>
                       </div>
                     </div>
@@ -3441,7 +3451,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                 </button>
                               </div>
 
-                              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <div
+                                id={privacyEditId}
+                                className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3"
+                              >
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-bold text-zinc-800">개인정보 동의</p>

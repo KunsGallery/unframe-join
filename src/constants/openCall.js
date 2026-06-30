@@ -41,6 +41,16 @@ export const DEFAULT_OPEN_CALL_FORM_SECTIONS = {
     enabled: true,
     title: "개인정보 수집 및 이용 동의",
     required: true,
+    body: `UNFRAME은 오픈콜 접수 및 심사 운영을 위해 지원자가 제출한 개인정보를 수집·이용합니다.
+
+수집 항목: 이름, 연락처, 이메일, 출생연도, 주소, 매체, SNS/웹사이트, 작품 이미지, 포트폴리오, 작업 소개 및 기타 지원자가 입력한 정보
+
+수집 목적: 지원자 확인, 오픈콜 접수 관리, 심사 진행, 결과 안내, 전시 및 프로젝트 진행 관련 연락
+
+보유 및 이용 기간: 오픈콜 운영 종료 후 내부 기록 및 분쟁 대응을 위해 필요한 기간 동안 보관하며, 보관 목적이 달성된 후 지체 없이 파기합니다. 단, 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관할 수 있습니다.
+
+지원자는 개인정보 수집 및 이용에 동의하지 않을 권리가 있으나, 동의하지 않을 경우 오픈콜 접수가 제한될 수 있습니다.`,
+    checkboxLabel: "위 개인정보 수집 및 이용 내용을 확인하였으며 이에 동의합니다.",
   },
 };
 
@@ -55,7 +65,9 @@ export const DEFAULT_OPEN_CALL_FORM_FIELDS = {
     enabled: true,
     required: true,
     label: "주소",
+    mode: "text",
     placeholder: "주소를 입력해 주세요.",
+    detailPlaceholder: "상세 주소를 입력해 주세요.",
   },
   medium: {
     enabled: true,
@@ -140,6 +152,14 @@ export const DEFAULT_OPEN_CALL_NOTIFICATION_SETTINGS = {
 const cloneFormSection = (section = {}, fallback = {}) => ({
   ...fallback,
   ...section,
+});
+
+const clonePrivacySection = (section = {}, fallback = {}) => ({
+  ...fallback,
+  ...section,
+  title: toText(section?.title, fallback.title),
+  body: toText(section?.body, fallback.body),
+  checkboxLabel: toText(section?.checkboxLabel, fallback.checkboxLabel),
 });
 
 const cloneFaq = (faq = {}, fallbackOrder = 999) => ({
@@ -326,6 +346,7 @@ export const renderOpenCallTemplate = (template = "", context = {}) => {
 export const normalizeOpenCallFormSettings = (formSettings = {}) => {
   const sections = formSettings?.sections || {};
   const fields = formSettings?.fields || {};
+  const addressMode = fields.address?.mode === "search" ? "search" : "text";
 
   const normalizedWorks = cloneFormSection(sections.works, DEFAULT_OPEN_CALL_FORM_SECTIONS.works);
   const maxCount = Math.min(3, Math.max(1, toNumber(normalizedWorks.maxCount, 3)));
@@ -361,7 +382,7 @@ export const normalizeOpenCallFormSettings = (formSettings = {}) => {
       },
       privacy: {
         ...DEFAULT_OPEN_CALL_FORM_SECTIONS.privacy,
-        ...cloneFormSection(sections.privacy, DEFAULT_OPEN_CALL_FORM_SECTIONS.privacy),
+        ...clonePrivacySection(sections.privacy, DEFAULT_OPEN_CALL_FORM_SECTIONS.privacy),
         enabled: toBoolean(sections.privacy?.enabled, true),
         required: toBoolean(sections.privacy?.required, true),
       },
@@ -378,6 +399,17 @@ export const normalizeOpenCallFormSettings = (formSettings = {}) => {
         ...cloneFormSection(fields.address, DEFAULT_OPEN_CALL_FORM_FIELDS.address),
         enabled: toBoolean(fields.address?.enabled, true),
         required: toBoolean(fields.address?.required, true),
+        mode: addressMode,
+        placeholder: toText(
+          fields.address?.placeholder,
+          addressMode === "search"
+            ? "주소를 검색해 주세요"
+            : DEFAULT_OPEN_CALL_FORM_FIELDS.address.placeholder
+        ),
+        detailPlaceholder: toText(
+          fields.address?.detailPlaceholder,
+          DEFAULT_OPEN_CALL_FORM_FIELDS.address.detailPlaceholder
+        ),
       },
       medium: {
         ...DEFAULT_OPEN_CALL_FORM_FIELDS.medium,
