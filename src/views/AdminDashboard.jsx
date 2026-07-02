@@ -77,7 +77,7 @@ const getCustomFieldAnswerDisplayValue = (answer) => {
 
 const DashboardPanel = ({ children, className = "" }) => (
   <section
-    className={`rounded-[28px] border border-zinc-950/10 bg-white/70 p-4 md:p-6 shadow-sm ${className}`}
+    className={`rounded-[28px] border-2 border-zinc-900 bg-white p-4 shadow-[3px_3px_0px_#000] md:p-6 ${className}`}
   >
     {children}
   </section>
@@ -191,7 +191,7 @@ const AdminField = ({
   rows = 4,
 }) => {
   const sharedClassName =
-    "w-full rounded-[18px] border border-zinc-100 bg-zinc-50 p-4 text-sm font-bold text-zinc-700 outline-none resize-none focus:border-[#004aad]/30 focus:bg-white transition-all";
+    "w-full rounded-[18px] border-2 border-zinc-900 bg-white p-4 text-sm font-medium text-zinc-900 outline-none resize-none transition-all focus:border-[#004AAD] focus:shadow-[2px_2px_0px_#000]";
 
   return (
     <div className="space-y-2">
@@ -266,7 +266,7 @@ const ApplicantPreviewCard = ({ eyebrow, title, description, note }) => (
       ) : null}
 
       {note ? (
-        <div className="mt-4 rounded-2xl border border-zinc-100 bg-zinc-50 p-4">
+        <div className="mt-4 rounded-2xl border-2 border-zinc-900 bg-zinc-50 p-4 shadow-[2px_2px_0px_#000]">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 mb-2">
             추가 노출 메모
           </p>
@@ -313,7 +313,7 @@ const AdminAuthDebug = ({ user, isAdmin }) => {
       : user?.providerId || (user?.isAnonymous ? "anonymous" : "-");
 
   return (
-    <div className="rounded-[28px] border border-[#004aad]/15 bg-[#004aad]/5 p-5 shadow-sm">
+    <div className="rounded-[28px] border-2 border-zinc-900 bg-[#004AAD]/8 p-5 shadow-[3px_3px_0px_#000]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004aad]">
@@ -323,7 +323,7 @@ const AdminAuthDebug = ({ user, isAdmin }) => {
         </div>
 
         <div
-          className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+          className={`rounded-full border-2 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] shadow-[2px_2px_0px_#000] ${
             isAdmin
               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
               : "border-red-200 bg-red-50 text-red-700"

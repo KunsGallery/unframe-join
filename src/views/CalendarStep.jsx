@@ -8,6 +8,7 @@ import {
   Edit3,
 } from "lucide-react";
 import NoticeItem from "../components/ui/NoticeItem";
+import { unframeDesign } from "../components/ui/unframeDesign";
 import { addDays, isDateInRange } from "../utils/date";
 
 const BLOCKING_STATUSES = ["confirmed", "planned", "preparing"];
@@ -90,7 +91,7 @@ const CalendarStep = ({
   };
 
   return (
-    <section className="animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto py-20 min-h-screen text-center px-4">
+    <section className={`${unframeDesign.surface} animate-in fade-in slide-in-from-bottom-8 duration-1000 max-w-5xl mx-auto py-20 min-h-screen text-center px-4`}>
       <h2 className="text-5xl md:text-7xl font-black tracking-tighter uppercase mb-10 leading-none text-zinc-900 text-center">
         Schedule
       </h2>
@@ -102,7 +103,7 @@ const CalendarStep = ({
         <NoticeItem icon={<ParkingCircle size={14} />} text="철수/오프닝 VIP 1시간 주차" />
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-[50px] shadow-2xl border border-gray-100 max-w-2xl mx-auto mb-12">
+      <div className="mx-auto mb-12 max-w-2xl rounded-[50px] border-2 border-zinc-900 bg-white p-6 shadow-[8px_8px_0px_#000] md:p-8">
         <div className="flex justify-between items-center mb-10 px-4 text-zinc-900">
           <h3 className="text-xl md:text-2xl font-black uppercase text-left">
             {currentDate.getFullYear()}.{" "}
@@ -115,7 +116,7 @@ const CalendarStep = ({
                   new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1)
                 )
               }
-              className="p-2 bg-zinc-50 rounded-full hover:bg-zinc-100 transition-colors"
+              className="rounded-full border-2 border-zinc-900 bg-white p-2 shadow-[2px_2px_0px_#000] transition-colors hover:bg-zinc-100"
             >
               <ChevronLeft size={18} />
             </button>
@@ -125,7 +126,7 @@ const CalendarStep = ({
                   new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1)
                 )
               }
-              className="p-2 bg-zinc-50 rounded-full hover:bg-zinc-100 transition-colors"
+              className="rounded-full border-2 border-zinc-900 bg-white p-2 shadow-[2px_2px_0px_#000] transition-colors hover:bg-zinc-100"
             >
               <ChevronRight size={18} />
             </button>
@@ -183,27 +184,27 @@ const CalendarStep = ({
                 <button
                   disabled={!isThu || !!blocked}
                   onClick={() => onSelect(dateStr)}
-                  className={`w-full h-full rounded-xl flex flex-col items-center justify-center transition-all border text-sm md:text-base relative ${style}`}
+                  className={`relative flex h-full w-full flex-col items-center justify-center rounded-xl border-2 border-zinc-900 text-sm transition-all md:text-base ${style}`}
                 >
                   <span className={isSun && !active ? "text-red-500" : ""}>
                     {day}
                   </span>
 
                   {isThu && !blocked && !active && resData?.applicantCount > 0 && (
-                    <span className="absolute bottom-1 px-1.5 bg-[#004aad] text-white text-[7px] rounded-md font-black shadow-sm">
+                    <span className="absolute bottom-1 rounded-md border border-zinc-900 bg-[#004AAD] px-1.5 text-[7px] font-black text-white shadow-[1px_1px_0px_#000]">
                       심사중 {resData.applicantCount}
                     </span>
                   )}
 
                   {isThu && !blocked && !active && activeWritingCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-[7px] px-1.5 py-0.5 rounded-full animate-pulse flex items-center gap-0.5 whitespace-nowrap z-20 font-black shadow-sm">
+                    <span className="absolute -right-1 -top-1 z-20 animate-pulse flex items-center gap-0.5 whitespace-nowrap rounded-full border border-zinc-900 bg-orange-500 px-1.5 py-0.5 text-[7px] font-black text-white shadow-[1px_1px_0px_#000]">
                       <Edit3 size={7} /> 작성중 {activeWritingCount}
                     </span>
                   )}
                 </button>
 
                 {blocked && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 bg-zinc-900 text-white p-4 rounded-2xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none text-left">
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-3 w-56 -translate-x-1/2 rounded-2xl border-2 border-zinc-900 bg-zinc-950 p-4 text-left text-white opacity-0 shadow-[6px_6px_0px_#000] transition-opacity group-hover:opacity-100">
                     <p className="text-[8px] font-black uppercase text-[#004aad] mb-1 text-left">
                       {getStatusLabel(blocked.status)}
                     </p>
@@ -229,7 +230,7 @@ const CalendarStep = ({
 
       {selectedDate && (
         <div className="animate-in slide-in-from-top-4 duration-500 max-w-2xl mx-auto">
-          <div className="mb-10 inline-flex items-center gap-4 bg-zinc-900 text-white px-8 py-4 rounded-3xl shadow-xl">
+          <div className="mb-10 inline-flex items-center gap-4 rounded-3xl border-2 border-zinc-900 bg-zinc-900 px-8 py-4 text-white shadow-[6px_6px_0px_#000]">
             <span className="font-black uppercase tracking-widest text-xs">
               {selectedDate} ~ {addDays(selectedDate, 6)}
             </span>
@@ -241,7 +242,7 @@ const CalendarStep = ({
 
           <button
             onClick={onConfirm}
-            className="w-full bg-[#004aad] text-white py-8 rounded-full font-black uppercase tracking-[0.4em] text-xl flex items-center justify-center gap-4 hover:scale-105 transition-all shadow-xl shadow-[#004aad]/20 active:scale-95 text-center"
+            className={unframeDesign.primaryButton + " w-full py-6 text-sm md:text-base"}
           >
             이 기간 신청하기
           </button>
@@ -250,7 +251,7 @@ const CalendarStep = ({
 
       <button
         onClick={onBack}
-        className="mt-20 block mx-auto text-zinc-400 font-black uppercase tracking-widest text-xs hover:text-[#004aad] transition-all text-center"
+        className={`${unframeDesign.secondaryButton} mt-20 mx-auto block`}
       >
         ← Back
       </button>

@@ -24,6 +24,7 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import InputBlock from "../components/ui/InputBlock";
+import { unframeDesign } from "../components/ui/unframeDesign";
 import { addDays } from "../utils/date";
 import {
   uploadImageToImgbb,
@@ -669,18 +670,18 @@ const ProposalFormStep = ({
   return (
     <section
       id="application-form-section"
-      className="max-w-4xl mx-auto animate-in fade-in py-8 md:py-10 min-h-screen relative z-10 text-zinc-900 text-left px-4"
+      className={`${unframeDesign.surface} max-w-4xl mx-auto animate-in fade-in py-8 md:py-10 min-h-screen relative z-10 text-zinc-900 text-left px-4`}
     >
       <div className="fixed top-3 left-0 right-0 z-40 px-4 pointer-events-none">
         <div className="max-w-4xl mx-auto">
-          <div className="rounded-full border border-zinc-100 bg-white/95 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.08)] px-3 py-2 pointer-events-auto">
+          <div className="rounded-full border-2 border-zinc-900 bg-white/95 backdrop-blur-md shadow-[3px_3px_0px_#000] px-3 py-2 pointer-events-auto">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[9px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                  Proposal Progress
+                <div className="text-[9px] font-black uppercase tracking-[0.12em] text-[#004AAD] mb-1">
+                  진행률
                 </div>
                 <div className="text-[11px] sm:text-xs font-black text-zinc-700">
-                  {progress.done} / {progress.total} completed
+                  {progress.done} / {progress.total} 완료
                 </div>
               </div>
 
@@ -706,7 +707,7 @@ const ProposalFormStep = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8 md:mb-10">
         <button
           onClick={onBack}
-          className="w-full sm:w-auto justify-center sm:justify-start text-zinc-400 hover:text-black flex items-center text-[11px] font-black uppercase tracking-[0.14em] gap-2 transition-all rounded-2xl border border-zinc-100 bg-white px-4 py-3"
+          className={unframeDesign.secondaryButton + " w-full sm:w-auto justify-center sm:justify-start"}
         >
           <ChevronLeft size={16} /> Calendar
         </button>
@@ -714,14 +715,14 @@ const ProposalFormStep = ({
         <button
           onClick={handleSaveDraft}
           disabled={isUploading || isSubmitting}
-          className="w-full sm:w-auto justify-center flex items-center gap-2 bg-zinc-50 px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.14em] hover:bg-white border border-zinc-100 transition-all shadow-sm shadow-zinc-100 disabled:opacity-40"
+          className="w-full sm:w-auto justify-center flex items-center gap-2 rounded-2xl border-2 border-zinc-900 bg-zinc-50 px-5 py-3 text-[10px] font-black uppercase tracking-[0.14em] shadow-[2px_2px_0px_#000] transition-all hover:bg-white disabled:opacity-40"
         >
           <Save size={16} /> Save Draft
         </button>
       </div>
 
       {draftBanner && (
-        <div className="mb-8 bg-[#004aad]/5 border border-[#004aad]/10 rounded-[22px] md:rounded-[28px] px-4 py-4 md:px-6 md:py-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="mb-8 flex flex-col gap-4 rounded-[22px] border-2 border-zinc-900 bg-[#004AAD]/8 px-4 py-4 shadow-[3px_3px_0px_#000] md:rounded-[28px] md:px-6 md:py-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="text-left">
             <div className="flex items-center gap-2 text-[#004aad] text-xs font-black uppercase tracking-[0.16em] mb-2">
               <RefreshCcw size={14} />
@@ -744,7 +745,7 @@ const ProposalFormStep = ({
 
           <button
             onClick={handleDiscardDraft}
-            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl border border-red-200 text-red-500 text-[10px] font-black uppercase tracking-[0.14em] hover:bg-red-50 transition-all"
+            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-red-900 px-5 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-red-600 shadow-[2px_2px_0px_#7f1d1d] transition-all hover:bg-red-50"
           >
             <Trash2 size={14} />
             Draft 삭제
@@ -752,7 +753,7 @@ const ProposalFormStep = ({
         </div>
       )}
 
-      <div className="bg-white/80 backdrop-blur-xl border border-gray-100 p-4 sm:p-5 md:p-12 xl:p-16 rounded-[28px] md:rounded-[48px] xl:rounded-[60px] shadow-2xl space-y-10 md:space-y-16">
+      <div className="space-y-10 rounded-[28px] border-2 border-zinc-900 bg-white/80 p-4 shadow-[8px_8px_0px_#000] backdrop-blur-xl sm:p-5 md:rounded-[48px] md:p-12 md:space-y-16 xl:rounded-[60px] xl:p-16">
         <input
           type="file"
           ref={fileInputRefs.profile}
@@ -799,9 +800,9 @@ const ProposalFormStep = ({
           </div>
 
           {selectedProgram && (
-            <div className="mt-5 w-full sm:inline-flex sm:w-auto flex-col gap-2 bg-[#004aad]/5 border border-[#004aad]/10 rounded-2xl px-4 py-4">
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                Selected Program
+          <div className="mt-5 w-full sm:inline-flex sm:w-auto flex-col gap-2 rounded-2xl border-2 border-zinc-900 bg-[#004AAD]/8 px-4 py-4 shadow-[2px_2px_0px_#000]">
+            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                선택한 프로그램
               </span>
               <span className="text-sm sm:text-base font-black text-zinc-900 break-keep">
                 {selectedProgram.name} · {selectedProgram.price}만원
@@ -817,11 +818,11 @@ const ProposalFormStep = ({
         </header>
 
         {hasUsableProfile && (
-          <div className="rounded-[22px] md:rounded-[28px] border border-[#004aad]/12 bg-[#004aad]/5 px-4 py-4 md:px-5 md:py-5">
+          <div className="rounded-[22px] border-2 border-zinc-900 bg-[#004AAD]/8 px-4 py-4 shadow-[3px_3px_0px_#000] md:rounded-[28px] md:px-5 md:py-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad] mb-2">
-                  Saved Profile
+                  저장된 정보 불러오기
                 </p>
                 <p className="text-[13px] sm:text-sm font-bold text-zinc-700 leading-relaxed break-keep">
                   마이페이지에 저장한 기본정보를 신청서에 불러올 수 있습니다.
@@ -831,7 +832,7 @@ const ProposalFormStep = ({
               <button
                 type="button"
                 onClick={handleUseSavedProfile}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-[#004aad] text-white text-[10px] font-black uppercase tracking-[0.14em] hover:opacity-90 transition-all"
+                className={unframeDesign.primaryButton + " w-full sm:w-auto"}
               >
                 <Download size={14} />
                 내 기본정보 불러오기
@@ -955,7 +956,7 @@ const ProposalFormStep = ({
               주소 *
             </label>
             <input
-              className="w-full bg-zinc-50/50 border border-gray-100 p-4 md:p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors"
+              className={unframeDesign.inputPublicSoft + " p-4 md:p-6 rounded-2xl text-base"}
               placeholder="기본 주소"
               value={formData.addressMain}
               onChange={(e) =>
@@ -963,7 +964,7 @@ const ProposalFormStep = ({
               }
             />
             <input
-              className="w-full bg-zinc-50/50 border border-gray-100 p-4 md:p-6 rounded-2xl text-base outline-none focus:bg-white shadow-sm font-bold transition-colors"
+              className={unframeDesign.inputPublicSoft + " p-4 md:p-6 rounded-2xl text-base"}
               placeholder="상세 주소"
               value={formData.addressDetail}
               onChange={(e) =>
@@ -979,7 +980,7 @@ const ProposalFormStep = ({
             <div>
               <button
                 onClick={() => fileInputRefs.profile.current.click()}
-                className="aspect-square w-full bg-zinc-50 border border-dashed border-zinc-200 rounded-[26px] md:rounded-[42px] flex flex-col items-center justify-center gap-2 hover:bg-white transition-all overflow-hidden relative group shadow-inner"
+                className="relative flex aspect-square w-full flex-col items-center justify-center gap-2 overflow-hidden rounded-[26px] border-2 border-dashed border-zinc-900 bg-zinc-50 transition-all shadow-[2px_2px_0px_#000] hover:bg-white md:rounded-[42px]"
               >
                 {formData.profilePhotoUrl ? (
                   <img
@@ -992,7 +993,7 @@ const ProposalFormStep = ({
                 {uploadingMap.profilePhotoUrl ? (
                   <Loader2 className="animate-spin text-[#004aad]" />
                 ) : (
-                  <div className="z-10 bg-white/80 p-4 rounded-full shadow-xl transition-transform group-hover:scale-110">
+                  <div className="z-10 rounded-full border-2 border-zinc-900 bg-white/80 p-4 shadow-[3px_3px_0px_#000] transition-transform group-hover:scale-110">
                     <Upload size={20} className="text-[#004aad]" />
                   </div>
                 )}
@@ -1043,7 +1044,7 @@ const ProposalFormStep = ({
                 : "작가 노트 및 프로젝트 개요 *"}
             </label>
             <textarea
-              className="w-full bg-zinc-50/50 border border-gray-100 p-4 md:p-10 rounded-[24px] md:rounded-[40px] h-52 md:h-80 text-base outline-none focus:bg-white shadow-sm resize-none font-bold transition-colors text-zinc-900"
+              className={unframeDesign.inputPublicSoft + " p-4 md:p-10 rounded-[24px] md:rounded-[40px] h-52 md:h-80 text-base resize-none"}
               value={isBrand ? formData.projectPurpose : formData.artistNote}
               onChange={(e) =>
                 setFormData({
@@ -1101,7 +1102,7 @@ const ProposalFormStep = ({
             </div>
           </div>
 
-          <div className="rounded-[22px] md:rounded-[28px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-[11px] sm:text-xs font-bold text-zinc-500 leading-relaxed break-keep">
+          <div className="rounded-[22px] border-2 border-zinc-900 bg-zinc-50 px-4 py-4 text-[11px] font-bold leading-relaxed break-keep text-zinc-600 shadow-[2px_2px_0px_#000] sm:text-xs md:rounded-[28px]">
             임시저장본은 24시간 후 자동 만료됩니다.
           </div>
 
@@ -1127,14 +1128,14 @@ const ProposalFormStep = ({
             )}
 
             <div className="w-full space-y-4">
-              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-4 text-[11px] sm:text-xs font-bold text-zinc-500 leading-relaxed break-keep text-center">
+              <div className="rounded-[20px] border-2 border-zinc-900 bg-zinc-50 px-4 py-4 text-center text-[11px] font-bold leading-relaxed break-keep text-zinc-600 shadow-[2px_2px_0px_#000] sm:text-xs">
                 제출 후 결과 및 추가 요청은 마이페이지와 등록된 이메일, 알림을 통해 순차적으로 안내됩니다.
               </div>
 
               <button
                 onClick={handleSubmit}
                 disabled={isUploading || isSubmitting}
-                className="w-full bg-zinc-900 text-white py-5 md:py-9 rounded-full font-black uppercase tracking-[0.18em] md:tracking-[0.3em] text-sm md:text-2xl shadow-2xl hover:bg-[#004aad] active:scale-95 transition-all text-center shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={unframeDesign.primaryButton + " w-full py-5 md:py-9 text-sm md:text-2xl"}
               >
                 {isSubmitting ? (
                   <span className="inline-flex items-center gap-3">

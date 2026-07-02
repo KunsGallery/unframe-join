@@ -237,7 +237,7 @@ const LandingPage = ({ onSelectProgram }) => {
       {/* Mobile */}
       <div className="md:hidden px-4 space-y-24">
         <section className="min-h-[72vh] flex flex-col items-center justify-center text-center pt-10">
-          <span className="text-[#004aad] uppercase tracking-[0.45em] text-[10px] font-black mb-6 block">
+          <span className="inline-flex items-center gap-2 rounded-full border-2 border-zinc-900 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD] shadow-[3px_3px_0px_#000] mb-6 block">
             Collaboration & Rental
           </span>
           <h1 className="text-[3.2rem] font-black uppercase leading-[0.88] tracking-tighter text-zinc-900">
@@ -281,7 +281,7 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
         </section>
 
-        <section className="bg-zinc-900 text-white rounded-[40px] px-5 py-12 shadow-2xl">
+        <section className="rounded-[40px] border-2 border-zinc-900 bg-zinc-900 px-5 py-12 text-white shadow-[6px_6px_0px_#000]">
           <MobileSectionTitle
             eyebrow="Preparation"
             title="🧳 Preparation"
@@ -330,7 +330,7 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
 
           <div className="pt-6 flex justify-center">
-            <div className="inline-flex items-center gap-3 bg-zinc-900 text-white px-5 py-3 rounded-full shadow-xl">
+            <div className="inline-flex items-center gap-3 rounded-full border-2 border-zinc-900 bg-[#AAD004] px-5 py-3 text-zinc-950 shadow-[3px_3px_0px_#000]">
               <Sparkles size={16} />
               <span className="text-[10px] font-black uppercase tracking-[0.18em]">
                 프로그램 선택 후 신청이 시작됩니다
@@ -364,7 +364,7 @@ const LandingPage = ({ onSelectProgram }) => {
       {/* Desktop */}
       <div className="hidden md:block px-4 space-y-60">
         <header className="min-h-[80vh] flex flex-col items-center justify-center text-center">
-          <span className="text-[#004aad] uppercase tracking-[0.5em] text-xs font-black mb-8 block animate-bounce">
+          <span className="inline-flex items-center gap-2 rounded-full border-2 border-zinc-900 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD] shadow-[3px_3px_0px_#000] mb-8 block animate-bounce">
             Collaboration & Rental
           </span>
           <h1 className="text-6xl md:text-[11rem] font-black uppercase leading-[0.85] mb-12 tracking-tighter text-zinc-900">
@@ -409,7 +409,7 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
         </section>
 
-        <section className="bg-zinc-900 text-white py-48 px-8 md:px-20 rounded-[80px] relative overflow-hidden shadow-2xl">
+        <section className="relative overflow-hidden rounded-[80px] border-2 border-zinc-900 bg-zinc-900 px-8 py-48 text-white shadow-[8px_8px_0px_#000] md:px-20">
           <div className="mb-32 text-center">
             <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase leading-none text-white text-center">
               🧳 Preparation
@@ -456,10 +456,10 @@ const LandingPage = ({ onSelectProgram }) => {
           </div>
 
           <div
-            className="relative rounded-[44px] border border-zinc-200 bg-white overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.06)]"
+            className="relative overflow-hidden rounded-[44px] border-2 border-zinc-900 bg-white shadow-[6px_6px_0px_#000]"
             onMouseLeave={() => setHoveredProgramId(DEFAULT_PROGRAM_ID)}
           >
-            <div className="grid grid-cols-4 border-b border-zinc-100 bg-zinc-50/70">
+            <div className="grid grid-cols-4 border-b-2 border-zinc-900 bg-zinc-50/70">
               {PROGRAMS.map((program, index) => {
                 const active = hoveredProgramId === program.id;
                 return (
@@ -484,7 +484,7 @@ const LandingPage = ({ onSelectProgram }) => {
               })}
             </div>
 
-            <div className="flex flex-col xl:flex-row h-[640px] xl:h-[620px] bg-zinc-950">
+            <div className="flex h-[640px] flex-col bg-zinc-950 xl:h-[620px] xl:flex-row">
               {PROGRAMS.map((program, index) => {
                 const isActive = hoveredProgramId === program.id;
                 const isCollapsed = !isActive;

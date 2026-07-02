@@ -1,11 +1,11 @@
 import React from "react";
 
 const DetailItem = ({ label, value }) => (
-  <div className="flex items-center gap-6 border-b border-zinc-50 pb-3 text-left">
-    <span className="text-[9px] font-black text-zinc-300 uppercase w-28 shrink-0 text-left">
+  <div className="flex items-center gap-4 border-b border-zinc-200 pb-3 text-left">
+    <span className="w-28 shrink-0 text-left text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
       {label}
     </span>
-    <span className="text-xs font-black text-zinc-800 text-left">
+    <span className="text-sm font-bold text-zinc-800 text-left">
       {value || "정보 없음"}
     </span>
   </div>

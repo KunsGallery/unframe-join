@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { unframeDesign } from "../components/ui/unframeDesign";
 
 const DEFAULT_EMAIL = "";
 const DEFAULT_NAME = "김재우";
@@ -213,13 +214,13 @@ const EmailTestPanel = () => {
   };
 
   return (
-    <section className="text-zinc-900">
-      <div className="bg-white rounded-4xl border border-zinc-100 shadow-xl p-8 md:p-10">
-        <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#004aad] mb-4">
+    <section className={`${unframeDesign.surface} text-zinc-900`}>
+      <div className="rounded-[32px] border-2 border-zinc-900 bg-white p-8 shadow-[6px_6px_0px_#000] md:p-10">
+        <p className="mb-4 text-[11px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
           Email & Kakao Test Panel
         </p>
 
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-4">
+        <h1 className="mb-4 text-3xl font-black tracking-tight md:text-4xl">
           메일 / 알림톡 테스트 발송
         </h1>
 
@@ -229,7 +230,7 @@ const EmailTestPanel = () => {
 
         <div className="grid md:grid-cols-2 gap-4 mb-8">
           <label className="block">
-            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-2">
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-[#004AAD]">
               Test Email
             </span>
             <input
@@ -237,7 +238,7 @@ const EmailTestPanel = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="메일을 받을 주소 입력"
-              className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-5 py-4 text-sm font-bold outline-none"
+              className={unframeDesign.inputPublicSoft}
             />
           </label>
 

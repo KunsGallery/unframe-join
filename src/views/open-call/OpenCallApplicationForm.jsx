@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import InputBlock from "../../components/ui/InputBlock";
+import { unframeDesign } from "../../components/ui/unframeDesign";
 import {
   sendApplicationEmails,
   uploadDocumentToR2,
@@ -199,7 +200,7 @@ const EditableFieldFrame = ({
   }
 
   return (
-    <section className={`rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6 ${enabled === false ? "opacity-75" : ""}`}>
+    <section className={`rounded-[28px] border-2 border-zinc-900 bg-white px-5 py-5 shadow-[3px_3px_0px_#000] md:px-6 md:py-6 ${enabled === false ? "opacity-75" : ""}`}>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -655,7 +656,7 @@ const OpenCallApplicationForm = ({
               type="button"
               onClick={() => moveCustomField(field.id, -1)}
               disabled={index === 0}
-              className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-full border-2 border-zinc-900 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-600 shadow-[2px_2px_0px_#000] disabled:cursor-not-allowed disabled:opacity-50"
             >
               위로
             </button>
@@ -663,14 +664,14 @@ const OpenCallApplicationForm = ({
               type="button"
               onClick={() => moveCustomField(field.id, 1)}
               disabled={index === maxIndex}
-              className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-full border-2 border-zinc-900 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-600 shadow-[2px_2px_0px_#000] disabled:cursor-not-allowed disabled:opacity-50"
             >
               아래로
             </button>
             <button
               type="button"
               onClick={() => removeCustomField(field.id)}
-              className="inline-flex items-center justify-center rounded-full border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-red-600"
+              className="inline-flex items-center justify-center rounded-full border-2 border-red-900 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-red-700 shadow-[2px_2px_0px_#7f1d1d]"
             >
               삭제
             </button>
@@ -1336,7 +1337,7 @@ const OpenCallApplicationForm = ({
     return (
       <div
         key={`work-${index}`}
-        className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6"
+        className="rounded-[28px] border-2 border-zinc-900 bg-white px-5 py-5 shadow-[3px_3px_0px_#000] md:px-6 md:py-6"
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1377,7 +1378,7 @@ const OpenCallApplicationForm = ({
         />
 
         {work.imageUrl ? (
-          <div className="mt-4 overflow-hidden rounded-[22px] border border-zinc-100 bg-zinc-50">
+          <div className="mt-4 overflow-hidden rounded-[22px] border-2 border-zinc-900 bg-zinc-50 shadow-[2px_2px_0px_#000]">
             <img
               src={work.imageUrl}
               alt={`${getWorkLabel(index)} preview`}
@@ -1457,13 +1458,13 @@ const OpenCallApplicationForm = ({
         wideLayout ? "max-w-none" : "mx-auto max-w-5xl"
       }`}
     >
-      <div className="rounded-[34px] border border-white/70 bg-white/70 px-5 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.05)] backdrop-blur-xl md:px-8 md:py-8">
+      <div className="rounded-[34px] border-2 border-zinc-900 bg-white px-5 py-5 shadow-[6px_6px_0px_#000] backdrop-blur-xl md:px-8 md:py-8">
         <div className="flex items-center justify-between gap-4">
           {typeof onBack === "function" ? (
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 shadow-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+              className={unframeDesign.secondaryButton}
             >
               <ArrowLeft size={14} />
               Back
@@ -1472,15 +1473,15 @@ const OpenCallApplicationForm = ({
             <div />
           )}
 
-          <div className="hidden md:flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
+          <div className={unframeDesign.pillLime + " hidden md:flex"}>
             <Sparkles size={12} />
-            {previewMode ? "FORM PREVIEW" : "OPEN CALL"}
+            {previewMode ? "미리보기" : "오픈콜"}
           </div>
         </div>
 
-        <div className="mt-6 rounded-[30px] border border-[#004AAD]/12 bg-[#004AAD]/5 px-5 py-5 md:px-6 md:py-6">
+        <div className="mt-6 rounded-[30px] border-2 border-zinc-900 bg-[#004AAD]/8 px-5 py-5 shadow-[4px_4px_0px_#000] md:px-6 md:py-6">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#004AAD] mb-2">
-            Application Form
+            지원서
           </p>
           <h1 className="text-2xl md:text-4xl font-black tracking-tight text-zinc-900 break-keep">
             {currentOpenCall.title || OPEN_CALL_TITLE}
@@ -1489,7 +1490,7 @@ const OpenCallApplicationForm = ({
             {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
           </p>
           {previewMode ? (
-            <div className="mt-4 rounded-2xl border border-[#004AAD]/15 bg-white/80 px-4 py-3">
+            <div className="mt-4 rounded-2xl border-2 border-zinc-900 bg-white px-4 py-3 shadow-[2px_2px_0px_#000]">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                 Preview Mode
               </p>
@@ -1499,7 +1500,7 @@ const OpenCallApplicationForm = ({
             </div>
           ) : null}
           {showClosedNotice ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <div className="mt-4 rounded-2xl border-2 border-amber-900 bg-amber-50 px-4 py-3 shadow-[2px_2px_0px_#78350f]">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
                 Notice
               </p>
@@ -1509,7 +1510,7 @@ const OpenCallApplicationForm = ({
             </div>
           ) : null}
           {previewNotice ? (
-            <div className="mt-4 rounded-2xl border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-3">
+            <div className="mt-4 rounded-2xl border-2 border-zinc-900 bg-[#AAD004]/12 px-4 py-3 shadow-[2px_2px_0px_#000]">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
                 Preview Notice
               </p>
@@ -1518,10 +1519,10 @@ const OpenCallApplicationForm = ({
           ) : null}
         </div>
 
-        <div className="mt-5 rounded-[22px] border border-zinc-100 bg-white px-5 py-4">
+        <div className="mt-5 rounded-[22px] border-2 border-zinc-900 bg-white px-5 py-4 shadow-[3px_3px_0px_#000]">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD] mb-1">
                 Progress
               </p>
               <p className="text-sm font-bold text-zinc-700">
@@ -1544,11 +1545,11 @@ const OpenCallApplicationForm = ({
         </div>
 
         {hasUsableProfile && (
-          <div className="mt-5 rounded-[28px] border border-[#004AAD]/12 bg-[#004AAD]/5 px-5 py-5 md:px-6 md:py-6">
+          <div className="mt-5 rounded-[28px] border-2 border-zinc-900 bg-[#004AAD]/8 px-5 py-5 shadow-[4px_4px_0px_#000] md:px-6 md:py-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD] mb-2">
-                  Saved Profile
+                  저장된 정보 불러오기
                 </p>
                 <p className="text-sm md:text-base font-bold text-zinc-700 leading-relaxed break-keep">
                   마이페이지에 저장한 기본정보를 불러올 수 있습니다.
@@ -1558,7 +1559,7 @@ const OpenCallApplicationForm = ({
               <button
                 type="button"
                 onClick={handleUseSavedProfile}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90"
+                className={unframeDesign.primaryButton}
               >
                 <Download size={14} />
                 내 기본정보 불러오기
@@ -1575,7 +1576,7 @@ const OpenCallApplicationForm = ({
         )}
 
         <div className="mt-6 space-y-6 md:space-y-8">
-          <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+        <div className="rounded-[28px] border-2 border-zinc-900 bg-white px-5 py-5 shadow-[3px_3px_0px_#000] md:px-6 md:py-6">
             <div className="mb-5 flex items-center gap-3">
               <User2 size={18} className="text-[#004AAD]" />
               <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
@@ -1817,7 +1818,7 @@ const OpenCallApplicationForm = ({
           </div>
 
           {visibleCustomFieldCount > 0 || canEditPreview ? (
-            <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5 md:px-6 md:py-6">
+            <div className="rounded-[28px] border-2 border-zinc-900 bg-white px-5 py-5 shadow-[3px_3px_0px_#000] md:px-6 md:py-6">
               <div className="mb-5 flex items-center gap-3">
                 <Sparkles size={18} className="text-[#004AAD]" />
                 <h2 className="text-lg md:text-xl font-black text-zinc-900 break-keep">
@@ -2002,7 +2003,7 @@ const OpenCallApplicationForm = ({
                 onChange={handlePortfolioUpload}
               />
 
-              <div className="rounded-[24px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 md:px-5 md:py-6">
+              <div className="rounded-[24px] border-2 border-dashed border-zinc-900 bg-zinc-50 px-4 py-5 shadow-[2px_2px_0px_#000] md:px-5 md:py-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-sm font-black text-zinc-900 break-keep">
@@ -2056,7 +2057,7 @@ const OpenCallApplicationForm = ({
           {Object.keys(fieldErrors).length > 0 ? (
             <div
               id="open-call-error-summary"
-              className="rounded-[28px] border border-red-200 bg-red-50 px-5 py-5 md:px-6 md:py-6"
+              className="rounded-[28px] border-2 border-red-900 bg-red-50 px-5 py-5 shadow-[3px_3px_0px_#7f1d1d] md:px-6 md:py-6"
             >
               <div className="flex items-start gap-3">
                 <AlertCircle size={18} className="mt-0.5 text-red-500" />
@@ -2146,7 +2147,7 @@ const OpenCallApplicationForm = ({
                 </pre>
               </div>
 
-              <label className="mt-4 flex items-start gap-3 rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
+              <label className="mt-4 flex items-start gap-3 rounded-[20px] border-2 border-zinc-900 bg-white px-4 py-4 shadow-[2px_2px_0px_#000]">
                 <input
                   type="checkbox"
                   checked={formData.privacyAgreed}
@@ -2160,7 +2161,7 @@ const OpenCallApplicationForm = ({
               <FieldError message={fieldErrors.privacyAgreed} />
 
               {canEditPreview ? (
-                <p className="mt-3 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-800 break-keep">
+                <p className="mt-3 rounded-[18px] border-2 border-amber-900 bg-amber-50 px-4 py-3 text-xs font-bold leading-relaxed text-amber-900 break-keep shadow-[2px_2px_0px_#78350f]">
                   개인정보 동의는 접수 운영상 필수 권장 항목입니다.
                 </p>
               ) : null}
@@ -2168,8 +2169,8 @@ const OpenCallApplicationForm = ({
           ) : null}
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-300">
+        <div className="mt-7 flex flex-col gap-3 rounded-[24px] border-2 border-zinc-900 bg-white px-4 py-4 shadow-[3px_3px_0px_#000] md:flex-row md:items-center md:justify-between">
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">
             {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
           </div>
 
@@ -2181,7 +2182,7 @@ const OpenCallApplicationForm = ({
               isSubmitting ||
               Object.values(uploadingMap).some(Boolean)
             }
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-6 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_18px_35px_rgba(0,74,173,0.2)] transition-all hover:-translate-y-0.5 disabled:translate-y-0 disabled:opacity-50"
+            className={unframeDesign.primaryButton}
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
             {previewMode ? "미리보기 검토" : canSubmitOpenCall ? "지원서 제출" : "접수 불가"}

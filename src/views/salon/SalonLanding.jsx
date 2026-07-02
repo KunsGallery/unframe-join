@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, CircleDot, Clock3, Sparkles, Users } from "lucid
 import { collection, onSnapshot } from "firebase/firestore";
 import { appId, db } from "../../lib/firebase";
 import { DEFAULT_JOIN_TRACKS, JOIN_TRACK_COLLECTION, mergeJoinTracks } from "../../constants/joinTracks";
+import { unframeDesign } from "../../components/ui/unframeDesign";
 
 const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(31, 31, 31, ${alpha})`;
@@ -59,31 +60,31 @@ const SalonLanding = ({ onBack }) => {
   const heroBackground = salonTrack?.backgroundImageUrl?.trim();
 
   return (
-    <section className="relative overflow-hidden py-4 md:py-8">
+    <section className={`${unframeDesign.surface} relative overflow-hidden py-4 md:py-8`}>
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(31,31,31,0.14),transparent_26%),radial-gradient(circle_at_top_right,rgba(170,208,4,0.12),transparent_24%),linear-gradient(180deg,#f6f4ee_0%,#fbfaf6_48%,#f6f4ee_100%)]" />
 
-      <div className="mx-auto max-w-6xl px-4 md:px-6">
+      <div className={unframeDesign.shell}>
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+          className={unframeDesign.secondaryButton}
         >
           <ArrowLeft size={14} />
           입구 다시 선택
         </button>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-          <div className="rounded-[36px] border border-white/70 bg-white/72 px-6 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.07)] backdrop-blur-xl md:px-8 md:py-10">
+          <div className={`${unframeDesign.majorCard} px-6 py-8 md:px-8 md:py-10`}>
             <div className="flex items-center gap-3 text-[#1f1f1f]">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-zinc-900 bg-[#AAD004] shadow-[2px_2px_0px_#000]">
                 <Users size={18} />
               </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
+              <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
                 SALON
               </span>
             </div>
 
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600">
+            <div className={unframeDesign.pill}>
               <CircleDot size={11} />
               {trackShortLabel}
             </div>
@@ -99,17 +100,17 @@ const SalonLanding = ({ onBack }) => {
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-3 py-1.5 text-[#004AAD]">
+              <span className={unframeDesign.pillBlue}>
                 <Sparkles size={11} />
                 {trackStatusLabel}
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white px-3 py-1.5 text-zinc-600">
+              <span className={unframeDesign.pill}>
                 {trackOrder} / {trackShortLabel}
               </span>
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[24px] border border-zinc-200 bg-white p-4">
+              <div className="rounded-[24px] border-2 border-zinc-900 bg-white p-4 shadow-[3px_3px_0px_#000]">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
                   What it is
                 </p>
@@ -118,7 +119,7 @@ const SalonLanding = ({ onBack }) => {
                 </p>
               </div>
 
-              <div className="rounded-[24px] border border-zinc-200 bg-white p-4">
+              <div className="rounded-[24px] border-2 border-zinc-900 bg-white p-4 shadow-[3px_3px_0px_#000]">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">
                   Status
                 </p>
@@ -132,7 +133,7 @@ const SalonLanding = ({ onBack }) => {
               <button
                 type="button"
                 onClick={onBack}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-zinc-950/10 transition-opacity hover:opacity-90"
+                className={unframeDesign.primaryButton}
               >
                 입구 다시 선택
                 <ArrowRight size={14} />
@@ -144,7 +145,7 @@ const SalonLanding = ({ onBack }) => {
             </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[36px] border border-zinc-950/10 bg-[#1f1f1f] shadow-[0_24px_80px_rgba(0,0,0,0.16)]">
+          <div className="relative overflow-hidden rounded-[36px] border-2 border-zinc-900 bg-[#1f1f1f] shadow-[8px_8px_0px_#000]">
             {heroBackground ? (
               <img
                 src={heroBackground}
@@ -201,7 +202,7 @@ const SalonLanding = ({ onBack }) => {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <div className="rounded-[28px] border border-zinc-950/10 bg-white/82 p-5 shadow-[0_14px_38px_rgba(0,0,0,0.06)]">
+          <div className={`${unframeDesign.sectionCard} bg-white p-5`}>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
               입구 정보
             </p>
@@ -213,7 +214,7 @@ const SalonLanding = ({ onBack }) => {
             </p>
           </div>
 
-          <div className="rounded-[28px] border border-zinc-950/10 bg-white/82 p-5 shadow-[0_14px_38px_rgba(0,0,0,0.06)]">
+          <div className={`${unframeDesign.sectionCard} bg-white p-5`}>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
               Next step
             </p>
@@ -225,7 +226,7 @@ const SalonLanding = ({ onBack }) => {
             </p>
           </div>
 
-          <div className="rounded-[28px] border border-zinc-950/10 bg-white/82 p-5 shadow-[0_14px_38px_rgba(0,0,0,0.06)]">
+          <div className={`${unframeDesign.sectionCard} bg-white p-5`}>
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
               Share URL
             </p>

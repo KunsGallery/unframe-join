@@ -4,6 +4,7 @@ import {
   normalizeOpenCallCompletionSettings,
   renderOpenCallTemplate,
 } from "../constants/openCall";
+import { unframeDesign } from "../components/ui/unframeDesign";
 
 const SuccessView = ({
   onReturn,
@@ -44,16 +45,16 @@ const SuccessView = ({
     : null;
 
   return (
-    <section className="max-w-xl mx-auto py-40 text-center animate-in zoom-in-95 duration-700 min-h-screen relative z-10 text-zinc-900 px-4">
-      <div className="w-24 h-24 bg-[#004aad]/10 text-[#004aad] rounded-full flex items-center justify-center mx-auto mb-10 shadow-inner shadow-[#004aad]/5">
+    <section className={`${unframeDesign.surface} relative z-10 px-4 py-24 text-center md:py-32`}>
+      <div className={`${unframeDesign.majorCard} mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#AAD004] text-zinc-950`}>
         <CheckCircle2 size={48} strokeWidth={3} />
       </div>
 
-      <h2 className="text-4xl font-black uppercase mb-6 text-[#004aad] text-center">
+      <h2 className="mt-8 text-4xl font-black tracking-tighter text-zinc-950 text-center md:text-5xl">
         {isOpenCall ? renderedCompletion?.title || "" : "Proposal Received"}
       </h2>
 
-      <p className="text-zinc-500 font-light leading-relaxed mb-12 break-keep text-base text-center">
+      <p className="mx-auto mt-5 max-w-2xl text-center text-base font-medium leading-relaxed text-zinc-700 break-keep">
         {isOpenCall ? (
           <span className="block space-y-2">
             <span className="block whitespace-pre-line">
@@ -72,10 +73,10 @@ const SuccessView = ({
         )}
       </p>
 
-      <div className="flex flex-col gap-3">
+      <div className="mx-auto mt-10 flex max-w-md flex-col gap-3">
         <button
           onClick={onReturn}
-          className="w-full border border-zinc-200 text-zinc-400 py-5 rounded-full font-black uppercase text-xs transition-all hover:bg-zinc-50 shadow-sm transition-all text-center"
+          className={unframeDesign.primaryButton + " w-full"}
         >
           {isOpenCall
             ? renderedCompletion?.buttonLabel
@@ -85,7 +86,7 @@ const SuccessView = ({
         {isOpenCall && onSecondaryAction ? (
           <button
             onClick={onSecondaryAction}
-            className="w-full rounded-full border border-[#004aad]/15 bg-white py-5 font-black uppercase text-xs text-[#004aad] transition-all hover:bg-[#004aad]/5 shadow-sm text-center"
+            className={unframeDesign.secondaryButton + " w-full"}
           >
             {renderedCompletion?.secondaryButtonLabel}
           </button>

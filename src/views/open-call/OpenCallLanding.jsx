@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { appId, db } from "../../lib/firebase";
+import { unframeDesign } from "../../components/ui/unframeDesign";
 import {
   DEFAULT_OPEN_CALL_FAQS,
   OPEN_CALL_FALLBACK,
@@ -25,8 +26,8 @@ import {
 
 const Section = ({ index, title, children, accent = false }) => (
   <div
-    className={`rounded-[28px] border p-5 md:p-6 ${
-      accent ? "border-[#004AAD]/15 bg-[#004AAD]/5" : "border-zinc-200 bg-white/85"
+    className={`rounded-[28px] border-2 border-zinc-900 p-5 shadow-[3px_3px_0px_#000] md:p-6 ${
+      accent ? "bg-[#004AAD]/8" : "bg-white"
     }`}
   >
     <div className="mb-3 flex items-center gap-3">
@@ -37,7 +38,7 @@ const Section = ({ index, title, children, accent = false }) => (
         {title}
       </h3>
     </div>
-    <div className="text-sm font-medium leading-relaxed text-zinc-600 break-keep whitespace-pre-line md:text-base">
+    <div className="whitespace-pre-line break-keep text-sm font-medium leading-relaxed text-zinc-700 md:text-base">
       {children}
     </div>
   </div>
@@ -187,45 +188,45 @@ const OpenCallLanding = ({ onBack, onApply }) => {
   };
 
   return (
-    <section className="relative overflow-hidden py-4 md:py-8">
+    <section className={`${unframeDesign.surface} relative overflow-hidden py-4 md:py-8`}>
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(0,74,173,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(170,208,4,0.12),transparent_26%),linear-gradient(180deg,#f6f4ee_0%,#fbfaf6_50%,#f6f4ee_100%)]" />
 
-      <div className="mx-auto max-w-5xl px-4 md:px-6">
+      <div className={unframeDesign.shellNarrow}>
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:border-[#004AAD]/20 hover:text-[#004AAD]"
+          className={unframeDesign.secondaryButton}
         >
           <ArrowLeft size={14} />
           신청 유형 다시 선택
         </button>
 
-        <div className="mt-6 rounded-[36px] border border-white/70 bg-white/65 px-5 py-8 shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl md:px-8 md:py-10">
+        <div className={`${unframeDesign.majorCard} mt-6 px-5 py-8 md:px-8 md:py-10`}>
           <div className="flex items-center gap-3 text-[#004AAD]">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-zinc-900 bg-[#AAD004] shadow-[2px_2px_0px_#000]">
               <Megaphone size={18} />
             </span>
-            <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
+            <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-500">
               OPEN CALL
             </span>
           </div>
 
           {loading ? (
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+            <div className={unframeDesign.pill}>
               <Loader2 size={14} className="animate-spin" />
               공고를 불러오는 중
             </div>
           ) : (
             <>
               <div className="mt-6 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
+                <span className={unframeDesign.pillBlue}>
                   {textOrFallback(openCall.badgeText, "OPEN")}
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                <span className={unframeDesign.pill}>
                   {statusLabel}
                 </span>
                 {openCall.isFeatured ? (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                  <span className={unframeDesign.pillLime}>
                     대표 공고
                   </span>
                 ) : null}
@@ -244,12 +245,12 @@ const OpenCallLanding = ({ onBack, onApply }) => {
               </p>
 
               <div className="mt-7 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
+                <span className={unframeDesign.pillBlue}>
                   <CircleDot size={12} />
                   {textOrFallback(openCall.mediumText, OPEN_CALL_FALLBACK.mediumText)}
                 </span>
                 {heroAccent ? (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black tracking-[0.16em] text-[#6e8d00]">
+                  <span className={unframeDesign.pillLime}>
                     <Sparkles size={12} />
                     {heroAccent}
                   </span>
@@ -262,9 +263,9 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                   return (
                     <div
                       key={label}
-                      className="rounded-[24px] border border-white/70 bg-white/75 px-4 py-4"
+                      className="rounded-[24px] border-2 border-zinc-900 bg-white px-4 py-4 shadow-[3px_3px_0px_#000]"
                     >
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                         {label}
                       </p>
                       <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
@@ -275,8 +276,8 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                 })}
               </div>
 
-              <div className="mt-4 rounded-2xl border border-zinc-200 bg-white/70 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+              <div className="mt-4 rounded-2xl border-2 border-zinc-900 bg-[#F6F4EE] px-4 py-3 shadow-[2px_2px_0px_#000]">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
                   상태 안내
                 </p>
                 <p className="mt-1 text-sm font-bold text-zinc-600 break-keep">
@@ -294,11 +295,11 @@ const OpenCallLanding = ({ onBack, onApply }) => {
         </div>
 
         <div className="mt-6 grid gap-4 md:mt-8 md:grid-cols-2">
-                {visibleSections.map((section, index) => (
-                  <Section
-                    key={`${section.title}-${index}`}
-                    index={String(index + 1).padStart(2, "0")}
-                    title={section.title}
+          {visibleSections.map((section, index) => (
+            <Section
+              key={`${section.title}-${index}`}
+              index={String(index + 1).padStart(2, "0")}
+              title={section.title}
               accent={index % 3 === 0}
             >
               {section.body}
@@ -306,7 +307,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
           ))}
         </div>
 
-        <div className="mt-6 md:mt-8 rounded-[32px] border border-[#004AAD]/15 bg-[#004AAD]/5 px-5 py-6 md:px-7 md:py-7">
+        <div className="mt-6 md:mt-8 rounded-[32px] border-2 border-zinc-900 bg-[#004AAD]/8 px-5 py-6 shadow-[6px_6px_0px_#000] md:px-7 md:py-7">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-[#004AAD]">
@@ -329,7 +330,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
               type="button"
               onClick={handleApply}
               disabled={!canApply}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_18px_35px_rgba(0,74,173,0.22)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:shadow-none disabled:hover:translate-y-0"
+              className={unframeDesign.primaryButton}
             >
               {canApply
                 ? applyButtonText
@@ -340,7 +341,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
         </div>
 
         {faqs.length > 0 ? (
-          <div className="mt-14 md:mt-16 rounded-[32px] border border-zinc-950/10 bg-white/70 px-5 py-6 md:px-7 md:py-7 shadow-[0_20px_60px_rgba(0,0,0,0.05)]">
+          <div className="mt-14 rounded-[32px] border-2 border-zinc-900 bg-white px-5 py-6 shadow-[6px_6px_0px_#000] md:mt-16 md:px-7 md:py-7">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
@@ -370,7 +371,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
                 return (
                   <div
                     key={`${faq.question}-${faq.order || index}`}
-                    className="overflow-hidden rounded-[28px] border border-zinc-950/10 bg-white/90"
+                    className="overflow-hidden rounded-[28px] border-2 border-zinc-900 bg-white shadow-[3px_3px_0px_#000]"
                   >
                     <button
                       type="button"
@@ -406,7 +407,7 @@ const OpenCallLanding = ({ onBack, onApply }) => {
         ) : null}
 
         <div className="mt-6 flex justify-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 shadow-sm backdrop-blur">
+          <div className={unframeDesign.pill}>
             <Telescope size={12} />
             {textOrFallback(openCall.title, OPEN_CALL_FALLBACK.title)}
           </div>

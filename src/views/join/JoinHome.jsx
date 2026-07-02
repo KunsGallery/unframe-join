@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { appId, db } from "../../lib/firebase";
+import { unframeDesign } from "../../components/ui/unframeDesign";
 import {
   DEFAULT_JOIN_HOME_CONTENT,
   mergeJoinHomeContent,
@@ -315,9 +316,9 @@ const FeaturedProjectCard = ({ popup, content, onCta }) => {
                 {targetLabel}
               </span>
               {popup?.priority != null ? (
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-[#6f8f00]">
-                  priority {popup.priority}
-                </span>
+              <span className="inline-flex items-center gap-2 rounded-full border-2 border-zinc-900 bg-[#AAD004] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 shadow-[2px_2px_0px_#000]">
+                대표 공지
+              </span>
               ) : null}
             </div>
           </div>
@@ -466,7 +467,7 @@ const BrandHero = ({ content }) => (
   >
     <div className="max-w-4xl">
       {isVisibleText(content.heroBadgeText) ? (
-        <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
+        <div className="inline-flex items-center gap-3 rounded-full border-2 border-zinc-900 bg-white px-4 py-2 shadow-[3px_3px_0px_#000]">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#004AAD] text-white">
             <Sparkles size={15} />
           </span>
@@ -490,7 +491,7 @@ const BrandHero = ({ content }) => (
 
       <div className="mt-6 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
         {isVisibleText(content.heroPrimaryChip) ? (
-          <span className="inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/85 px-3 py-1.5">
+          <span className={unframeDesign.pill}>
             <CircleDot size={11} />
             {content.heroPrimaryChip}
           </span>
@@ -504,7 +505,7 @@ const BrandHero = ({ content }) => (
     </div>
 
     {content.brandNoteEnabled ? (
-      <div className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-5 shadow-sm md:p-6">
+      <div className="rounded-[32px] border-2 border-zinc-900 bg-white p-5 shadow-[4px_4px_0px_#000] md:p-6">
         <>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -530,7 +531,7 @@ const BrandHero = ({ content }) => (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {isVisibleText(content.brandNoteLeftLabel) ||
             isVisibleText(content.brandNoteLeftText) ? (
-              <div className="rounded-[24px] border border-white/80 bg-white p-4">
+              <div className="rounded-[24px] border-2 border-zinc-900 bg-white p-4 shadow-[2px_2px_0px_#000]">
                 {isVisibleText(content.brandNoteLeftLabel) ? (
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
                     {content.brandNoteLeftLabel}
@@ -546,7 +547,7 @@ const BrandHero = ({ content }) => (
 
             {isVisibleText(content.brandNoteRightLabel) ||
             isVisibleText(content.brandNoteRightText) ? (
-              <div className="rounded-[24px] border border-white/80 bg-white p-4">
+              <div className="rounded-[24px] border-2 border-zinc-900 bg-white p-4 shadow-[2px_2px_0px_#000]">
                 {isVisibleText(content.brandNoteRightLabel) ? (
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
                     {content.brandNoteRightLabel}
@@ -576,7 +577,7 @@ const EntryPanel = ({
   setHoveredTrackId,
   handleTrackClick,
 }) => (
-  <section className="rounded-[32px] border border-zinc-950/10 bg-white/72 p-4 shadow-sm md:p-6">
+  <section className="rounded-[32px] border-2 border-zinc-900 bg-white p-4 shadow-[4px_4px_0px_#000] md:p-6">
     <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div className="max-w-3xl">
         {content.waysToJoinEnabled ? (
@@ -612,7 +613,7 @@ const EntryPanel = ({
             ? "SYNCING"
             : formatCountLabel(content.activeTrackCountLabelTemplate, visibleTracks.length)
         ) ? (
-          <div className="rounded-full border border-zinc-950/10 bg-white/85 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
+          <div className={unframeDesign.pill}>
             {loading
               ? "SYNCING"
               : formatCountLabel(content.activeTrackCountLabelTemplate, visibleTracks.length)}
@@ -787,8 +788,8 @@ const JoinPopupModal = ({ popup, onClose, onHideToday, onCta }) => {
                   <CircleDot size={11} />
                   {popup.targetTrack || "open-call"}
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/12 px-3 py-1.5 text-[#6f8f00]">
-                  {popup.priority != null ? `priority ${popup.priority}` : "priority 999"}
+                <span className="inline-flex items-center gap-2 rounded-full border-2 border-zinc-900 bg-[#AAD004] px-3 py-1.5 text-zinc-950 shadow-[2px_2px_0px_#000]">
+                  대표 공지
                 </span>
               </div>
             </div>
