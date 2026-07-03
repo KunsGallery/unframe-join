@@ -33,6 +33,7 @@ import {
   validateDocumentFile,
   sendApplicationEmails,
 } from "../lib/uploads";
+import AddressSearchField from "../components/ui/AddressSearchField";
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -366,6 +367,11 @@ const ProposalFormStep = ({
   const clearUploadError = (field) => {
     setUploadErrors((prev) => ({ ...prev, [field]: "" }));
     setFieldErrors((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleAddressChange = (patch) => {
+    setFormData((prev) => ({ ...prev, ...patch }));
+    setFieldErrors((prev) => ({ ...prev, addressMain: "" }));
   };
 
   const handleUseSavedProfile = () => {
@@ -952,24 +958,14 @@ const ProposalFormStep = ({
           </div>
 
           <div className="space-y-4 md:space-y-6">
-            <label className="text-[11px] font-black uppercase text-[#004aad] tracking-[0.14em]">
-              주소 *
-            </label>
-            <input
-              className={unframeDesign.inputPublicSoft + " p-4 md:p-6 rounded-2xl text-base"}
-              placeholder="기본 주소"
+            <AddressSearchField
+              label="주소"
+              required
               value={formData.addressMain}
-              onChange={(e) =>
-                setFormData({ ...formData, addressMain: e.target.value })
-              }
-            />
-            <input
-              className={unframeDesign.inputPublicSoft + " p-4 md:p-6 rounded-2xl text-base"}
-              placeholder="상세 주소"
-              value={formData.addressDetail}
-              onChange={(e) =>
-                setFormData({ ...formData, addressDetail: e.target.value })
-              }
+              detailValue={formData.addressDetail}
+              placeholder="주소를 검색해 주세요"
+              detailPlaceholder="상세주소를 입력해 주세요"
+              onChange={handleAddressChange}
             />
             {fieldErrors.addressMain && (
               <p className="text-red-500 text-xs font-black">{fieldErrors.addressMain}</p>
