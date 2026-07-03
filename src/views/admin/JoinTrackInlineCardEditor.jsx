@@ -7,7 +7,11 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { getSavedTextValue, isJoinTrackVisible } from "../../constants/joinTracks";
+import {
+  JOIN_TRACK_DISPLAY_STATES,
+  getJoinTrackVisibilityState,
+  getSavedTextValue,
+} from "../../constants/joinTracks";
 
 const TRACK_ICON_MAP = {
   rental: Building2,
@@ -132,17 +136,39 @@ const normalizeOrderInput = (value) => {
   return digits;
 };
 
+const VISIBILITY_STATE_META = {
+  [JOIN_TRACK_DISPLAY_STATES.ACTIVE]: {
+    label: "ACTIVE",
+    hint: "메인에 표시, 클릭 가능",
+    selectClass: "border-[#004aad] bg-[#004aad]/8 text-[#004aad]",
+  },
+  [JOIN_TRACK_DISPLAY_STATES.DISABLED]: {
+    label: "DISABLED",
+    hint: "메인에 표시, 클릭 불가",
+    selectClass: "border-amber-300 bg-amber-50 text-amber-800",
+  },
+  [JOIN_TRACK_DISPLAY_STATES.HIDDEN]: {
+    label: "HIDE",
+    hint: "메인에서 숨김",
+    selectClass: "border-rose-200 bg-rose-50 text-rose-700",
+  },
+};
+
 const JoinTrackInlineCardEditor = ({
   track,
   index = 0,
   draft = {},
   onChange,
   onOpenAdvanced,
-  onToggleVisibility,
+  visibilityState: controlledVisibilityState,
+  onChangeVisibility,
 }) => {
   const Icon = TRACK_ICON_MAP[track?.routeTrack] || Sparkles;
   const draftTrack = { ...track, ...draft };
-  const isVisible = isJoinTrackVisible(draftTrack);
+  const visibilityState =
+    controlledVisibilityState || getJoinTrackVisibilityState(draftTrack);
+  const visibilityMeta =
+    VISIBILITY_STATE_META[visibilityState] || VISIBILITY_STATE_META.active;
 
   const resolvedOrder = getSavedTextValue(draft, "order");
   const resolvedShortLabel = getSavedTextValue(draft, "shortLabel");
@@ -211,22 +237,23 @@ const JoinTrackInlineCardEditor = ({
               ) : null}
 
               <div className="flex flex-col items-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => onToggleVisibility?.()}
-                  aria-pressed={isVisible}
-                  aria-label={isVisible ? "메인 페이지에서 숨기기" : "메인 페이지에 노출하기"}
-                  title="클릭하면 메인 페이지 노출/숨김 상태를 전환합니다."
-                  className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] shadow-[0_12px_30px_rgba(0,0,0,0.12)] backdrop-blur-md transition-colors ${
-                    isVisible
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      : "border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-                  }`}
-                >
-                  {isVisible ? "ACTIVE" : "DISABLED"}
-                </button>
-                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/60">
-                  메인 페이지 노출 여부
+                <label className="flex flex-col items-end gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/60">
+                    메인 카드 상태
+                  </span>
+                  <select
+                    value={visibilityState}
+                    onChange={(event) => onChangeVisibility?.(event.target.value)}
+                    aria-label="메인 카드 상태"
+                    className={`rounded-full border-2 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] shadow-[2px_2px_0px_#000] outline-none transition-colors ${visibilityMeta.selectClass}`}
+                  >
+                    <option value={JOIN_TRACK_DISPLAY_STATES.ACTIVE}>ACTIVE</option>
+                    <option value={JOIN_TRACK_DISPLAY_STATES.DISABLED}>DISABLED</option>
+                    <option value={JOIN_TRACK_DISPLAY_STATES.HIDDEN}>HIDE</option>
+                  </select>
+                </label>
+                <p className="max-w-[13rem] whitespace-pre-line text-right text-[9px] font-bold leading-relaxed tracking-[0.08em] text-white/72">
+                  {`${visibilityMeta.label}: ${visibilityMeta.hint}`}
                 </p>
 
                 <label

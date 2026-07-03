@@ -5,10 +5,10 @@ import {
   DEFAULT_JOIN_TRACKS,
   JOIN_TRACK_COLLECTION,
   getJoinTrackVisibilityState,
+  getJoinTrackVisibilityPatch,
   getPreviewTextValue,
   hasOwnField,
   mergeJoinTracks,
-  isJoinTrackVisible,
 } from "../../constants/joinTracks";
 import JoinTrackInlineCardEditor from "./JoinTrackInlineCardEditor";
 
@@ -117,13 +117,8 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
     }));
   };
 
-  const toggleTrackVisibility = (trackId, currentTrack) => {
-    const visible = isJoinTrackVisible(currentTrack);
-
-    updateDraftPatch(trackId, {
-      enabled: !visible,
-      entryStatus: visible ? "hidden" : "active",
-    });
+  const updateTrackVisibilityState = (trackId, nextState) => {
+    updateDraftPatch(trackId, getJoinTrackVisibilityPatch(nextState));
   };
 
   const handleSeedDefaults = async () => {
@@ -165,17 +160,14 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       ...savedTrack,
       ...(drafts[track.id] || {}),
     };
-    const visibilityState = getJoinTrackVisibilityState(
-      draft,
-      track.entryStatus || "active"
-    );
+    const visibilityState = getJoinTrackVisibilityState(draft);
+    const visibilityPatch = getJoinTrackVisibilityPatch(visibilityState);
     const payload = {
       ...draft,
       id: track.id,
       routeTrack: track.routeTrack || track.id,
       order: normalizeOrderValue(draft.order, track.order || 0),
-      enabled: visibilityState.isVisible,
-      entryStatus: visibilityState.entryStatus,
+      ...visibilityPatch,
       trackType: "join-track",
       updatedAt: serverTimestamp(),
       createdAt: draft.createdAt || track.createdAt || serverTimestamp(),
@@ -224,8 +216,8 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
             JOIN 허브 트랙 관리
           </h3>
           <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-            JoinHome에서 보여줄 트랙의 사용 여부와 시각 요소를 조정합니다.
-            비활성 트랙은 메인 허브에서 숨겨집니다.
+            JoinHome에서 보여줄 트랙의 상태와 시각 요소를 조정합니다.
+            HIDE 상태만 메인 허브에서 숨겨집니다.
           </p>
         </div>
 
@@ -274,24 +266,28 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
               ...(drafts[track.id] || {}),
             };
             const feedback = saveFeedbacks[track.id];
-            const visibilityState = getJoinTrackVisibilityState(
-              draft,
-              track.entryStatus || "active"
-            );
-            const entryStatus = visibilityState.entryStatus;
+            const visibilityState = getJoinTrackVisibilityState(draft);
             const entryStatusLabel =
-              entryStatus === "hidden"
-                ? "DISABLED"
-                : entryStatus.toUpperCase();
+              visibilityState === "hidden"
+                ? "HIDE"
+                : visibilityState.toUpperCase();
+            const visibilityTone =
+              visibilityState === "active"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : visibilityState === "disabled"
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-rose-200 bg-rose-50 text-rose-700";
+            const cardTone =
+              visibilityState === "active"
+                ? "border-[#004aad]/10 bg-[#004aad]/5"
+                : visibilityState === "disabled"
+                ? "border-amber-200 bg-amber-50/50"
+                : "border-rose-200 bg-rose-50/40 opacity-90";
 
             return (
               <div
                 key={track.id}
-                className={`overflow-hidden rounded-[32px] border ${
-                  visibilityState.isVisible
-                    ? "border-zinc-100 bg-zinc-50/70"
-                    : "border-zinc-200 bg-zinc-50/40 opacity-90"
-                }`}
+                className={`overflow-hidden rounded-[32px] border ${cardTone}`}
               >
                 <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[1.08fr_0.92fr]">
                   <div className="space-y-4">
@@ -300,7 +296,10 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                       index={index}
                       draft={draft}
                       onChange={(patch) => updateDraftPatch(track.id, patch)}
-                      onToggleVisibility={() => toggleTrackVisibility(track.id, draft)}
+                      visibilityState={visibilityState}
+                      onChangeVisibility={(nextState) =>
+                        updateTrackVisibilityState(track.id, nextState)
+                      }
                     />
                   </div>
 
@@ -315,11 +314,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                       </div>
 
                       <span
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                          visibilityState.isVisible
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-zinc-200 bg-zinc-100 text-zinc-500"
-                        }`}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${visibilityTone}`}
                       >
                         {entryStatusLabel}
                       </span>

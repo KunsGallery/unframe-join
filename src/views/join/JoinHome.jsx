@@ -18,6 +18,9 @@ import {
 import {
   JOIN_TRACK_COLLECTION,
   isJoinTrackVisible,
+  isJoinTrackClickable,
+  getJoinTrackVisibilityState,
+  JOIN_TRACK_DISPLAY_STATES,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
 import {
@@ -177,11 +180,53 @@ const buildTrackBackgroundStyle = (track, isHovered) => {
   };
 };
 
+const getTrackVisibilityTone = (visibilityState) => {
+  if (visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE) {
+    return {
+      cardClass: "cursor-pointer",
+      panelClass: "border-[#004AAD]/10 bg-white/78",
+      ctaLabel: null,
+      buttonClass: "",
+      hoverEnabled: true,
+      opacity: 1,
+      transform: "translateY(0)",
+      toneClass: "border-[#004AAD]/15 bg-[#004AAD]/8 text-[#004AAD]",
+    };
+  }
+
+  if (visibilityState === JOIN_TRACK_DISPLAY_STATES.DISABLED) {
+    return {
+      cardClass: "cursor-not-allowed",
+      panelClass: "border-amber-200 bg-amber-50/72",
+      ctaLabel: "준비 중",
+      buttonClass: "opacity-95",
+      hoverEnabled: false,
+      opacity: 0.95,
+      transform: "translateY(0)",
+      toneClass: "border-amber-200 bg-amber-50 text-amber-700",
+    };
+  }
+
+  return {
+    cardClass: "cursor-default",
+    panelClass: "border-zinc-200 bg-zinc-50/40",
+    ctaLabel: null,
+    buttonClass: "opacity-90",
+    hoverEnabled: false,
+    opacity: 0.9,
+    transform: "translateY(0)",
+    toneClass: "border-zinc-200 bg-zinc-100 text-zinc-500",
+  };
+};
+
 const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
+  const visibilityState = getJoinTrackVisibilityState(track);
+  const isClickable = visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
+  const visibilityTone = getTrackVisibilityTone(visibilityState);
   const isHovered = hoveredTrackId === track.id;
   const hasHover = Boolean(hoveredTrackId);
-  const isDimmed = hasHover && !isHovered;
+  const isDimmed = hasHover && !isHovered && isClickable;
   const tone = getTrackTone(track);
   const orderLabel = String(track.order ?? 0).padStart(2, "0");
   const shortLabel = getTrackShortLabel(track);
@@ -189,21 +234,26 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const eyebrow = getTextOrFallback(track.eyebrow, "UNFRAME JOIN");
   const title = getPresentText(track.title);
   const description = getPresentText(track.description);
-  const ctaLabel = getTrackCtaLabel(track);
+  const ctaLabel = visibilityTone.ctaLabel || getTrackCtaLabel(track);
+  const handleMouseEnter = isClickable ? onHover : undefined;
+  const handleButtonClick = () => {
+    if (!isClickable) return;
+    onClick?.();
+  };
 
   return (
     <button
       type="button"
-      onClick={onClick}
-      onMouseEnter={onHover}
-      className="group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+      onClick={handleButtonClick}
+      onMouseEnter={handleMouseEnter}
+      className={`group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${visibilityTone.cardClass}`}
       style={{
         flexBasis: getPanelBasis(track, hoveredTrackId, count),
-        flexGrow: isHovered ? 2 : 1,
+        flexGrow: isClickable && isHovered ? 2 : 1,
         flexShrink: 1,
-        zIndex: isHovered ? 20 : 10,
-        opacity: isDimmed ? 0.72 : 1,
-        transform: isHovered ? "translateY(-2px)" : "translateY(0)",
+        zIndex: isClickable && isHovered ? 20 : 10,
+        opacity: isDimmed ? 0.72 : visibilityTone.opacity,
+        transform: isClickable && isHovered ? "translateY(-2px)" : visibilityTone.transform,
       }}
     >
       <div
@@ -216,7 +266,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
       <div className="absolute inset-y-0 -right-10 w-24 skew-x-[-8deg] bg-white/18 opacity-45 mix-blend-overlay transition-opacity duration-500 group-hover:opacity-70" />
       <div className="absolute inset-y-0 right-0 w-px bg-white/25" />
 
-      <div className="relative z-30 flex h-full min-h-[420px] flex-col justify-between p-6 text-white md:min-h-[480px] md:p-8 lg:min-h-[520px] lg:p-10">
+      <div className={`relative z-30 flex h-full min-h-[420px] flex-col justify-between p-6 text-white md:min-h-[480px] md:p-8 lg:min-h-[520px] lg:p-10 ${visibilityTone.buttonClass}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
@@ -281,34 +331,57 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
 
 const AuxiliaryTrackItem = ({ track, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
+  const visibilityState = getJoinTrackVisibilityState(track);
+  const isClickable = visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
   const eyebrow = getTextOrFallback(track.eyebrow, "UNFRAME");
   const title = getPresentText(track.title);
+  const handleClick = () => {
+    if (!isClickable) return;
+    onClick?.();
+  };
 
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="group flex items-center justify-between gap-4 rounded-[24px] border border-zinc-950/10 bg-white/85 px-4 py-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-[#004AAD]/20 hover:shadow-[0_16px_36px_rgba(0,0,0,0.08)]"
+      onClick={handleClick}
+      className={`group flex items-center justify-between gap-4 rounded-[24px] border px-4 py-4 text-left transition-all duration-300 ${
+        isClickable
+          ? "cursor-pointer border-zinc-950/10 bg-white/85 hover:-translate-y-0.5 hover:border-[#004AAD]/20 hover:shadow-[0_16px_36px_rgba(0,0,0,0.08)]"
+          : "cursor-not-allowed border-amber-200 bg-amber-50/80 opacity-95"
+      }`}
     >
       <div className="flex min-w-0 items-center gap-4">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-zinc-950/10 bg-[#F6F4EE] text-zinc-950">
+        <div
+          className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border text-zinc-950 ${
+            isClickable
+              ? "border-zinc-950/10 bg-[#F6F4EE]"
+              : "border-amber-200 bg-white"
+          }`}
+        >
           <Icon size={18} />
         </div>
         <div className="min-w-0">
           {hasText(eyebrow) ? (
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+            <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${isClickable ? "text-zinc-500" : "text-amber-700"}`}>
               {eyebrow}
             </p>
           ) : null}
           {hasText(title) ? (
-            <p className="mt-1 text-sm font-black tracking-tight text-zinc-950 break-keep">
+            <p className={`mt-1 text-sm font-black tracking-tight break-keep ${isClickable ? "text-zinc-950" : "text-zinc-700"}`}>
               {title}
             </p>
           ) : null}
         </div>
       </div>
 
-      <ArrowRight size={16} className="shrink-0 text-zinc-300 transition-colors group-hover:text-[#004AAD]" />
+      <ArrowRight
+        size={16}
+        className={`shrink-0 transition-colors ${
+          isClickable
+            ? "text-zinc-300 group-hover:text-[#004AAD]"
+            : "text-amber-300"
+        }`}
+      />
     </button>
   );
 };
@@ -699,56 +772,89 @@ const EntryPanel = ({
         </div>
 
         <div className="grid gap-4 md:hidden">
-          {primaryTracks.map((track, index) => (
-            <button
-              key={track.id}
-              type="button"
-              onClick={() => handleTrackClick(track)}
-              className="group relative min-h-[16rem] overflow-hidden rounded-[30px] border border-zinc-950/10 bg-white text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)]"
-            >
-              <div className="absolute inset-0" style={buildTrackBackgroundStyle(track, true)} />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-zinc-950/5 to-white/15" />
-              <div className="absolute inset-y-0 -right-8 w-16 skew-x-[-8deg] bg-white/18 opacity-50 mix-blend-overlay" />
+          {primaryTracks.map((track, index) => {
+            const visibilityState = getJoinTrackVisibilityState(track);
+            const isClickable = visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
+            const isDisabled = visibilityState === JOIN_TRACK_DISPLAY_STATES.DISABLED;
+            const mobileCtaLabel = isClickable ? getTrackCtaLabel(track) : "준비 중";
 
-              <div className="relative z-30 flex min-h-[16rem] flex-col justify-between p-5 text-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
-                    {String(index + 1).padStart(2, "0")}
-                    {hasText(getTrackShortLabel(track)) ? ` / ${getTrackShortLabel(track)}` : ""}
+            return (
+              <button
+                key={track.id}
+                type="button"
+                onClick={() => {
+                  if (!isClickable) return;
+                  handleTrackClick(track);
+                }}
+                className={`group relative min-h-[16rem] overflow-hidden rounded-[30px] border text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)] ${
+                  isClickable
+                    ? "cursor-pointer border-zinc-950/10 bg-white"
+                    : "cursor-not-allowed border-amber-200 bg-amber-50/80"
+                }`}
+              >
+                <div
+                  className="absolute inset-0"
+                  style={buildTrackBackgroundStyle(track, isClickable)}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/30 via-zinc-950/5 to-white/15" />
+                <div className="absolute inset-y-0 -right-8 w-16 skew-x-[-8deg] bg-white/18 opacity-50 mix-blend-overlay" />
+
+                <div
+                  className={`relative z-30 flex min-h-[16rem] flex-col justify-between p-5 ${
+                    isDisabled ? "text-white/92" : "text-white"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div
+                      className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md ${
+                        isClickable
+                          ? "border-white/12 bg-white/12"
+                          : "border-amber-200 bg-white/18 text-amber-50"
+                      }`}
+                    >
+                      {String(index + 1).padStart(2, "0")}
+                      {hasText(getTrackShortLabel(track)) ? ` / ${getTrackShortLabel(track)}` : ""}
+                    </div>
+                    {hasText(getTrackStatusLabel(track)) ? (
+                      <div
+                        className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md ${
+                          isClickable
+                            ? "border-white/12 bg-white/12"
+                            : "border-amber-200 bg-white/18 text-amber-50"
+                        }`}
+                      >
+                        {getTrackStatusLabel(track)}
+                      </div>
+                    ) : null}
                   </div>
-                  {hasText(getTrackStatusLabel(track)) ? (
-                    <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
-                      {getTrackStatusLabel(track)}
-                    </div>
-                  ) : null}
-                </div>
 
-                <div className="max-w-[18rem]">
-                  {hasText(getTextOrFallback(track.eyebrow, "UNFRAME JOIN")) ? (
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
-                      {getTextOrFallback(track.eyebrow, "UNFRAME JOIN")}
-                    </p>
-                  ) : null}
-                  {hasText(getPresentText(track.title)) ? (
-                    <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
-                      {getPresentText(track.title)}
-                    </h3>
-                  ) : null}
-                  {hasText(getPresentText(track.description)) ? (
-                    <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-white/82 break-keep">
-                      {getPresentText(track.description)}
-                    </p>
-                  ) : null}
-                  {hasText(getTrackCtaLabel(track)) ? (
-                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
-                      {getTrackCtaLabel(track)}
-                      <ArrowRight size={14} />
-                    </div>
-                  ) : null}
+                  <div className="max-w-[18rem]">
+                    {hasText(getTextOrFallback(track.eyebrow, "UNFRAME JOIN")) ? (
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
+                        {getTextOrFallback(track.eyebrow, "UNFRAME JOIN")}
+                      </p>
+                    ) : null}
+                    {hasText(getPresentText(track.title)) ? (
+                      <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
+                        {getPresentText(track.title)}
+                      </h3>
+                    ) : null}
+                    {hasText(getPresentText(track.description)) ? (
+                      <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-white/82 break-keep">
+                        {getPresentText(track.description)}
+                      </p>
+                    ) : null}
+                    {hasText(mobileCtaLabel) ? (
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
+                        {mobileCtaLabel}
+                        <ArrowRight size={14} />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </>
     ) : (
@@ -1063,6 +1169,9 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       setPreparingTrack(targetTrack);
       return;
     }
+    if (!isJoinTrackClickable(targetTrack)) {
+      return;
+    }
 
     if (routeTrack === "rental") {
       onSelectRental?.();
@@ -1168,6 +1277,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
       setPreparingTrack(track);
       return;
     }
+    if (!isJoinTrackClickable(track)) return;
     handleTrackSelect(track.routeTrack);
   };
 

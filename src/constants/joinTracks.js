@@ -6,7 +6,7 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "rental",
     order: 1,
     enabled: true,
-    entryStatus: "active",
+    entryStatus: "open",
     preparingTitle: "준비 중입니다.",
     preparingMessage: "현재 해당 접수는 준비 중입니다.",
     preparingConfirmLabel: "확인",
@@ -25,7 +25,7 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "open-call",
     order: 2,
     enabled: true,
-    entryStatus: "active",
+    entryStatus: "open",
     preparingTitle: "준비 중입니다.",
     preparingMessage: "현재 해당 접수는 준비 중입니다.",
     preparingConfirmLabel: "확인",
@@ -44,7 +44,7 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "salon",
     order: 3,
     enabled: true,
-    entryStatus: "active",
+    entryStatus: "open",
     preparingTitle: "준비 중입니다.",
     preparingMessage: "현재 해당 접수는 준비 중입니다.",
     preparingConfirmLabel: "확인",
@@ -63,7 +63,7 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "collaboration",
     order: 4,
     enabled: true,
-    entryStatus: "preparing",
+    entryStatus: "disabled",
     preparingTitle: "준비 중입니다.",
     preparingMessage: "현재 협업 제안 접수는 준비 중입니다.",
     preparingConfirmLabel: "확인",
@@ -95,21 +95,61 @@ const normalizeOrder = (value, fallback = 0) => {
 const normalizeEnabled = (value, fallback = true) =>
   typeof value === "boolean" ? value : fallback;
 
-export const JOIN_TRACK_ENTRY_STATUSES = ["active", "preparing", "hidden"];
+export const JOIN_TRACK_DISPLAY_STATES = {
+  ACTIVE: "active",
+  DISABLED: "disabled",
+  HIDDEN: "hidden",
+};
 
-const normalizeEntryStatus = (value, fallback = "active") =>
-  JOIN_TRACK_ENTRY_STATUSES.includes(value) ? value : fallback;
+export const JOIN_TRACK_ENTRY_STATUSES = [
+  "open",
+  "active",
+  "disabled",
+  "hidden",
+  "preparing",
+];
+
+const normalizeVisibilityState = (value, fallback = JOIN_TRACK_DISPLAY_STATES.ACTIVE) => {
+  if (value === "hidden") return JOIN_TRACK_DISPLAY_STATES.HIDDEN;
+  if (value === "disabled" || value === "preparing") {
+    return JOIN_TRACK_DISPLAY_STATES.DISABLED;
+  }
+  if (value === "open" || value === "active") return JOIN_TRACK_DISPLAY_STATES.ACTIVE;
+  return fallback;
+};
+
+export const getJoinTrackVisibilityState = (track = {}) => {
+  if (track?.entryStatus === "hidden" || track?.enabled === false) {
+    return JOIN_TRACK_DISPLAY_STATES.HIDDEN;
+  }
+
+  return normalizeVisibilityState(track?.entryStatus);
+};
 
 export const isJoinTrackVisible = (track) =>
-  track?.entryStatus !== "hidden" && track?.enabled !== false;
+  getJoinTrackVisibilityState(track) !== JOIN_TRACK_DISPLAY_STATES.HIDDEN;
 
-export const getJoinTrackVisibilityState = (track = {}, fallbackEntryStatus = "active") => {
-  const isVisible = isJoinTrackVisible(track);
-  const normalizedEntryStatus = normalizeEntryStatus(track.entryStatus, fallbackEntryStatus);
+export const isJoinTrackClickable = (track) =>
+  getJoinTrackVisibilityState(track) === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
+
+export const getJoinTrackVisibilityPatch = (state) => {
+  if (state === JOIN_TRACK_DISPLAY_STATES.HIDDEN) {
+    return {
+      entryStatus: "hidden",
+      enabled: false,
+    };
+  }
+
+  if (state === JOIN_TRACK_DISPLAY_STATES.DISABLED) {
+    return {
+      entryStatus: "disabled",
+      enabled: true,
+    };
+  }
 
   return {
-    isVisible,
-    entryStatus: isVisible ? normalizedEntryStatus : "hidden",
+    entryStatus: "open",
+    enabled: true,
   };
 };
 
@@ -144,17 +184,14 @@ export const getPreviewTextValue = (object, key, fallback = "") => {
 export const normalizeJoinTrack = (track = {}) => {
   const base = DEFAULT_JOIN_TRACK_MAP[track.id] || {};
   const enabled = normalizeEnabled(track.enabled, base.enabled !== false);
-  const visibilityState = getJoinTrackVisibilityState(
-    { ...base, ...track, enabled },
-    base.entryStatus || "active"
-  );
+  const visibilityState = getJoinTrackVisibilityState({ ...base, ...track, enabled });
 
   return {
     id: normalizeString(track.id || base.id),
     routeTrack: normalizeString(track.routeTrack || base.routeTrack || track.id || base.id),
     order: normalizeOrder(track.order, base.order || 0),
-    enabled: visibilityState.isVisible,
-    entryStatus: visibilityState.entryStatus,
+    enabled: visibilityState !== JOIN_TRACK_DISPLAY_STATES.HIDDEN,
+    entryStatus: visibilityState,
     preparingTitle: normalizeString(
       track.preparingTitle || base.preparingTitle,
       "준비 중입니다."
