@@ -196,7 +196,7 @@ const getTrackVisibilityTone = (visibilityState) => {
 
   if (visibilityState === JOIN_TRACK_DISPLAY_STATES.DISABLED) {
     return {
-      cardClass: "cursor-not-allowed",
+      cardClass: "cursor-default",
       panelClass: "border-amber-200 bg-amber-50/72",
       ctaLabel: "준비 중",
       buttonClass: "opacity-95",
@@ -247,7 +247,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
       onClick={handleButtonClick}
       onMouseEnter={onHover}
       aria-disabled={!isClickable}
-      className={`group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${visibilityTone.cardClass} ${isDisabled ? "cursor-not-allowed" : ""}`}
+      className={`group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${visibilityTone.cardClass}`}
       style={{
         flexBasis: getPanelBasis(track, hoveredTrackId, count),
         flexGrow: isHovered ? 2 : 1,
@@ -348,7 +348,7 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
       className={`group flex items-center justify-between gap-4 rounded-[24px] border px-4 py-4 text-left transition-all duration-300 ${
         isClickable
           ? "cursor-pointer border-zinc-950/10 bg-white/85 hover:-translate-y-0.5 hover:border-[#004AAD]/20 hover:shadow-[0_16px_36px_rgba(0,0,0,0.08)]"
-          : "cursor-not-allowed border-amber-200 bg-amber-50/80 opacity-95"
+          : "cursor-default border-amber-200 bg-amber-50/80 opacity-95"
       }`}
     >
       <div className="flex min-w-0 items-center gap-4">
@@ -791,7 +791,7 @@ const EntryPanel = ({
                 className={`group relative min-h-[16rem] overflow-hidden rounded-[30px] border text-left shadow-[0_18px_50px_rgba(0,0,0,0.1)] ${
                   isClickable
                     ? "cursor-pointer border-zinc-950/10 bg-white"
-                    : "cursor-not-allowed border-amber-200 bg-amber-50/80"
+                    : "cursor-default border-amber-200 bg-amber-50/80"
                 }`}
               >
                 <div
