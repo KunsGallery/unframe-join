@@ -223,10 +223,11 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
   const visibilityState = getJoinTrackVisibilityState(track);
   const isClickable = visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
+  const isDisabled = visibilityState === JOIN_TRACK_DISPLAY_STATES.DISABLED;
   const visibilityTone = getTrackVisibilityTone(visibilityState);
   const isHovered = hoveredTrackId === track.id;
   const hasHover = Boolean(hoveredTrackId);
-  const isDimmed = hasHover && !isHovered && isClickable;
+  const isDimmed = hasHover && !isHovered;
   const tone = getTrackTone(track);
   const orderLabel = String(track.order ?? 0).padStart(2, "0");
   const shortLabel = getTrackShortLabel(track);
@@ -235,7 +236,6 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const title = getPresentText(track.title);
   const description = getPresentText(track.description);
   const ctaLabel = visibilityTone.ctaLabel || getTrackCtaLabel(track);
-  const handleMouseEnter = isClickable ? onHover : undefined;
   const handleButtonClick = () => {
     if (!isClickable) return;
     onClick?.();
@@ -245,15 +245,16 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
     <button
       type="button"
       onClick={handleButtonClick}
-      onMouseEnter={handleMouseEnter}
-      className={`group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${visibilityTone.cardClass}`}
+      onMouseEnter={onHover}
+      aria-disabled={!isClickable}
+      className={`group relative min-w-0 overflow-hidden text-left transition-[flex-basis,flex-grow,transform,opacity] duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${visibilityTone.cardClass} ${isDisabled ? "cursor-not-allowed" : ""}`}
       style={{
         flexBasis: getPanelBasis(track, hoveredTrackId, count),
-        flexGrow: isClickable && isHovered ? 2 : 1,
+        flexGrow: isHovered ? 2 : 1,
         flexShrink: 1,
-        zIndex: isClickable && isHovered ? 20 : 10,
+        zIndex: isHovered ? 20 : 10,
         opacity: isDimmed ? 0.72 : visibilityTone.opacity,
-        transform: isClickable && isHovered ? "translateY(-2px)" : visibilityTone.transform,
+        transform: isHovered ? "translateY(-2px)" : visibilityTone.transform,
       }}
     >
       <div
@@ -266,7 +267,7 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
       <div className="absolute inset-y-0 -right-10 w-24 skew-x-[-8deg] bg-white/18 opacity-45 mix-blend-overlay transition-opacity duration-500 group-hover:opacity-70" />
       <div className="absolute inset-y-0 right-0 w-px bg-white/25" />
 
-      <div className={`relative z-30 flex h-full min-h-[420px] flex-col justify-between p-6 text-white md:min-h-[480px] md:p-8 lg:min-h-[520px] lg:p-10 ${visibilityTone.buttonClass}`}>
+        <div className={`relative z-30 flex h-full min-h-[420px] flex-col justify-between p-6 text-white md:min-h-[480px] md:p-8 lg:min-h-[520px] lg:p-10 ${visibilityTone.buttonClass}`}>
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
@@ -782,6 +783,7 @@ const EntryPanel = ({
               <button
                 key={track.id}
                 type="button"
+                aria-disabled={!isClickable}
                 onClick={() => {
                   if (!isClickable) return;
                   handleTrackClick(track);
