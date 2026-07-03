@@ -17,6 +17,7 @@ import {
 } from "../../constants/joinHome";
 import {
   JOIN_TRACK_COLLECTION,
+  isJoinTrackVisible,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
 import {
@@ -995,7 +996,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   const currentTime = useMemo(() => new Date(nowTick), [nowTick]);
   const mergedTracks = useMemo(() => mergeJoinTracks(joinTrackDocs), [joinTrackDocs]);
   const visibleTracks = useMemo(
-    () => mergedTracks.filter((track) => track.entryStatus !== "hidden"),
+    () => mergedTracks.filter(isJoinTrackVisible),
     [mergedTracks]
   );
   const primaryTracks = visibleTracks.slice(0, 4);
@@ -1057,7 +1058,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
 
   const handleTrackSelect = (routeTrack) => {
     const targetTrack = mergedTracks.find((track) => track.routeTrack === routeTrack);
-    if (targetTrack?.entryStatus === "hidden") return;
+    if (!isJoinTrackVisible(targetTrack)) return;
     if (targetTrack?.entryStatus === "preparing") {
       setPreparingTrack(targetTrack);
       return;
@@ -1162,6 +1163,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   }, [preparingTrack]);
 
   const handleTrackClick = (track) => {
+    if (!isJoinTrackVisible(track)) return;
     if (track.entryStatus === "preparing") {
       setPreparingTrack(track);
       return;

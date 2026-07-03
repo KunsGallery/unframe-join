@@ -97,12 +97,21 @@ const normalizeEnabled = (value, fallback = true) =>
 
 export const JOIN_TRACK_ENTRY_STATUSES = ["active", "preparing", "hidden"];
 
-const normalizeEntryStatus = (value, enabled) =>
-  JOIN_TRACK_ENTRY_STATUSES.includes(value)
-    ? value
-    : enabled === false
-    ? "hidden"
-    : "active";
+const normalizeEntryStatus = (value, fallback = "active") =>
+  JOIN_TRACK_ENTRY_STATUSES.includes(value) ? value : fallback;
+
+export const isJoinTrackVisible = (track) =>
+  track?.entryStatus !== "hidden" && track?.enabled !== false;
+
+export const getJoinTrackVisibilityState = (track = {}, fallbackEntryStatus = "active") => {
+  const isVisible = isJoinTrackVisible(track);
+  const normalizedEntryStatus = normalizeEntryStatus(track.entryStatus, fallbackEntryStatus);
+
+  return {
+    isVisible,
+    entryStatus: isVisible ? normalizedEntryStatus : "hidden",
+  };
+};
 
 const normalizeColor = (value, fallback = "#004AAD") => {
   const color = normalizeString(value, fallback);
@@ -135,14 +144,17 @@ export const getPreviewTextValue = (object, key, fallback = "") => {
 export const normalizeJoinTrack = (track = {}) => {
   const base = DEFAULT_JOIN_TRACK_MAP[track.id] || {};
   const enabled = normalizeEnabled(track.enabled, base.enabled !== false);
-  const entryStatus = normalizeEntryStatus(track.entryStatus, enabled);
+  const visibilityState = getJoinTrackVisibilityState(
+    { ...base, ...track, enabled },
+    base.entryStatus || "active"
+  );
 
   return {
     id: normalizeString(track.id || base.id),
     routeTrack: normalizeString(track.routeTrack || base.routeTrack || track.id || base.id),
     order: normalizeOrder(track.order, base.order || 0),
-    enabled: entryStatus !== "hidden",
-    entryStatus,
+    enabled: visibilityState.isVisible,
+    entryStatus: visibilityState.entryStatus,
     preparingTitle: normalizeString(
       track.preparingTitle || base.preparingTitle,
       "준비 중입니다."

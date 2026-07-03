@@ -3,11 +3,12 @@ import { Loader2, Plus, Save, Sparkles } from "lucide-react";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   DEFAULT_JOIN_TRACKS,
-  JOIN_TRACK_ENTRY_STATUSES,
   JOIN_TRACK_COLLECTION,
+  getJoinTrackVisibilityState,
   getPreviewTextValue,
   hasOwnField,
   mergeJoinTracks,
+  isJoinTrackVisible,
 } from "../../constants/joinTracks";
 import JoinTrackInlineCardEditor from "./JoinTrackInlineCardEditor";
 
@@ -116,6 +117,15 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
     }));
   };
 
+  const toggleTrackVisibility = (trackId, currentTrack) => {
+    const visible = isJoinTrackVisible(currentTrack);
+
+    updateDraftPatch(trackId, {
+      enabled: !visible,
+      entryStatus: visible ? "hidden" : "active",
+    });
+  };
+
   const handleSeedDefaults = async () => {
     const hasStoredDocs = trackDocs.length > 0;
     if (hasStoredDocs) {
@@ -155,16 +165,17 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       ...savedTrack,
       ...(drafts[track.id] || {}),
     };
-    const entryStatus = JOIN_TRACK_ENTRY_STATUSES.includes(draft.entryStatus)
-      ? draft.entryStatus
-      : track.entryStatus || (track.enabled === false ? "hidden" : "active");
+    const visibilityState = getJoinTrackVisibilityState(
+      draft,
+      track.entryStatus || "active"
+    );
     const payload = {
       ...draft,
       id: track.id,
       routeTrack: track.routeTrack || track.id,
       order: normalizeOrderValue(draft.order, track.order || 0),
-      enabled: entryStatus !== "hidden",
-      entryStatus,
+      enabled: visibilityState.isVisible,
+      entryStatus: visibilityState.entryStatus,
       trackType: "join-track",
       updatedAt: serverTimestamp(),
       createdAt: draft.createdAt || track.createdAt || serverTimestamp(),
@@ -263,13 +274,21 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
               ...(drafts[track.id] || {}),
             };
             const feedback = saveFeedbacks[track.id];
-            const entryStatus = draft.entryStatus || track.entryStatus || "active";
+            const visibilityState = getJoinTrackVisibilityState(
+              draft,
+              track.entryStatus || "active"
+            );
+            const entryStatus = visibilityState.entryStatus;
+            const entryStatusLabel =
+              entryStatus === "hidden"
+                ? "DISABLED"
+                : entryStatus.toUpperCase();
 
             return (
               <div
                 key={track.id}
                 className={`overflow-hidden rounded-[32px] border ${
-                  entryStatus !== "hidden"
+                  visibilityState.isVisible
                     ? "border-zinc-100 bg-zinc-50/70"
                     : "border-zinc-200 bg-zinc-50/40 opacity-90"
                 }`}
@@ -281,6 +300,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                       index={index}
                       draft={draft}
                       onChange={(patch) => updateDraftPatch(track.id, patch)}
+                      onToggleVisibility={() => toggleTrackVisibility(track.id, draft)}
                     />
                   </div>
 
@@ -296,12 +316,12 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
 
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${
-                          entryStatus !== "hidden"
+                          visibilityState.isVisible
                             ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                             : "border-zinc-200 bg-zinc-100 text-zinc-500"
                         }`}
                       >
-                        {entryStatus}
+                        {entryStatusLabel}
                       </span>
                     </div>
 

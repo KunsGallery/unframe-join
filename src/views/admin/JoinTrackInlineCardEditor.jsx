@@ -7,7 +7,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
-import { getSavedTextValue } from "../../constants/joinTracks";
+import { getSavedTextValue, isJoinTrackVisible } from "../../constants/joinTracks";
 
 const TRACK_ICON_MAP = {
   rental: Building2,
@@ -138,8 +138,11 @@ const JoinTrackInlineCardEditor = ({
   draft = {},
   onChange,
   onOpenAdvanced,
+  onToggleVisibility,
 }) => {
   const Icon = TRACK_ICON_MAP[track?.routeTrack] || Sparkles;
+  const draftTrack = { ...track, ...draft };
+  const isVisible = isJoinTrackVisible(draftTrack);
 
   const resolvedOrder = getSavedTextValue(draft, "order");
   const resolvedShortLabel = getSavedTextValue(draft, "shortLabel");
@@ -196,7 +199,7 @@ const JoinTrackInlineCardEditor = ({
               />
             </label>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end gap-3">
               {onOpenAdvanced ? (
                 <button
                   type="button"
@@ -207,16 +210,41 @@ const JoinTrackInlineCardEditor = ({
                 </button>
               ) : null}
 
-              <label className={`inline-flex items-center gap-2 rounded-full border border-white/18 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/92 ${pillInlineFieldClass}`}>
-                <span className="sr-only">카드 우측 상단 배지 문구</span>
-                <input
-                  value={resolvedStatusLabel}
-                  onChange={handleFieldChange("statusLabel")}
-                  className="w-24 bg-transparent text-center text-[10px] font-black uppercase tracking-[0.18em] text-white outline-none placeholder:text-white/45"
-                  aria-label="카드 우측 상단 배지 문구"
-                  placeholder={getTrackStatusLabel(track)}
-                />
-              </label>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onToggleVisibility?.()}
+                  aria-pressed={isVisible}
+                  aria-label={isVisible ? "메인 페이지에서 숨기기" : "메인 페이지에 노출하기"}
+                  title="클릭하면 메인 페이지 노출/숨김 상태를 전환합니다."
+                  className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] shadow-[0_12px_30px_rgba(0,0,0,0.12)] backdrop-blur-md transition-colors ${
+                    isVisible
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "border-zinc-300 bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                  }`}
+                >
+                  {isVisible ? "ACTIVE" : "DISABLED"}
+                </button>
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/60">
+                  메인 페이지 노출 여부
+                </p>
+
+                <label
+                  className={`inline-flex items-center gap-2 rounded-full border border-white/18 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/92 ${pillInlineFieldClass}`}
+                >
+                  <span className="sr-only">카드 우측 상단 배지 문구</span>
+                  <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/60">
+                    배지 문구
+                  </span>
+                  <input
+                    value={resolvedStatusLabel}
+                    onChange={handleFieldChange("statusLabel")}
+                    className="w-24 bg-transparent text-center text-[10px] font-black uppercase tracking-[0.18em] text-white outline-none placeholder:text-white/45"
+                    aria-label="카드 우측 상단 배지 문구"
+                    placeholder={getTrackStatusLabel(track)}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
