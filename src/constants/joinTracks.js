@@ -132,13 +132,15 @@ export const normalizeJoinTrack = (track = {}) => {
       track.preparingConfirmLabel || base.preparingConfirmLabel,
       "확인"
     ),
-    title: normalizeString(track.title || base.title),
-    eyebrow: normalizeString(track.eyebrow || base.eyebrow),
-    description: normalizeString(track.description || base.description),
-    ctaLabel: normalizeString(track.ctaLabel || base.ctaLabel),
-    statusLabel: normalizeString(track.statusLabel || track.badgeText || base.statusLabel || base.badgeText),
-    shortLabel: normalizeString(track.shortLabel || base.shortLabel),
-    badgeText: normalizeString(track.badgeText || base.badgeText),
+    title: normalizeString(track.title ?? base.title),
+    eyebrow: normalizeString(track.eyebrow ?? base.eyebrow),
+    description: normalizeString(track.description ?? base.description),
+    ctaLabel: normalizeString(track.ctaLabel ?? base.ctaLabel),
+    statusLabel: normalizeString(
+      track.statusLabel ?? track.badgeText ?? base.statusLabel ?? base.badgeText
+    ),
+    shortLabel: normalizeString(track.shortLabel ?? base.shortLabel),
+    badgeText: normalizeString(track.badgeText ?? base.badgeText),
     accentColor: normalizeColor(track.accentColor || base.accentColor),
     backgroundImageUrl: normalizeString(track.backgroundImageUrl || base.backgroundImageUrl),
   };

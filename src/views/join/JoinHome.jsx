@@ -43,6 +43,20 @@ const formatCountLabel = (template, count) => {
   return template.replace(/\{\{\s*count\s*\}\}/g, String(count));
 };
 
+const getTextOrFallback = (value, fallback = "") => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+};
+
+const getPresentText = (value) => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+};
+
+const hasText = (value) => typeof value === "string" && value.trim().length > 0;
+
 const hexToRgba = (hex, alpha = 1) => {
   const fallback = `rgba(0, 74, 173, ${alpha})`;
   if (typeof hex !== "string") return fallback;
@@ -81,23 +95,35 @@ const getDefaultCtaLabel = (routeTrack) => {
 };
 
 const getTrackShortLabel = (track) =>
-  track?.shortLabel?.trim() || getEntryLabel(track?.routeTrack);
+  getTextOrFallback(track?.shortLabel, getEntryLabel(track?.routeTrack));
 
-const getTrackStatusLabel = (track) =>
-  track?.entryStatus === "preparing"
-    ? "PREPARING"
-    : track?.statusLabel?.trim() ||
-  track?.badgeText?.trim() ||
-  (track?.routeTrack === "rental"
+const getTrackStatusLabel = (track) => {
+  if (track?.entryStatus === "preparing") {
+    const explicitLabel = getPresentText(track?.statusLabel);
+    return explicitLabel === null ? "PREPARING" : explicitLabel;
+  }
+
+  const explicitLabel = getPresentText(track?.statusLabel);
+  if (explicitLabel !== null) return explicitLabel;
+
+  const badgeLabel = getPresentText(track?.badgeText);
+  if (badgeLabel !== null) return badgeLabel;
+
+  return track?.routeTrack === "rental"
     ? "신청하기"
     : track?.routeTrack === "open-call"
     ? "공모보기"
-    : "PREPARING");
+    : "PREPARING";
+};
 
-const getTrackCtaLabel = (track) =>
-  track?.entryStatus === "preparing"
-    ? "준비 중"
-    : track?.ctaLabel?.trim() || getDefaultCtaLabel(track?.routeTrack);
+const getTrackCtaLabel = (track) => {
+  if (track?.entryStatus === "preparing") {
+    const explicitLabel = getPresentText(track?.ctaLabel);
+    return explicitLabel === null ? "준비 중" : explicitLabel;
+  }
+
+  return getTextOrFallback(track?.ctaLabel, getDefaultCtaLabel(track?.routeTrack));
+};
 
 const getPanelBasis = (track, hoveredTrackId, trackCount) => {
   if (trackCount <= 1 || !hoveredTrackId) {
@@ -156,6 +182,13 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const hasHover = Boolean(hoveredTrackId);
   const isDimmed = hasHover && !isHovered;
   const tone = getTrackTone(track);
+  const orderLabel = String(track.order ?? 0).padStart(2, "0");
+  const shortLabel = getTrackShortLabel(track);
+  const statusLabel = getTrackStatusLabel(track);
+  const eyebrow = getTextOrFallback(track.eyebrow, "UNFRAME JOIN");
+  const title = getPresentText(track.title);
+  const description = getPresentText(track.description);
+  const ctaLabel = getTrackCtaLabel(track);
 
   return (
     <button
@@ -186,14 +219,17 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
         <div className="flex items-start justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/16 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-white/92 backdrop-blur-md">
             <CircleDot size={11} />
-            {String(track.order || 0).padStart(2, "0")} / {getTrackShortLabel(track)}
+            {orderLabel}
+            {hasText(shortLabel) ? ` / ${shortLabel}` : ""}
           </div>
 
-          <div
-            className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md ${tone.badgeClass}`}
-          >
-            {getTrackStatusLabel(track)}
-          </div>
+          {hasText(statusLabel) ? (
+            <div
+              className={`rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md ${tone.badgeClass}`}
+            >
+              {statusLabel}
+            </div>
+          ) : null}
         </div>
 
         <div className="max-w-[34rem]">
@@ -201,33 +237,41 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/14 bg-white/12 shadow-[0_18px_40px_rgba(0,0,0,0.12)] backdrop-blur-md">
               <Icon size={22} className={tone.accentClass} />
             </div>
-            <div>
-              <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${tone.metaClass}`}>
-                {track.eyebrow || "UNFRAME JOIN"}
-              </p>
+            {hasText(eyebrow) ? (
+              <div>
+                <p className={`text-[10px] font-black uppercase tracking-[0.24em] ${tone.metaClass}`}>
+                  {eyebrow}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {hasText(title) ? (
+            <h2
+              className={`mt-5 text-[1.85rem] font-black tracking-tighter break-keep transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:text-[2.4rem] lg:text-[3.1rem] ${tone.titleClass} ${
+                hasHover && !isHovered ? "opacity-55" : "opacity-100"
+              }`}
+            >
+              {title}
+            </h2>
+          ) : null}
+
+          {hasText(description) ? (
+            <p
+              className={`mt-4 max-w-[30rem] whitespace-pre-line text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${tone.descriptionClass} ${
+                isHovered ? "opacity-100" : "opacity-92"
+              }`}
+            >
+              {description}
+            </p>
+          ) : null}
+
+          {hasText(ctaLabel) ? (
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 shadow-[0_12px_30px_rgba(0,0,0,0.08)] backdrop-blur-sm transition-transform duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
+              <span>{ctaLabel}</span>
+              <ArrowRight size={14} />
             </div>
-          </div>
-
-          <h2
-            className={`mt-5 text-[1.85rem] font-black tracking-tighter break-keep transition-all duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:text-[2.4rem] lg:text-[3.1rem] ${tone.titleClass} ${
-              hasHover && !isHovered ? "opacity-55" : "opacity-100"
-            }`}
-          >
-            {track.title}
-          </h2>
-
-          <p
-            className={`mt-4 max-w-[30rem] whitespace-pre-line text-sm font-medium leading-relaxed break-keep md:text-[0.98rem] ${tone.descriptionClass} ${
-              isHovered ? "opacity-100" : "opacity-92"
-            }`}
-          >
-            {track.description}
-          </p>
-
-          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-zinc-950/10 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 shadow-[0_12px_30px_rgba(0,0,0,0.08)] backdrop-blur-sm transition-transform duration-[650ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
-            <span>{getTrackCtaLabel(track)}</span>
-            <ArrowRight size={14} />
-          </div>
+          ) : null}
         </div>
       </div>
     </button>
@@ -236,6 +280,8 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
 
 const AuxiliaryTrackItem = ({ track, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
+  const eyebrow = getTextOrFallback(track.eyebrow, "UNFRAME");
+  const title = getPresentText(track.title);
 
   return (
     <button
@@ -248,12 +294,16 @@ const AuxiliaryTrackItem = ({ track, onClick }) => {
           <Icon size={18} />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
-            {track.eyebrow || "UNFRAME"}
-          </p>
-          <p className="mt-1 text-sm font-black tracking-tight text-zinc-950 break-keep">
-            {track.title}
-          </p>
+          {hasText(eyebrow) ? (
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+              {eyebrow}
+            </p>
+          ) : null}
+          {hasText(title) ? (
+            <p className="mt-1 text-sm font-black tracking-tight text-zinc-950 break-keep">
+              {title}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -662,27 +712,38 @@ const EntryPanel = ({
               <div className="relative z-30 flex min-h-[16rem] flex-col justify-between p-5 text-white">
                 <div className="flex items-start justify-between gap-3">
                   <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] backdrop-blur-md">
-                    {String(index + 1).padStart(2, "0")} / {getTrackShortLabel(track)}
+                    {String(index + 1).padStart(2, "0")}
+                    {hasText(getTrackShortLabel(track)) ? ` / ${getTrackShortLabel(track)}` : ""}
                   </div>
-                  <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
-                    {getTrackStatusLabel(track)}
-                  </div>
+                  {hasText(getTrackStatusLabel(track)) ? (
+                    <div className="rounded-full border border-white/12 bg-white/12 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] backdrop-blur-md">
+                      {getTrackStatusLabel(track)}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="max-w-[18rem]">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
-                    {track.eyebrow || "UNFRAME JOIN"}
-                  </p>
-                  <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
-                    {track.title}
-                  </h3>
-                  <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-white/82 break-keep">
-                    {track.description}
-                  </p>
-                  <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
-                    {getTrackCtaLabel(track)}
-                    <ArrowRight size={14} />
-                  </div>
+                  {hasText(getTextOrFallback(track.eyebrow, "UNFRAME JOIN")) ? (
+                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-white/72">
+                      {getTextOrFallback(track.eyebrow, "UNFRAME JOIN")}
+                    </p>
+                  ) : null}
+                  {hasText(getPresentText(track.title)) ? (
+                    <h3 className="mt-3 text-[1.55rem] font-black tracking-tighter text-white break-keep">
+                      {getPresentText(track.title)}
+                    </h3>
+                  ) : null}
+                  {hasText(getPresentText(track.description)) ? (
+                    <p className="mt-3 whitespace-pre-line text-sm font-medium leading-relaxed text-white/82 break-keep">
+                      {getPresentText(track.description)}
+                    </p>
+                  ) : null}
+                  {hasText(getTrackCtaLabel(track)) ? (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/88 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950">
+                      {getTrackCtaLabel(track)}
+                      <ArrowRight size={14} />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </button>

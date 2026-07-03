@@ -89,7 +89,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
             eyebrow: track.eyebrow || "",
             description: track.description || "",
             ctaLabel: track.ctaLabel || "",
-            statusLabel: track.statusLabel || track.badgeText || "",
+            statusLabel: track.statusLabel ?? track.badgeText ?? "",
             shortLabel: track.shortLabel || "",
             badgeText: track.badgeText || "",
             accentColor: track.accentColor || "#004AAD",
@@ -203,7 +203,7 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       ctaLabel: normalizeText(draft.ctaLabel, track.ctaLabel || ""),
       statusLabel: normalizeText(
         draft.statusLabel,
-        track.statusLabel || track.badgeText || ""
+        track.statusLabel ?? track.badgeText ?? ""
       ),
       shortLabel: normalizeText(draft.shortLabel, track.shortLabel || ""),
       badgeText: normalizeText(

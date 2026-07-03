@@ -38,6 +38,18 @@ const hexToRgba = (hex, alpha = 1) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
+const getTextOrFallback = (value, fallback = "") => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+};
+
+const getPresentText = (value) => {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value.trim();
+  return String(value).trim();
+};
+
 const getEntryLabel = (routeTrack) => {
   if (routeTrack === "rental") return "SPACE";
   if (routeTrack === "open-call") return "OPEN CALL";
@@ -47,24 +59,42 @@ const getEntryLabel = (routeTrack) => {
 };
 
 const getTrackShortLabel = (track) =>
-  track?.shortLabel?.trim() || getEntryLabel(track?.routeTrack);
+  getTextOrFallback(track?.shortLabel, getEntryLabel(track?.routeTrack));
 
-const getTrackStatusLabel = (track) =>
-  track?.statusLabel?.trim() ||
-  track?.badgeText?.trim() ||
-  (track?.routeTrack === "rental"
+const getTrackStatusLabel = (track) => {
+  if (track?.entryStatus === "preparing") {
+    const explicitLabel = getPresentText(track?.statusLabel);
+    return explicitLabel === null ? "PREPARING" : explicitLabel;
+  }
+
+  const explicitLabel = getPresentText(track?.statusLabel);
+  if (explicitLabel !== null) return explicitLabel;
+
+  const badgeLabel = getPresentText(track?.badgeText);
+  if (badgeLabel !== null) return badgeLabel;
+
+  return track?.routeTrack === "rental"
     ? "신청하기"
     : track?.routeTrack === "open-call"
     ? "공모보기"
-    : "PREPARING");
+    : "PREPARING";
+};
 
-const getTrackCtaLabel = (track) =>
-  track?.ctaLabel?.trim() ||
-  (track?.routeTrack === "rental"
-    ? "신청 시작하기"
-    : track?.routeTrack === "open-call"
-    ? "공개모집 보기"
-    : "준비 중");
+const getTrackCtaLabel = (track) => {
+  if (track?.entryStatus === "preparing") {
+    const explicitLabel = getPresentText(track?.ctaLabel);
+    return explicitLabel === null ? "준비 중" : explicitLabel;
+  }
+
+  return getTextOrFallback(
+    track?.ctaLabel,
+    track?.routeTrack === "rental"
+      ? "신청 시작하기"
+      : track?.routeTrack === "open-call"
+      ? "공개모집 보기"
+      : "준비 중"
+  );
+};
 
 const buildTrackBackgroundStyle = (track) => {
   const accentColor = track?.accentColor || "#004AAD";
