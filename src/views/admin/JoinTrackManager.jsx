@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Eye,
-  EyeOff,
-  Image as ImageIcon,
-  Loader2,
-  Plus,
-  Save,
-  Sparkles,
-} from "lucide-react";
+import { Loader2, Plus, Save, Sparkles } from "lucide-react";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   DEFAULT_JOIN_TRACKS,
@@ -15,49 +7,7 @@ import {
   JOIN_TRACK_COLLECTION,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
-
-const hexToRgba = (hex, alpha = 1) => {
-  const fallback = `rgba(0, 74, 173, ${alpha})`;
-  if (typeof hex !== "string") return fallback;
-
-  const normalized = hex.trim();
-  const match = normalized.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!match) return fallback;
-
-  const value =
-    match[1].length === 3
-      ? match[1]
-          .split("")
-          .map((char) => char + char)
-          .join("")
-      : match[1];
-
-  const r = Number.parseInt(value.slice(0, 2), 16);
-  const g = Number.parseInt(value.slice(2, 4), 16);
-  const b = Number.parseInt(value.slice(4, 6), 16);
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const buildPreviewStyle = (track) => {
-  if (track?.backgroundImageUrl) {
-    return {
-      backgroundImage: `linear-gradient(180deg, rgba(12, 12, 16, 0.1), rgba(12, 12, 16, 0.7)), url(${track.backgroundImageUrl})`,
-      backgroundSize: "cover",
-      backgroundPosition: "center",
-      backgroundColor: track.accentColor || "#004AAD",
-    };
-  }
-
-  const accentColor = track?.accentColor || "#004AAD";
-  return {
-    backgroundImage: `linear-gradient(135deg, ${hexToRgba(accentColor, 0.18)} 0%, rgba(246, 244, 238, 0.96) 58%, ${hexToRgba(
-      accentColor,
-      0.1
-    )} 100%)`,
-    backgroundColor: hexToRgba(accentColor, 0.08),
-  };
-};
+import JoinTrackInlineCardEditor from "./JoinTrackInlineCardEditor";
 
 const normalizeText = (value, fallback = "") =>
   typeof value === "string" ? value.trim() : fallback;
@@ -187,6 +137,22 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       [trackId]: {
         ...(prev[trackId] || {}),
         [key]: value,
+      },
+    }));
+  };
+
+  const updateDraftPatch = (trackId, patch) => {
+    if (!patch || typeof patch !== "object") return;
+
+    setSaveFeedbacks((prev) => ({
+      ...prev,
+      [trackId]: null,
+    }));
+    setDrafts((prev) => ({
+      ...prev,
+      [trackId]: {
+        ...(prev[trackId] || {}),
+        ...patch,
       },
     }));
   };
@@ -346,12 +312,8 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
         </div>
       ) : (
         <div className="grid gap-5">
-          {sortedTracks.map((track) => {
+          {sortedTracks.map((track, index) => {
             const draft = drafts[track.id] || {};
-            const previewStyle = buildPreviewStyle({
-              accentColor: draft.accentColor || track.accentColor,
-              backgroundImageUrl: draft.backgroundImageUrl || track.backgroundImageUrl,
-            });
             const feedback = saveFeedbacks[track.id];
             const entryStatus = draft.entryStatus || track.entryStatus || "active";
 
@@ -364,233 +326,23 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                     : "border-zinc-200 bg-zinc-50/40 opacity-90"
                 }`}
               >
-                <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[0.95fr_1.05fr]">
+                <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[1.08fr_0.92fr]">
                   <div className="space-y-4">
-                            <div
-                              className="relative overflow-hidden rounded-[28px] border border-white/70 p-5"
-                              style={previewStyle}
-                            >
-                              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,12,16,0.06),rgba(12,12,16,0.72))]" />
-                              <div className="relative flex min-h-[18rem] flex-col justify-between">
-                                <div className="flex items-start justify-between gap-3">
-                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                                    {draft.shortLabel || track.shortLabel || track.routeTrack || track.id}
-                                  </span>
-                                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                                    {entryStatus !== "hidden" ? (
-                                      <>
-                                        <Eye size={12} />
-                                        visible
-                                      </>
-                                    ) : (
-                                      <>
-                                        <EyeOff size={12} />
-                                        hidden
-                                      </>
-                                    )}
-                                  </span>
-                                </div>
-
-                                <div>
-                                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-white/70">
-                                    {draft.eyebrow || track.eyebrow || "UNFRAME"}
-                                  </p>
-                                  <h4 className="mt-3 text-3xl font-black tracking-tighter text-white break-keep">
-                                    {draft.title || track.title}
-                                  </h4>
-                                  <p className="mt-3 max-w-md whitespace-pre-line text-sm font-medium leading-relaxed text-white/80 break-keep">
-                                    {draft.description || track.description}
-                                  </p>
-                                  <div className="mt-4 flex flex-wrap gap-2">
-                                    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                                      {draft.statusLabel || draft.badgeText || track.statusLabel || track.badgeText || "OPEN"}
-                                    </span>
-                                    <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white backdrop-blur">
-                                      {draft.ctaLabel || track.ctaLabel || "신청 시작하기"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-4 sm:col-span-2">
-                        <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          진입 상태
-                        </span>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                          {[
-                            ["active", "정상 진입"],
-                            ["preparing", "준비중"],
-                            ["hidden", "숨김"],
-                          ].map(([value, label]) => (
-                            <button
-                              key={value}
-                              type="button"
-                              onClick={() => updateDraft(track.id, "entryStatus", value)}
-                              className={`rounded-2xl px-3 py-3 text-xs font-black transition-colors ${
-                                entryStatus === value
-                                  ? "bg-[#004AAD] text-white"
-                                  : "border border-zinc-200 bg-zinc-50 text-zinc-500"
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                        <p className="mt-3 text-[11px] font-semibold leading-relaxed text-zinc-400 break-keep">
-                          정상 진입: 신청 페이지로 이동 · 준비중: 카드는 보이고 안내 팝업 표시 · 숨김: 메인에서 완전히 제거
-                        </p>
-                      </div>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          준비중 팝업 제목
-                        </span>
-                        <input value={draft.preparingTitle || ""} onChange={(e) => updateDraft(track.id, "preparingTitle", e.target.value)} className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20 focus:bg-white" />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          준비중 팝업 문구
-                        </span>
-                        <textarea rows={3} value={draft.preparingMessage || ""} onChange={(e) => updateDraft(track.id, "preparingMessage", e.target.value)} className="w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none focus:border-[#004aad]/20 focus:bg-white" />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          확인 버튼 문구
-                        </span>
-                        <input value={draft.preparingConfirmLabel || ""} onChange={(e) => updateDraft(track.id, "preparingConfirmLabel", e.target.value)} className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20 focus:bg-white" />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          order
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          value={draft.order ?? 0}
-                          onChange={(e) => updateDraft(track.id, "order", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          eyebrow
-                        </span>
-                        <input
-                          value={draft.eyebrow || ""}
-                          onChange={(e) => updateDraft(track.id, "eyebrow", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          shortLabel
-                        </span>
-                        <input
-                          value={draft.shortLabel || ""}
-                          onChange={(e) => updateDraft(track.id, "shortLabel", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          statusLabel
-                        </span>
-                        <input
-                          value={draft.statusLabel || ""}
-                          onChange={(e) => updateDraft(track.id, "statusLabel", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          ctaLabel
-                        </span>
-                        <input
-                          value={draft.ctaLabel || ""}
-                          onChange={(e) => updateDraft(track.id, "ctaLabel", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          title
-                        </span>
-                        <input
-                          value={draft.title || ""}
-                          onChange={(e) => updateDraft(track.id, "title", e.target.value)}
-                          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3 sm:col-span-2">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          description
-                        </span>
-                        <textarea
-                          rows={4}
-                          value={draft.description || ""}
-                          onChange={(e) => updateDraft(track.id, "description", e.target.value)}
-                          className="w-full resize-none rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                        />
-                        <p className="mt-2 text-[11px] font-semibold leading-relaxed text-zinc-400 break-keep">
-                          줄바꿈은 실제 JoinHome 화면에 반영됩니다.
-                        </p>
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          accentColor
-                        </span>
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={draft.accentColor || "#004AAD"}
-                            onChange={(e) => updateDraft(track.id, "accentColor", e.target.value)}
-                            className="h-11 w-14 rounded-xl border border-zinc-100 bg-transparent p-1"
-                          />
-                          <input
-                            value={draft.accentColor || "#004AAD"}
-                            onChange={(e) => updateDraft(track.id, "accentColor", e.target.value)}
-                            className="min-w-0 flex-1 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                          />
-                        </div>
-                      </label>
-
-                      <label className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-                        <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          backgroundImageUrl
-                        </span>
-                        <div className="flex items-center gap-3">
-                          <ImageIcon size={16} className="shrink-0 text-zinc-300" />
-                          <input
-                            value={draft.backgroundImageUrl || ""}
-                            onChange={(e) =>
-                              updateDraft(track.id, "backgroundImageUrl", e.target.value)
-                            }
-                            placeholder="https://..."
-                            className="min-w-0 flex-1 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                          />
-                        </div>
-                      </label>
-                    </div>
+                    <JoinTrackInlineCardEditor
+                      track={track}
+                      index={index}
+                      draft={draft}
+                      onChange={(patch) => updateDraftPatch(track.id, patch)}
+                    />
                   </div>
 
                   <div className="rounded-[28px] border border-zinc-100 bg-white p-5">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
-                        <h5 className="text-lg font-black tracking-tight text-zinc-900">트랙 편집</h5>
+                        <h5 className="text-lg font-black tracking-tight text-zinc-900">고급 설정</h5>
                         <p className="mt-1 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                          활성화 상태, 카피, 색상, 배경 이미지를 수정한 뒤 저장해 주세요.
+                          텍스트는 왼쪽 카드에서 직접 수정하고, 여기서는 노출 상태와 기본 옵션을
+                          조정합니다.
                         </p>
                       </div>
 
@@ -616,15 +368,35 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                       </div>
                       <div className="rounded-[22px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          preview labels
+                          카드 문구
                         </p>
                         <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-                          {draft.shortLabel || track.shortLabel || track.routeTrack || track.id}
+                          {draft.shortLabel ?? track.shortLabel ?? track.routeTrack ?? track.id}
                           {"\n"}
-                          {draft.statusLabel || draft.badgeText || track.statusLabel || track.badgeText || "OPEN"}
+                          {draft.statusLabel ?? draft.badgeText ?? track.statusLabel ?? track.badgeText ?? "OPEN"}
                           {"\n"}
-                          {draft.ctaLabel || track.ctaLabel || "신청 시작하기"}
+                          {draft.ctaLabel ?? track.ctaLabel ?? "신청 시작하기"}
                         </p>
+                      </div>
+
+                      <div className="rounded-[22px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                          기본 색상 / 배경
+                        </p>
+                        <div className="mt-3 flex items-center gap-3">
+                          <span
+                            className="h-10 w-10 shrink-0 rounded-2xl border border-zinc-200"
+                            style={{ backgroundColor: draft.accentColor || track.accentColor || "#004AAD" }}
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-zinc-900 break-all">
+                              {draft.accentColor || track.accentColor || "#004AAD"}
+                            </p>
+                            <p className="mt-1 text-xs font-medium leading-relaxed text-zinc-500 break-keep">
+                              {draft.backgroundImageUrl || track.backgroundImageUrl || "배경 이미지 없음"}
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
                       {feedback?.message ? (
