@@ -5,12 +5,11 @@ import {
   DEFAULT_JOIN_TRACKS,
   JOIN_TRACK_ENTRY_STATUSES,
   JOIN_TRACK_COLLECTION,
+  getPreviewTextValue,
+  hasOwnField,
   mergeJoinTracks,
 } from "../../constants/joinTracks";
 import JoinTrackInlineCardEditor from "./JoinTrackInlineCardEditor";
-
-const normalizeText = (value, fallback = "") =>
-  typeof value === "string" ? value.trim() : fallback;
 
 const normalizeOrderValue = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -77,36 +76,10 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
   );
 
   const sortedTracks = useMemo(() => mergeJoinTracks(trackDocs), [trackDocs]);
-
-  useEffect(() => {
-    setDrafts((prev) => {
-      const next = { ...prev };
-
-      sortedTracks.forEach((track) => {
-        if (!next[track.id]) {
-          next[track.id] = {
-            title: track.title || "",
-            eyebrow: track.eyebrow || "",
-            description: track.description || "",
-            ctaLabel: track.ctaLabel || "",
-            statusLabel: track.statusLabel ?? track.badgeText ?? "",
-            shortLabel: track.shortLabel || "",
-            badgeText: track.badgeText || "",
-            accentColor: track.accentColor || "#004AAD",
-            backgroundImageUrl: track.backgroundImageUrl || "",
-            order: track.order ?? 0,
-            enabled: track.enabled !== false,
-            entryStatus: track.entryStatus || (track.enabled === false ? "hidden" : "active"),
-            preparingTitle: track.preparingTitle || "준비 중입니다.",
-            preparingMessage: track.preparingMessage || "현재 해당 접수는 준비 중입니다.",
-            preparingConfirmLabel: track.preparingConfirmLabel || "확인",
-          };
-        }
-      });
-
-      return next;
-    });
-  }, [sortedTracks]);
+  const trackDocById = useMemo(
+    () => new Map(trackDocs.map((track) => [track.id, track])),
+    [trackDocs]
+  );
 
   const setTimedSaveFeedback = (trackId, feedback) => {
     setSaveFeedbacks((prev) => ({
@@ -125,20 +98,6 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
         clearTimersRef.current[trackId] = null;
       }, 2500);
     }
-  };
-
-  const updateDraft = (trackId, key, value) => {
-    setSaveFeedbacks((prev) => ({
-      ...prev,
-      [trackId]: null,
-    }));
-    setDrafts((prev) => ({
-      ...prev,
-      [trackId]: {
-        ...(prev[trackId] || {}),
-        [key]: value,
-      },
-    }));
   };
 
   const updateDraftPatch = (trackId, patch) => {
@@ -191,44 +150,29 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
   };
 
   const handleSave = async (track) => {
-    const draft = drafts[track.id] || {};
+    const savedTrack = trackDocById.get(track.id) || {};
+    const draft = {
+      ...savedTrack,
+      ...(drafts[track.id] || {}),
+    };
     const entryStatus = JOIN_TRACK_ENTRY_STATUSES.includes(draft.entryStatus)
       ? draft.entryStatus
       : track.entryStatus || (track.enabled === false ? "hidden" : "active");
     const payload = {
-      ...track,
-      title: normalizeText(draft.title, track.title || ""),
-      eyebrow: normalizeText(draft.eyebrow, track.eyebrow || ""),
-      description: normalizeText(draft.description, track.description || ""),
-      ctaLabel: normalizeText(draft.ctaLabel, track.ctaLabel || ""),
-      statusLabel: normalizeText(
-        draft.statusLabel,
-        track.statusLabel ?? track.badgeText ?? ""
-      ),
-      shortLabel: normalizeText(draft.shortLabel, track.shortLabel || ""),
-      badgeText: normalizeText(
-        draft.statusLabel || draft.badgeText,
-        track.badgeText || track.statusLabel || ""
-      ),
-      accentColor: normalizeText(draft.accentColor, track.accentColor || "#004AAD"),
-      backgroundImageUrl: normalizeText(
-        draft.backgroundImageUrl,
-        track.backgroundImageUrl || ""
-      ),
+      ...draft,
+      id: track.id,
+      routeTrack: track.routeTrack || track.id,
       order: normalizeOrderValue(draft.order, track.order || 0),
       enabled: entryStatus !== "hidden",
       entryStatus,
-      preparingTitle: normalizeText(draft.preparingTitle, "준비 중입니다."),
-      preparingMessage: normalizeText(
-        draft.preparingMessage,
-        "현재 해당 접수는 준비 중입니다."
-      ),
-      preparingConfirmLabel: normalizeText(draft.preparingConfirmLabel, "확인"),
-      routeTrack: track.routeTrack || track.id,
       trackType: "join-track",
       updatedAt: serverTimestamp(),
-      createdAt: track.createdAt || serverTimestamp(),
+      createdAt: draft.createdAt || track.createdAt || serverTimestamp(),
     };
+
+    if (hasOwnField(draft, "statusLabel")) {
+      payload.badgeText = draft.statusLabel;
+    }
 
     setTimedSaveFeedback(track.id, {
       state: "saving",
@@ -313,7 +257,11 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
       ) : (
         <div className="grid gap-5">
           {sortedTracks.map((track, index) => {
-            const draft = drafts[track.id] || {};
+            const savedTrack = trackDocById.get(track.id) || {};
+            const draft = {
+              ...savedTrack,
+              ...(drafts[track.id] || {}),
+            };
             const feedback = saveFeedbacks[track.id];
             const entryStatus = draft.entryStatus || track.entryStatus || "active";
 
@@ -371,11 +319,23 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                           카드 문구
                         </p>
                         <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-                          {draft.shortLabel ?? track.shortLabel ?? track.routeTrack ?? track.id}
+                          {getPreviewTextValue(
+                            draft,
+                            "shortLabel",
+                            track.shortLabel || track.routeTrack || track.id
+                          )}
                           {"\n"}
-                          {draft.statusLabel ?? draft.badgeText ?? track.statusLabel ?? track.badgeText ?? "OPEN"}
+                          {getPreviewTextValue(
+                            draft,
+                            "statusLabel",
+                            track.statusLabel || track.badgeText || "OPEN"
+                          )}
                           {"\n"}
-                          {draft.ctaLabel ?? track.ctaLabel ?? "신청 시작하기"}
+                          {getPreviewTextValue(
+                            draft,
+                            "ctaLabel",
+                            track.ctaLabel || "신청 시작하기"
+                          )}
                         </p>
                       </div>
 
@@ -386,14 +346,28 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                         <div className="mt-3 flex items-center gap-3">
                           <span
                             className="h-10 w-10 shrink-0 rounded-2xl border border-zinc-200"
-                            style={{ backgroundColor: draft.accentColor || track.accentColor || "#004AAD" }}
+                            style={{
+                              backgroundColor: getPreviewTextValue(
+                                draft,
+                                "accentColor",
+                                track.accentColor || "#004AAD"
+                              ),
+                            }}
                           />
                           <div className="min-w-0">
                             <p className="text-sm font-black text-zinc-900 break-all">
-                              {draft.accentColor || track.accentColor || "#004AAD"}
+                              {getPreviewTextValue(
+                                draft,
+                                "accentColor",
+                                track.accentColor || "#004AAD"
+                              )}
                             </p>
                             <p className="mt-1 text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                              {draft.backgroundImageUrl || track.backgroundImageUrl || "배경 이미지 없음"}
+                              {getPreviewTextValue(
+                                draft,
+                                "backgroundImageUrl",
+                                track.backgroundImageUrl || ""
+                              ) || "배경 이미지 없음"}
                             </p>
                           </div>
                         </div>

@@ -7,6 +7,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { getSavedTextValue } from "../../constants/joinTracks";
 
 const TRACK_ICON_MAP = {
   rental: Building2,
@@ -140,15 +141,16 @@ const JoinTrackInlineCardEditor = ({
 }) => {
   const Icon = TRACK_ICON_MAP[track?.routeTrack] || Sparkles;
 
-  const resolvedOrder = draft.order ?? track?.order ?? index + 1;
-  const resolvedShortLabel = draft.shortLabel ?? track?.shortLabel ?? getTrackShortLabel(track);
-  const resolvedStatusLabel = draft.statusLabel ?? track?.statusLabel ?? track?.badgeText ?? getTrackStatusLabel(track);
-  const resolvedEyebrow = draft.eyebrow ?? track?.eyebrow ?? "UNFRAME";
-  const resolvedTitle = draft.title ?? track?.title ?? "";
-  const resolvedDescription = draft.description ?? track?.description ?? "";
-  const resolvedCtaLabel = draft.ctaLabel ?? track?.ctaLabel ?? getTrackCtaLabel(track);
-  const resolvedAccentColor = draft.accentColor ?? track?.accentColor ?? "#004AAD";
-  const resolvedBackgroundImageUrl = draft.backgroundImageUrl ?? track?.backgroundImageUrl ?? "";
+  const resolvedOrder = getSavedTextValue(draft, "order");
+  const resolvedShortLabel = getSavedTextValue(draft, "shortLabel");
+  const resolvedStatusLabel = getSavedTextValue(draft, "statusLabel");
+  const resolvedEyebrow = getSavedTextValue(draft, "eyebrow");
+  const resolvedTitle = getSavedTextValue(draft, "title");
+  const resolvedDescription = getSavedTextValue(draft, "description");
+  const resolvedCtaLabel = getSavedTextValue(draft, "ctaLabel");
+  const resolvedAccentColor = getSavedTextValue(draft, "accentColor");
+  const resolvedBackgroundImageUrl = getSavedTextValue(draft, "backgroundImageUrl");
+  const orderPlaceholder = formatOrderDisplay(track?.order ?? index + 1);
 
   const handleChange = (patch) => {
     if (onChange) onChange(patch);
@@ -177,11 +179,11 @@ const JoinTrackInlineCardEditor = ({
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
-                value={formatOrderDisplay(resolvedOrder)}
+                value={resolvedOrder ? formatOrderDisplay(resolvedOrder) : ""}
                 onChange={handleNumberChange("order")}
                 className="w-10 bg-transparent text-center text-[10px] font-black uppercase tracking-[0.22em] text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 aria-label="트랙 순서"
-                placeholder="01"
+                placeholder={orderPlaceholder}
               />
               <span className="opacity-60">/</span>
               <span className="sr-only">짧은 라벨</span>
@@ -190,7 +192,7 @@ const JoinTrackInlineCardEditor = ({
                 onChange={handleFieldChange("shortLabel")}
                 className="min-w-[5rem] bg-transparent text-[10px] font-black uppercase tracking-[0.22em] text-white outline-none placeholder:text-white/45"
                 aria-label="짧은 라벨"
-                placeholder="SPACE"
+                placeholder={getTrackShortLabel(track)}
               />
             </label>
 
@@ -212,7 +214,7 @@ const JoinTrackInlineCardEditor = ({
                   onChange={handleFieldChange("statusLabel")}
                   className="w-24 bg-transparent text-center text-[10px] font-black uppercase tracking-[0.18em] text-white outline-none placeholder:text-white/45"
                   aria-label="카드 우측 상단 배지 문구"
-                  placeholder="신청하기"
+                  placeholder={getTrackStatusLabel(track)}
                 />
               </label>
             </div>
@@ -231,7 +233,7 @@ const JoinTrackInlineCardEditor = ({
                   onChange={handleFieldChange("eyebrow")}
                   className={`${sharedInlineFieldClass} text-[10px] font-black uppercase tracking-[0.24em]`}
                   aria-label="중간 라벨"
-                  placeholder="OPEN NOW"
+                  placeholder={getTextOrFallback(track?.eyebrow, "UNFRAME")}
                 />
               </label>
             </div>
@@ -244,7 +246,7 @@ const JoinTrackInlineCardEditor = ({
                 onChange={handleFieldChange("title")}
                 className={`${sharedInlineFieldClass} resize-none whitespace-pre-line break-keep text-[1.85rem] font-black tracking-tighter leading-[0.94] md:text-[2.4rem] lg:text-[3.1rem]`}
                 aria-label="제목"
-                placeholder="공간 대관"
+                placeholder={getTextOrFallback(track?.title, "공간 대관")}
               />
             </label>
 
@@ -256,7 +258,10 @@ const JoinTrackInlineCardEditor = ({
                 onChange={handleFieldChange("description")}
                 className={`${sharedInlineFieldClass} resize-none whitespace-pre-line break-keep text-sm font-medium leading-relaxed md:text-[0.98rem]`}
                 aria-label="설명"
-                placeholder="전시, 팝업, 쇼룸, 촬영 등 UNFRAME의 공간을 사용하고 싶은 분들을 위한 입구입니다."
+                placeholder={getTextOrFallback(
+                  track?.description,
+                  "전시, 팝업, 쇼룸, 촬영 등 UNFRAME의 공간을 사용하고 싶은 분들을 위한 입구입니다."
+                )}
               />
             </label>
 
@@ -267,7 +272,7 @@ const JoinTrackInlineCardEditor = ({
                 onChange={handleFieldChange("ctaLabel")}
                 className="min-w-[8rem] bg-transparent text-[10px] font-black uppercase tracking-[0.18em] text-zinc-950 outline-none placeholder:text-zinc-400"
                 aria-label="CTA 문구"
-                placeholder="신청 시작하기"
+                placeholder={getTrackCtaLabel(track)}
               />
               <ArrowRight size={14} className="shrink-0 text-zinc-500" />
             </label>

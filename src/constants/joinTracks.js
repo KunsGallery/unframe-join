@@ -109,6 +109,29 @@ const normalizeColor = (value, fallback = "#004AAD") => {
   return color || fallback;
 };
 
+export const hasOwnField = (object, key) =>
+  Object.prototype.hasOwnProperty.call(object || {}, key);
+
+export const getSavedTextValue = (object, key) => {
+  if (!hasOwnField(object, key)) return "";
+
+  const value = object[key];
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  return String(value);
+};
+
+export const getPreviewTextValue = (object, key, fallback = "") => {
+  if (hasOwnField(object, key)) {
+    const value = object[key];
+    if (typeof value === "string") return value.trim();
+    if (value == null) return "";
+    return String(value).trim();
+  }
+
+  return fallback;
+};
+
 export const normalizeJoinTrack = (track = {}) => {
   const base = DEFAULT_JOIN_TRACK_MAP[track.id] || {};
   const enabled = normalizeEnabled(track.enabled, base.enabled !== false);
