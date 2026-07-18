@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email != null &&
+        request.auth.token.email.lower() in [
+          'gallerykuns@gmail.com',
+          'sylove887@gmail.com',
+          'sklove887@gmail.com'
+        ];
+    }
+    function isOwner() { return signedIn() && resource.data.userId == request.auth.uid; }
+    function salonProtectedFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'status', 'salonId', 'trackType', 'qrTokenHash', 'qrTokenNonce', 'qrTokenVersion',
+        'qrIssuedAt', 'qrExpiresAt', 'checkedInAt', 'checkedInBy',
+        'checkInMethod', 'approvalNotificationStatus',
+        'approvalNotificationSentAt', 'approvalNotificationError',
+        'welcomeNotificationStatus', 'welcomeNotificationSentAt',
+        'welcomeNotificationError'
+      ]);
+    }
+
+    match /artifacts/{appId}/public/data/salonEvents/{salonId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /artifacts/{appId}/public/data/applications/{applicationId} {
+      allow read: if isAdmin() || isOwner();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isOwner() && (resource.data.trackType != 'salon' || salonProtectedFieldsUnchanged()));
+      allow delete: if isAdmin();
+    }
+
+    match /artifacts/{appId}/public/data/reservations/{reservationId} {
+      // Existing rental date reservation behavior: authenticated JOIN users read/write.
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    match /artifacts/{appId}/public/data/salonCheckInLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /artifacts/{appId}/public/data/{collectionId}/{documentId} {
+      allow read: if collectionId in ['openCalls', 'joinHome', 'joinTracks', 'joinPopups'];
+      allow write: if isAdmin();
+    }
+
+    match /artifacts/{appId}/users/{userId}/{document=**} {
+      allow read, write: if signedIn() && (request.auth.uid == userId || isAdmin());
+    }
+  }
+}

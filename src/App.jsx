@@ -24,6 +24,11 @@ import JoinHome from "./views/join/JoinHome";
 import OpenCallLanding from "./views/open-call/OpenCallLanding";
 import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
 import SalonLanding from "./views/salon/SalonLanding";
+import SalonDetail from "./views/salon/SalonDetail";
+import SalonApplicationForm from "./views/salon/SalonApplicationForm";
+import SalonApplicationComplete from "./views/salon/SalonApplicationComplete";
+import SalonPassPage from "./views/salon/SalonPassPage";
+import SalonCheckInScanner from "./views/admin/SalonCheckInScanner";
 import { createFallbackOpenCall, pickActiveOpenCall } from "./constants/openCall";
 
 const EMPTY_FORM_DATA = {
@@ -64,8 +69,20 @@ const EMPTY_PROFILE_DATA = {
 
 const getSelectedTrackFromPathname = (pathname) => {
   if (pathname === "/opencall" || pathname === "/opencall/apply") return "open-call";
-  if (pathname === "/salon") return "salon";
+  if (pathname === "/salon" || pathname.startsWith("/salon/") || pathname.startsWith("/admin/salon/")) return "salon";
   return null;
+};
+
+const getSalonRouteFromUrl = (pathname, params) => {
+  const adminMatch = pathname.match(/^\/admin\/salon\/check-in\/([^/]+)$/);
+  if (adminMatch) return { salonMode: "admin-check-in", salonSlug: "", salonId: decodeURIComponent(adminMatch[1]), salonToken: "" };
+  if (pathname === "/salon/pass" || pathname === "/salon/check-in-token") return { salonMode: "pass", salonSlug: "", salonId: "", salonToken: params.get("token") || "" };
+  if (pathname === "/salon/application-complete") return { salonMode: "complete", salonSlug: "", salonId: "", salonToken: "" };
+  const applyMatch = pathname.match(/^\/salon\/([^/]+)\/apply$/);
+  if (applyMatch) return { salonMode: "apply", salonSlug: decodeURIComponent(applyMatch[1]), salonId: "", salonToken: "" };
+  const detailMatch = pathname.match(/^\/salon\/([^/]+)$/);
+  if (detailMatch) return { salonMode: "detail", salonSlug: decodeURIComponent(detailMatch[1]), salonId: "", salonToken: "" };
+  return { salonMode: "landing", salonSlug: "", salonId: "", salonToken: "" };
 };
 
 const getOpenCallModeFromUrl = (pathname, params) => {
@@ -84,12 +101,14 @@ const getPathnameForSelectedTrack = (selectedTrack, openCallMode = "landing") =>
 
 const getUrlState = () => {
   const params = new URLSearchParams(window.location.search);
+  const salonRoute = getSalonRouteFromUrl(window.location.pathname, params);
   return {
     selectedTrack: getSelectedTrackFromPathname(window.location.pathname),
-    view: params.get("view") || "user",
+    view: salonRoute.salonMode === "admin-check-in" ? "admin" : params.get("view") || "user",
     app: params.get("app") || "",
     openCallMode: getOpenCallModeFromUrl(window.location.pathname, params),
     openCallId: params.get("openCallId") || "",
+    ...salonRoute,
   };
 };
 
@@ -99,11 +118,24 @@ const buildUrl = ({
   app = "",
   openCallMode = "landing",
   openCallId = "",
+  salonMode = "landing",
+  salonSlug = "",
+  salonId = "",
+  salonToken = "",
 }) => {
-  const pathname = getPathnameForSelectedTrack(selectedTrack, openCallMode);
+  let pathname = getPathnameForSelectedTrack(selectedTrack, openCallMode);
   const params = new URLSearchParams();
 
-  if (view && view !== "user") {
+  if (selectedTrack === "salon") {
+    if (salonMode === "detail" && salonSlug) pathname = `/salon/${encodeURIComponent(salonSlug)}`;
+    else if (salonMode === "apply" && salonSlug) pathname = `/salon/${encodeURIComponent(salonSlug)}/apply`;
+    else if (salonMode === "complete") pathname = "/salon/application-complete";
+    else if (salonMode === "pass") pathname = "/salon/pass";
+    else if (salonMode === "admin-check-in" && salonId) pathname = `/admin/salon/check-in/${encodeURIComponent(salonId)}`;
+    if (salonMode === "pass" && salonToken) params.set("token", salonToken);
+  }
+
+  if (view && view !== "user" && salonMode !== "admin-check-in") {
     params.set("view", view);
   }
 
@@ -129,6 +161,11 @@ const App = () => {
   const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
   const [openCallMode, setOpenCallMode] = useState(initialUrlState.openCallMode);
   const [requestedOpenCallId, setRequestedOpenCallId] = useState(initialUrlState.openCallId);
+  const [salonMode, setSalonMode] = useState(initialUrlState.salonMode);
+  const [salonSlug, setSalonSlug] = useState(initialUrlState.salonSlug);
+  const [salonId, setSalonId] = useState(initialUrlState.salonId);
+  const [salonToken, setSalonToken] = useState(initialUrlState.salonToken);
+  const [salonCompleteContext, setSalonCompleteContext] = useState(null);
   const [selectedOpenCall, setSelectedOpenCall] = useState(null);
   const [openCalls, setOpenCalls] = useState([]);
   const [currentStep, setCurrentStep] = useState(1);
@@ -194,6 +231,10 @@ const App = () => {
       setFocusedApplicationId(next.app);
       setOpenCallMode(next.openCallMode);
       setRequestedOpenCallId(next.openCallId);
+      setSalonMode(next.salonMode);
+      setSalonSlug(next.salonSlug);
+      setSalonId(next.salonId);
+      setSalonToken(next.salonToken);
       setSelectedOpenCall(null);
     };
 
@@ -211,6 +252,10 @@ const App = () => {
         selectedTrack === "open-call" && openCallMode === "form"
           ? selectedOpenCallView?.id || requestedOpenCallId
           : "",
+      salonMode,
+      salonSlug,
+      salonId,
+      salonToken,
     });
     const currentUrl = `${window.location.pathname}${window.location.search}`;
 
@@ -223,12 +268,15 @@ const App = () => {
     requestedOpenCallId,
     selectedOpenCallView?.id,
     selectedTrack,
+    salonId,
+    salonMode,
+    salonSlug,
+    salonToken,
     viewMode,
   ]);
 
   useEffect(() => {
     if (selectedTrack !== "open-call") {
-      setOpenCalls([]);
       return;
     }
 
@@ -249,7 +297,6 @@ const App = () => {
 
   useEffect(() => {
     if (!user || user.isAnonymous) {
-      setSavedProfileData(EMPTY_PROFILE_DATA);
       return;
     }
 
@@ -366,6 +413,10 @@ const App = () => {
 
   const handleSelectSalonTrack = () => {
     setSelectedTrack("salon");
+    setSalonMode("landing");
+    setSalonSlug("");
+    setSalonId("");
+    setSalonToken("");
     setOpenCallMode("landing");
     setRequestedOpenCallId("");
     setSelectedOpenCall(null);
@@ -381,6 +432,10 @@ const App = () => {
 
   const handleReturnToJoinHome = () => {
     setSelectedTrack(null);
+    setSalonMode("landing");
+    setSalonSlug("");
+    setSalonId("");
+    setSalonToken("");
     setOpenCallMode("landing");
     setRequestedOpenCallId("");
     setSelectedOpenCall(null);
@@ -407,6 +462,10 @@ const App = () => {
   const resetAll = () => {
     setCurrentStep(1);
     setSelectedTrack(null);
+    setSalonMode("landing");
+    setSalonSlug("");
+    setSalonId("");
+    setSalonToken("");
     setOpenCallMode("landing");
     setRequestedOpenCallId("");
     setSelectedOpenCall(null);
@@ -460,7 +519,15 @@ const App = () => {
       />
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left">
-        {isSubmitSuccess ? (
+        {selectedTrack === "salon" && salonMode === "pass" ? (
+          <SalonPassPage token={salonToken} />
+        ) : selectedTrack === "salon" && salonMode === "admin-check-in" ? (
+          <SalonCheckInScanner
+            salonId={salonId}
+            applications={applications}
+            isAdmin={isAdmin}
+          />
+        ) : isSubmitSuccess ? (
           <SuccessView
             trackType={selectedTrack}
             completionSettings={selectedOpenCallView?.completionSettings}
@@ -528,7 +595,45 @@ const App = () => {
                 />
               )
             ) : selectedTrack === "salon" ? (
-              <SalonLanding onBack={handleReturnToJoinHome} />
+              salonMode === "detail" ? (
+                <SalonDetail
+                  slug={salonSlug}
+                  onBack={() => {
+                    setSalonMode("landing");
+                    setSalonSlug("");
+                  }}
+                  onApply={() => setSalonMode("apply")}
+                />
+              ) : salonMode === "apply" ? (
+                <SalonApplicationForm
+                  slug={salonSlug}
+                  user={user}
+                  initialProfileData={savedProfileData}
+                  onBack={() => setSalonMode("detail")}
+                  onComplete={(context) => {
+                    setSalonCompleteContext(context);
+                    setSalonMode("complete");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                />
+              ) : salonMode === "complete" ? (
+                <SalonApplicationComplete
+                  context={salonCompleteContext}
+                  onHome={() => {
+                    setSalonMode("landing");
+                    setSalonSlug("");
+                  }}
+                />
+              ) : (
+                <SalonLanding
+                  onBack={handleReturnToJoinHome}
+                  onOpen={(slug) => {
+                    setSalonSlug(slug);
+                    setSalonMode("detail");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                />
+              )
             ) : (
               <>
                 <div className="mb-4 md:mb-6 flex justify-start">

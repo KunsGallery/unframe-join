@@ -1,4 +1,8 @@
-export const ADMIN_EMAILS = ["gallerykuns@gmail.com", "sylove887@gmail.com"];
+export const ADMIN_EMAILS = [
+  "gallerykuns@gmail.com",
+  "sylove887@gmail.com",
+  "sklove887@gmail.com",
+];
 
 export const normalizeEmail = (email) =>
   typeof email === "string" ? email.trim().toLowerCase() : "";
