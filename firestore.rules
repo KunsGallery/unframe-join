@@ -1,59 +1,110 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn() && request.auth.token.email != null &&
-        request.auth.token.email.lower() in [
-          'gallerykuns@gmail.com',
-          'sylove887@gmail.com',
-          'sklove887@gmail.com'
-        ];
-    }
-    function isOwner() { return signedIn() && resource.data.userId == request.auth.uid; }
-    function salonProtectedFieldsUnchanged() {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'status', 'salonId', 'trackType', 'qrTokenHash', 'qrTokenNonce', 'qrTokenVersion',
-        'qrIssuedAt', 'qrExpiresAt', 'checkedInAt', 'checkedInBy',
-        'checkInMethod', 'approvalNotificationStatus',
-        'approvalNotificationSentAt', 'approvalNotificationError',
-        'welcomeNotificationStatus', 'welcomeNotificationSentAt',
-        'welcomeNotificationError'
-      ]);
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    match /artifacts/{appId}/public/data/salonEvents/{salonId} {
+    function isNonAnonymous() {
+      return isSignedIn() &&
+        request.auth.token.firebase.sign_in_provider != "anonymous";
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        (
+          request.auth.token.email == 'gallerykuns@gmail.com' ||
+          request.auth.token.email == 'sylove887@gmail.com'
+        );
+    }
+
+    function isSalonApplication(data) {
+      return data.keys().hasAny(['trackType']) &&
+        data.trackType == 'salon';
+    }
+
+    // 1. 공용 예약 정보
+    // 공간 대관 / 파트너십 일정 관리 전용
+    match /artifacts/unframe-join/public/data/reservations/{date} {
+      allow read: if true;
+      allow create, update: if isAdmin() || isNonAnonymous();
+      allow delete: if isAdmin();
+    }
+
+    // 2. 신청서 / 지원서 데이터
+    // rental 신청서와 open-call 지원서를 함께 저장
+    // SALON 신청 생성과 변경은 Firebase Admin SDK 서버 함수만 수행
+    match /artifacts/unframe-join/public/data/applications/{docId} {
+      allow create: if isNonAnonymous() &&
+        request.resource.data.userId == request.auth.uid &&
+        !isSalonApplication(request.resource.data);
+
+      allow read: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid
+      );
+
+      allow delete: if isAdmin();
+
+      allow update: if (
+        isAdmin() &&
+        !isSalonApplication(resource.data)
+      ) || (
+        isNonAnonymous() &&
+        resource.data.userId == request.auth.uid &&
+        !isSalonApplication(resource.data) &&
+        resource.data.status == "additional_requested" &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.status == "review"
+      );
+    }
+
+    // 3. 개인 임시 저장 데이터
+    match /artifacts/unframe-join/users/{userId}/drafts/{draftId} {
+      allow read, write: if isNonAnonymous() && request.auth.uid == userId;
+    }
+
+    // 4. 개인 기본정보 프로필
+    match /artifacts/unframe-join/users/{userId}/profile/{profileId} {
+      allow read, write: if isNonAnonymous() && request.auth.uid == userId;
+    }
+
+    // 5. 오픈콜 공고 관리
+    match /artifacts/unframe-join/public/data/openCalls/{openCallId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    match /artifacts/{appId}/public/data/applications/{applicationId} {
-      allow read: if isAdmin() || isOwner();
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin() ||
-        (isOwner() && (resource.data.trackType != 'salon' || salonProtectedFieldsUnchanged()));
-      allow delete: if isAdmin();
+    // 6. JoinHome 신청 트랙 관리
+    // rental / open-call / salon / collaboration on-off 관리
+    match /artifacts/unframe-join/public/data/joinTracks/{trackId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
 
-    match /artifacts/{appId}/public/data/reservations/{reservationId} {
-      // Existing rental date reservation behavior: authenticated JOIN users read/write.
-      allow read: if signedIn();
-      allow create, update: if signedIn();
-      allow delete: if isAdmin();
+    // 7. JoinHome 팝업 / 공지 모달 관리
+    match /artifacts/unframe-join/public/data/joinPopups/{popupId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
 
-    match /artifacts/{appId}/public/data/salonCheckInLogs/{logId} {
+    match /artifacts/unframe-join/public/data/joinHome/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 8. SALON 행사 설정
+    match /artifacts/unframe-join/public/data/salonEvents/{salonId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 9. SALON 체크인 감사 로그
+    // 인증된 Admin SDK 서버 함수만 Rules를 우회해 기록할 수 있음
+    match /artifacts/unframe-join/public/data/salonCheckInLogs/{logId} {
       allow read: if isAdmin();
-      allow write: if false;
-    }
-
-    match /artifacts/{appId}/public/data/{collectionId}/{documentId} {
-      allow read: if collectionId in ['openCalls', 'joinHome', 'joinTracks', 'joinPopups'];
-      allow write: if isAdmin();
-    }
-
-    match /artifacts/{appId}/users/{userId}/{document=**} {
-      allow read, write: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow create, update, delete: if false;
     }
   }
 }
