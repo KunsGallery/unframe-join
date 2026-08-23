@@ -9,6 +9,16 @@ export const SALON_APPLICATION_STATUSES = [
   { value: "cancelled", label: "취소" },
 ];
 
+export const DEFAULT_SALON_PAYMENT_SETTINGS = {
+  enabled: true,
+  amount: "",
+  bankName: "카카오뱅크",
+  accountNumber: "3333-36-4153287",
+  accountHolder: "언프레임(UNFRAME)",
+  depositorGuide: "입금자명은 신청자명과 동일하게 입력해 주세요.",
+  note: "입금 확인 후 참가 확정 안내를 보내드립니다.",
+};
+
 export const DEFAULT_SALON_EVENT = {
   id: "",
   slug: "",
@@ -44,15 +54,7 @@ export const DEFAULT_SALON_EVENT = {
     customFields: [],
   },
   links: { programUrl: "", guestbookUrl: "", instagramUrl: "" },
-  paymentSettings: {
-    enabled: true,
-    amount: "",
-    bankName: "",
-    accountNumber: "",
-    accountHolder: "",
-    depositorGuide: "입금자명은 신청자명과 동일하게 입력해 주세요.",
-    note: "입금 확인 후 참가 확정 안내를 보내드립니다.",
-  },
+  paymentSettings: DEFAULT_SALON_PAYMENT_SETTINGS,
   checkInSettings: {
     enabled: true,
     checkInStartAt: "",
@@ -79,6 +81,16 @@ const mergeDefined = (defaults, source) => {
   return result;
 };
 
+const mergePaymentSettings = (source) => {
+  const merged = mergeDefined(DEFAULT_SALON_PAYMENT_SETTINGS, source);
+  ["bankName", "accountNumber", "accountHolder"].forEach((key) => {
+    if (typeof merged[key] === "string" && !merged[key].trim()) {
+      merged[key] = DEFAULT_SALON_PAYMENT_SETTINGS[key];
+    }
+  });
+  return merged;
+};
+
 export const normalizeSalonEvent = (source = {}) => {
   const base = mergeDefined(DEFAULT_SALON_EVENT, source);
   const sourceForm = source.formSettings || {};
@@ -98,10 +110,7 @@ export const normalizeSalonEvent = (source = {}) => {
       customFields: Array.isArray(sourceForm.customFields) ? sourceForm.customFields : [],
     },
     links: mergeDefined(DEFAULT_SALON_EVENT.links, source.links),
-    paymentSettings: mergeDefined(
-      DEFAULT_SALON_EVENT.paymentSettings,
-      source.paymentSettings
-    ),
+    paymentSettings: mergePaymentSettings(source.paymentSettings),
     checkInSettings: mergeDefined(DEFAULT_SALON_EVENT.checkInSettings, source.checkInSettings),
     notificationSettings: mergeDefined(
       DEFAULT_SALON_EVENT.notificationSettings,

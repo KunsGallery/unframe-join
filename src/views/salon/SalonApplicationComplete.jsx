@@ -11,6 +11,13 @@ import { unframeDesign } from "../../components/ui/unframeDesign";
 
 const hasText = (value) => typeof value === "string" && value.trim().length > 0;
 
+const formatKrwAmount = (value) => {
+  if (!hasText(value)) return "";
+  const digits = String(value).replace(/[^\d]/g, "");
+  if (!digits) return String(value).trim();
+  return `${Number(digits).toLocaleString("ko-KR")}원`;
+};
+
 const PaymentLine = ({ label, value, strong = false }) => {
   if (!hasText(value)) return null;
 
@@ -40,12 +47,13 @@ const SalonApplicationComplete = ({ context, onHome }) => {
   const hasPaymentInfo =
     paymentEnabled &&
     [payment.amount, payment.bankName, payment.accountNumber, payment.accountHolder].some(hasText);
+  const formattedAmount = formatKrwAmount(payment.amount);
 
   const copyText = useMemo(
     () =>
       [
         `${salonTitle} 참여비 입금 안내`,
-        hasText(payment.amount) ? `금액: ${payment.amount}` : "",
+        hasText(formattedAmount) ? `금액: ${formattedAmount}` : "",
         hasText(payment.bankName) ? `은행: ${payment.bankName}` : "",
         hasText(payment.accountNumber) ? `계좌: ${payment.accountNumber}` : "",
         hasText(payment.accountHolder) ? `예금주: ${payment.accountHolder}` : "",
@@ -53,7 +61,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
       ]
         .filter(Boolean)
         .join("\n"),
-    [payment, salonTitle]
+    [formattedAmount, payment, salonTitle]
   );
 
   const copyPaymentInfo = async () => {
@@ -118,7 +126,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
 
           {hasPaymentInfo ? (
             <dl className="mt-6 rounded-[24px] border-2 border-zinc-900 bg-[#f6f4ee] px-5">
-              <PaymentLine label="금액" value={payment.amount} strong />
+              <PaymentLine label="금액" value={formattedAmount} strong />
               <PaymentLine label="은행" value={payment.bankName} />
               <PaymentLine label="계좌" value={payment.accountNumber} strong />
               <PaymentLine label="예금주" value={payment.accountHolder} />

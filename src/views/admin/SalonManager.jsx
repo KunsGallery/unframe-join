@@ -9,6 +9,11 @@ const labelClass = "block text-[11px] font-black text-zinc-600";
 const toSlug = (value) => String(value || "salon").trim().toLowerCase().replace(/[^a-z0-9가-힣]+/g, "-").replace(/(^-|-$)/g, "") || `salon-${Date.now()}`;
 const phoneDisplay = (value) => String(value || "").replace(/(\d{3})(\d{3,4})(\d{4})/, "$1-$2-$3");
 const getStatusLabel = (status) => SALON_APPLICATION_STATUSES.find((item) => item.value === status)?.label || status;
+const formatKrwAmount = (value) => {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (!digits) return String(value || "").trim();
+  return `${Number(digits).toLocaleString("ko-KR")}원`;
+};
 const asCsv = (items) => {
   const rows = [["이름", "연락처", "이메일", "닉네임", "상태", "QR", "확정알림", "체크인", "체크인시간", "환영알림"]];
   items.forEach((item) => rows.push([item.applicantName, item.phone, item.email, item.nickname, getStatusLabel(item.status), item.qrTokenHash ? "발급" : "미발급", item.approvalNotificationStatus, item.checkedInAt ? "완료" : "미입장", item.checkedInAt?.toDate?.()?.toISOString?.() || item.checkedInAt || "", item.welcomeNotificationStatus]));
@@ -60,7 +65,7 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
         </label>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className={labelClass}>참여비 금액<input className={fieldClass} value={draft.paymentSettings.amount} onChange={(e) => payment("amount", e.target.value)} placeholder="예: 30,000원" /></label>
+        <label className={labelClass}>참여비 금액<input className={fieldClass} value={draft.paymentSettings.amount} onChange={(e) => payment("amount", e.target.value)} onBlur={(e) => payment("amount", formatKrwAmount(e.target.value))} placeholder="예: 30,000원" /></label>
         <label className={labelClass}>은행명<input className={fieldClass} value={draft.paymentSettings.bankName} onChange={(e) => payment("bankName", e.target.value)} placeholder="예: 신한은행" /></label>
         <label className={labelClass}>계좌번호<input className={fieldClass} value={draft.paymentSettings.accountNumber} onChange={(e) => payment("accountNumber", e.target.value)} placeholder="000-000-000000" /></label>
         <label className={labelClass}>예금주<input className={fieldClass} value={draft.paymentSettings.accountHolder} onChange={(e) => payment("accountHolder", e.target.value)} placeholder="언프레임" /></label>
