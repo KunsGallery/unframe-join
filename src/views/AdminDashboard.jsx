@@ -113,11 +113,13 @@ const getProgramLabel = (program) => {
 };
 
 const getTrackLabel = (trackType) => {
+  if (trackType === "salon") return "SALON";
   if (trackType === "open-call") return "오픈콜";
   return "공간 대관";
 };
 
-const getApplicationTitle = (app) => app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
+const getApplicationTitle = (app) =>
+  app?.salonTitle || app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
 
 const getApplicationDateKey = (app) => {
   if (app?.selectedDate) return app.selectedDate;
@@ -128,6 +130,7 @@ const getApplicationDateKey = (app) => {
 };
 
 const getApplicationGroupLabel = (app) => {
+  if (app?.trackType === "salon") return "SALON";
   if (app?.trackType === "open-call") return "오픈콜";
   return app?.selectedDate || "미정";
 };
@@ -390,6 +393,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [programFilter, setProgramFilter] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("date-desc");
+  const [applicationScope, setApplicationScope] = useState("rental");
 
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [guideDrafts, setGuideDrafts] = useState({});
@@ -978,11 +982,22 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       const term = searchTerm.trim().toLowerCase();
 
     let list = [...applications].filter((app) => {
+      const matchesScope =
+        applicationScope === "salon"
+          ? app.trackType === "salon"
+          : applicationScope === "open-call"
+          ? app.trackType === "open-call"
+          : app.trackType !== "salon" && app.trackType !== "open-call";
+
       const matchesSearch =
         !term ||
         [
+          app.salonTitle,
           app.exhibitionTitle,
           app.openCallTitle,
+          app.applicantName,
+          app.nickname,
+          app.email,
           app.name,
           app.realName,
           app.stageName,
@@ -1003,7 +1018,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       const matchesPartner =
         partnerFilter === "all" ? true : app.partnerType === partnerFilter;
 
-      return matchesSearch && matchesStatus && matchesProgram && matchesPartner;
+      return matchesScope && matchesSearch && matchesStatus && matchesProgram && matchesPartner;
     });
 
     list.sort((a, b) => {
@@ -1023,7 +1038,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
     });
 
     return list;
-  }, [applications, searchTerm, statusFilter, programFilter, partnerFilter, sortOrder]);
+  }, [applications, applicationScope, searchTerm, statusFilter, programFilter, partnerFilter, sortOrder]);
 
   const groupedApps = useMemo(() => {
     const groups = {};
@@ -1059,6 +1074,33 @@ const handleAction = async (appDoc, date, status, reason = "") => {
   }, [filteredApplications, sortOrder]);
 
   const activeTab = ADMIN_TABS.find((tab) => tab.id === activeAdminTab) || ADMIN_TABS[0];
+  const applicationScopeTabs = useMemo(
+    () => [
+      {
+        id: "rental",
+        label: "공간 대관",
+        description: "공간 대관 / 파트너십 신청",
+        count: applications.filter(
+          (app) => app.trackType !== "open-call" && app.trackType !== "salon"
+        ).length,
+      },
+      {
+        id: "open-call",
+        label: "오픈콜",
+        description: "공개 모집 지원서",
+        count: applications.filter((app) => app.trackType === "open-call").length,
+      },
+      {
+        id: "salon",
+        label: "SALON",
+        description: "모임 / 프로그램 참가 신청",
+        count: applications.filter((app) => app.trackType === "salon").length,
+      },
+    ],
+    [applications]
+  );
+  const activeApplicationScope =
+    applicationScopeTabs.find((tab) => tab.id === applicationScope) || applicationScopeTabs[0];
 
   return (
     <section className="min-h-screen bg-[#F6F4EE] py-10 text-zinc-900 md:py-14">
@@ -1218,6 +1260,63 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
       {activeAdminTab === "applications" ? (
         <DashboardPanel className="space-y-8">
+          <div className="rounded-[32px] border border-zinc-100 bg-white p-4 shadow-sm md:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-xl font-black tracking-tight text-zinc-950">
+                  신청 분류
+                </h3>
+                <p className="mt-1 text-sm font-bold leading-6 text-zinc-500 break-keep">
+                  공간 대관, 오픈콜, SALON 참가 신청을 분리해서 확인합니다.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[42rem]">
+                {applicationScopeTabs.map((tab) => {
+                  const isActive = applicationScope === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setApplicationScope(tab.id);
+                        if (tab.id !== "rental") {
+                          setProgramFilter("all");
+                          setPartnerFilter("all");
+                        }
+                      }}
+                      className={`rounded-[22px] border px-4 py-4 text-left transition-all ${
+                        isActive
+                          ? "border-[#004aad] bg-[#004aad] text-white shadow-lg shadow-[#004aad]/15"
+                          : "border-zinc-100 bg-zinc-50 text-zinc-700 hover:border-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-black uppercase tracking-[0.12em]">
+                          {tab.label}
+                        </span>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${
+                            isActive ? "bg-white/15 text-white" : "bg-white text-zinc-500"
+                          }`}
+                        >
+                          {tab.count}
+                        </span>
+                      </div>
+                      <p
+                        className={`mt-2 text-xs font-bold leading-5 break-keep ${
+                          isActive ? "text-white/75" : "text-zinc-400"
+                        }`}
+                      >
+                        {tab.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {applicationScope === "rental" ? (
           <div className="mb-20 grid xl:grid-cols-[0.95fr_1.05fr] gap-8">
         <div className="bg-white rounded-[40px] border border-zinc-100 shadow-xl p-8 md:p-10">
           <div className="flex items-center justify-between gap-3 mb-8">
@@ -1381,11 +1480,17 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           </div>
         </div>
       </div>
+          ) : null}
 
       <div className="mb-14 bg-white rounded-[40px] border border-zinc-100 shadow-xl p-6 md:p-8">
         <div className="flex items-center gap-3 mb-6">
           <Filter size={18} className="text-[#004aad]" />
-          <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight">신청서 필터링</h3>
+          <div>
+            <h3 className="text-xl md:text-2xl font-black uppercase tracking-tight">신청서 필터링</h3>
+            <p className="mt-1 text-xs font-bold text-zinc-400 break-keep">
+              현재 보기: {activeApplicationScope.label} · {activeApplicationScope.count}건
+            </p>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-4">
@@ -1406,16 +1511,21 @@ const handleAction = async (appDoc, date, status, reason = "") => {
             className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
           >
             <option value="all">전체 상태</option>
+            <option value="submitted">신청 접수</option>
             <option value="review">심사중</option>
             <option value="confirmed">확정</option>
+            <option value="approved">승인</option>
+            <option value="waitlisted">대기</option>
             <option value="rejected">거절</option>
             <option value="additional_requested">추가자료 요청</option>
+            <option value="cancelled">취소</option>
           </select>
 
           <select
             value={programFilter}
             onChange={(e) => setProgramFilter(e.target.value)}
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
+            disabled={applicationScope !== "rental"}
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none disabled:cursor-not-allowed disabled:opacity-45"
           >
             <option value="all">전체 프로그램</option>
             {PROGRAMS.map((program) => (
@@ -1428,7 +1538,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           <select
             value={partnerFilter}
             onChange={(e) => setPartnerFilter(e.target.value)}
-            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none"
+            disabled={applicationScope !== "rental"}
+            className="bg-zinc-50 border border-zinc-100 rounded-2xl px-4 py-4 font-bold outline-none disabled:cursor-not-allowed disabled:opacity-45"
           >
             <option value="all">전체 파트너</option>
             <option value="artist">Artist</option>
@@ -1505,11 +1616,11 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                           <div className="flex-1 space-y-6 text-left">
                             <div
                               className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${
-                                app.status === "review"
+                                app.status === "review" || app.status === "submitted"
                                   ? "bg-[#004aad]"
-                                  : app.status === "confirmed"
+                                  : app.status === "confirmed" || app.status === "approved"
                                   ? "bg-green-500"
-                                  : app.status === "additional_requested"
+                                  : app.status === "additional_requested" || app.status === "waitlisted"
                                   ? "bg-amber-500"
                                   : "bg-red-400"
                               }`}
@@ -1525,13 +1636,22 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                               <p className="text-sm font-black text-zinc-400 uppercase">
                                 {app.trackType === "open-call"
                                   ? app.medium || app.name || "-"
+                                  : app.trackType === "salon"
+                                  ? app.applicantName || app.nickname || "-"
                                   : app.partnerType === "brand"
                                   ? app.brandName
                                   : app.stageName || app.name || "-"}
                               </p>
                               <div className="w-1 h-1 bg-zinc-200 rounded-full" />
                               <p className="text-sm font-black text-zinc-400">{app.phone}</p>
-                              {app.trackType === "open-call" ? (
+                              {app.trackType === "salon" ? (
+                                <>
+                                  <div className="w-1 h-1 bg-zinc-200 rounded-full" />
+                                  <span className="px-3 py-1.5 rounded-full bg-zinc-950 text-white text-[10px] font-black uppercase tracking-widest">
+                                    SALON
+                                  </span>
+                                </>
+                              ) : app.trackType === "open-call" ? (
                                 <>
                                   <div className="w-1 h-1 bg-zinc-200 rounded-full" />
                                   <span className="px-3 py-1.5 rounded-full bg-[#AAD004]/15 text-[#6e8d00] text-[10px] font-black uppercase tracking-widest">
@@ -1577,7 +1697,23 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                               )}
                             </button>
 
-                            {rejectId === app.id ? (
+                            {app.trackType === "salon" ? (
+                              <div className="rounded-2xl border border-[#004aad]/15 bg-[#004aad]/5 p-4 text-left">
+                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                                  Salon Workflow
+                                </p>
+                                <p className="mt-2 text-xs font-bold leading-5 text-zinc-600 break-keep">
+                                  참가 승인, QR 발급, 체크인은 상단의 살롱 관리 탭에서 처리합니다.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveAdminTab("salons")}
+                                  className="mt-4 w-full rounded-xl bg-zinc-950 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white"
+                                >
+                                  살롱 관리로 이동
+                                </button>
+                              </div>
+                            ) : rejectId === app.id ? (
                               <div className="space-y-3 animate-in fade-in zoom-in-95 text-left">
                                 <textarea
                                   value={rejectReason}
@@ -1652,7 +1788,17 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
                                   지원자 정보
                                 </h5>
-                                {app.trackType === "open-call" ? (
+                                {app.trackType === "salon" ? (
+                                  <div className="grid gap-4 text-left">
+                                    <DetailItem label="신청자" value={app.applicantName || app.nickname || "-"} />
+                                    <DetailItem label="사용할 이름" value={app.nickname || "-"} />
+                                    <DetailItem label="연락처" value={app.phone || "-"} />
+                                    <DetailItem label="이메일" value={app.email || "-"} />
+                                    <DetailItem label="SALON" value={app.salonTitle || "-"} />
+                                    <DetailItem label="QR 발급" value={app.qrTokenHash ? "발급 완료" : "미발급"} />
+                                    <DetailItem label="입장 확인" value={app.checkedInAt ? `입장 완료 · ${formatSentAt(app.checkedInAt)}` : "미입장"} />
+                                  </div>
+                                ) : app.trackType === "open-call" ? (
                                   <div className="grid gap-4 text-left">
                                     <DetailItem label="이름" value={app.name || "-"} />
                                     <DetailItem label="연락처" value={app.phone || "-"} />
@@ -1688,7 +1834,31 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
                                   작업 소개
                                 </h5>
-                                {app.trackType === "open-call" ? (
+                                {app.trackType === "salon" ? (
+                                  <div className="rounded-2xl border border-zinc-100 bg-white p-5">
+                                    <p className="text-sm font-bold leading-relaxed text-zinc-600 break-keep">
+                                      SALON 참가 신청입니다. 신청 상태 변경, 확정 알림톡, QR 발급과 체크인은
+                                      살롱 관리 탭에서 처리해 주세요.
+                                    </p>
+                                    {getCustomFieldAnswersList(app.customFieldAnswers).length > 0 ? (
+                                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                        {getCustomFieldAnswersList(app.customFieldAnswers).map((answer) => (
+                                          <div
+                                            key={`${app.id}-${answer.fieldId}`}
+                                            className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-4"
+                                          >
+                                            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                                              {answer.label}
+                                            </p>
+                                            <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
+                                              {getCustomFieldAnswerDisplayValue(answer)}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : app.trackType === "open-call" ? (
                                   <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
                                     {app.artistStatement || "-"}
                                   </p>
@@ -1705,7 +1875,13 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
                                   포트폴리오 / 외부 링크
                                 </h5>
-                                {app.trackType === "open-call" ? (
+                                {app.trackType === "salon" ? (
+                                  <div className="rounded-2xl border border-zinc-100 bg-white p-5">
+                                    <p className="text-sm font-bold leading-relaxed text-zinc-500 break-keep">
+                                      참가자용 외부 링크는 참가 확정 후 개인 QR 페이지와 알림톡에서 안내됩니다.
+                                    </p>
+                                  </div>
+                                ) : app.trackType === "open-call" ? (
                                   <div className="flex flex-col gap-4 text-left">
                                     {app.snsLink && (
                                       <a

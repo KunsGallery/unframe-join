@@ -29,7 +29,12 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
     try {
       const customFieldAnswers = Object.fromEntries((event.formSettings?.customFields || []).map((field) => [field.id, { label: field.label || field.id, type: field.type || "text", value: customAnswers[field.id] ?? "" }]));
       const result = await callSalonFunction("submit-salon-application", { salonId: event.id, ...form, customFieldAnswers });
-      onComplete({ salonTitle: event.title, status: result.status });
+      onComplete({
+        salonTitle: event.title,
+        status: result.status,
+        applicantName: form.applicantName,
+        paymentSettings: event.paymentSettings,
+      });
     } catch (err) { setSubmitError(err.message); } finally { setSubmitting(false); }
   };
   return <section className="mx-auto max-w-3xl py-4 md:py-8"><button type="button" onClick={onBack} className={unframeDesign.secondaryButton}><ArrowLeft size={14} /> 상세로</button>

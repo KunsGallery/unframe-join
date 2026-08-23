@@ -44,6 +44,15 @@ export const DEFAULT_SALON_EVENT = {
     customFields: [],
   },
   links: { programUrl: "", guestbookUrl: "", instagramUrl: "" },
+  paymentSettings: {
+    enabled: true,
+    amount: "",
+    bankName: "",
+    accountNumber: "",
+    accountHolder: "",
+    depositorGuide: "입금자명은 신청자명과 동일하게 입력해 주세요.",
+    note: "입금 확인 후 참가 확정 안내를 보내드립니다.",
+  },
   checkInSettings: {
     enabled: true,
     checkInStartAt: "",
@@ -89,6 +98,10 @@ export const normalizeSalonEvent = (source = {}) => {
       customFields: Array.isArray(sourceForm.customFields) ? sourceForm.customFields : [],
     },
     links: mergeDefined(DEFAULT_SALON_EVENT.links, source.links),
+    paymentSettings: mergeDefined(
+      DEFAULT_SALON_EVENT.paymentSettings,
+      source.paymentSettings
+    ),
     checkInSettings: mergeDefined(DEFAULT_SALON_EVENT.checkInSettings, source.checkInSettings),
     notificationSettings: mergeDefined(
       DEFAULT_SALON_EVENT.notificationSettings,
