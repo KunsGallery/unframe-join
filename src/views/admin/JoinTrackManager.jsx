@@ -39,6 +39,33 @@ const getJoinTrackErrorMessage = (error, currentUser) => {
   return "설정을 저장하는 중 오류가 발생했습니다.";
 };
 
+const textFieldClass =
+  "mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold text-zinc-900 outline-none transition-colors placeholder:text-zinc-300 focus:border-[#004aad] focus:bg-white";
+
+const AdvancedTextField = ({ label, value, placeholder, onChange, textarea = false }) => (
+  <label className="block">
+    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
+      {label}
+    </span>
+    {textarea ? (
+      <textarea
+        value={value || ""}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={4}
+        className={`${textFieldClass} resize-none leading-relaxed`}
+      />
+    ) : (
+      <input
+        value={value || ""}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={textFieldClass}
+      />
+    )}
+  </label>
+);
+
 const JoinTrackManager = ({ db, appId, currentUser }) => {
   const [trackDocs, setTrackDocs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -308,8 +335,8 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                       <div>
                         <h5 className="text-lg font-black tracking-tight text-zinc-900">고급 설정</h5>
                         <p className="mt-1 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                          텍스트는 왼쪽 카드에서 직접 수정하고, 여기서는 노출 상태와 기본 옵션을
-                          조정합니다.
+                          왼쪽 카드와 같은 문구를 여기서도 직접 수정할 수 있습니다. ACTIVE로 열 때
+                          버튼과 배지 문구를 함께 바꿔 주세요.
                         </p>
                       </div>
 
@@ -321,6 +348,102 @@ const JoinTrackManager = ({ db, appId, currentUser }) => {
                     </div>
 
                     <div className="mt-5 grid gap-3">
+                      <div className="rounded-[22px] border border-[#004aad]/12 bg-[#004aad]/5 px-4 py-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
+                              표시 문구 편집
+                            </p>
+                            <p className="mt-1 text-xs font-bold leading-5 text-zinc-500 break-keep">
+                              메인 입구 카드의 라벨, 배지, 버튼 문구를 저장합니다.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateDraftPatch(track.id, {
+                                shortLabel: track.routeTrack === "salon" ? "SALON" : draft.shortLabel || track.shortLabel,
+                                statusLabel:
+                                  track.routeTrack === "salon"
+                                    ? "참여하기"
+                                    : track.routeTrack === "open-call"
+                                    ? "공모보기"
+                                    : track.routeTrack === "rental"
+                                    ? "신청하기"
+                                    : draft.statusLabel || track.statusLabel || track.badgeText,
+                                ctaLabel:
+                                  track.routeTrack === "salon"
+                                    ? "모임 신청하기"
+                                    : track.routeTrack === "open-call"
+                                    ? "공개모집 보기"
+                                    : track.routeTrack === "rental"
+                                    ? "신청 시작하기"
+                                    : draft.ctaLabel || track.ctaLabel,
+                              })
+                            }
+                            className="shrink-0 rounded-full border border-[#004aad]/20 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-[#004aad] transition-colors hover:bg-[#004aad] hover:text-white"
+                          >
+                            ACTIVE 문구 추천
+                          </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                          <AdvancedTextField
+                            label="짧은 라벨"
+                            value={getPreviewTextValue(draft, "shortLabel", track.shortLabel || "")}
+                            placeholder="예: SALON"
+                            onChange={(value) => updateDraftPatch(track.id, { shortLabel: value })}
+                          />
+                          <AdvancedTextField
+                            label="배지 문구"
+                            value={getPreviewTextValue(draft, "statusLabel", track.statusLabel || track.badgeText || "")}
+                            placeholder="예: 참여하기"
+                            onChange={(value) => updateDraftPatch(track.id, { statusLabel: value })}
+                          />
+                          <AdvancedTextField
+                            label="버튼 문구"
+                            value={getPreviewTextValue(draft, "ctaLabel", track.ctaLabel || "")}
+                            placeholder="예: 모임 신청하기"
+                            onChange={(value) => updateDraftPatch(track.id, { ctaLabel: value })}
+                          />
+                          <AdvancedTextField
+                            label="상단 라벨"
+                            value={getPreviewTextValue(draft, "eyebrow", track.eyebrow || "")}
+                            placeholder="예: Event"
+                            onChange={(value) => updateDraftPatch(track.id, { eyebrow: value })}
+                          />
+                          <AdvancedTextField
+                            label="카드 제목"
+                            value={getPreviewTextValue(draft, "title", track.title || "")}
+                            placeholder="예: EVENT & SALON"
+                            onChange={(value) => updateDraftPatch(track.id, { title: value })}
+                          />
+                          <AdvancedTextField
+                            label="강조 색상"
+                            value={getPreviewTextValue(draft, "accentColor", track.accentColor || "")}
+                            placeholder="#004AAD"
+                            onChange={(value) => updateDraftPatch(track.id, { accentColor: value })}
+                          />
+                          <div className="md:col-span-3">
+                            <AdvancedTextField
+                              label="설명"
+                              value={getPreviewTextValue(draft, "description", track.description || "")}
+                              placeholder="메인 카드에 표시할 설명"
+                              textarea
+                              onChange={(value) => updateDraftPatch(track.id, { description: value })}
+                            />
+                          </div>
+                          <div className="md:col-span-3">
+                            <AdvancedTextField
+                              label="배경 이미지 URL"
+                              value={getPreviewTextValue(draft, "backgroundImageUrl", track.backgroundImageUrl || "")}
+                              placeholder="https://..."
+                              onChange={(value) => updateDraftPatch(track.id, { backgroundImageUrl: value })}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="rounded-[22px] border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
                           routeTrack
