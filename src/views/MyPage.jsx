@@ -125,9 +125,17 @@ const getStatusMeta = (status) => {
   );
 };
 
-const getTrackLabel = (trackType) => {
-  if (trackType === "salon") return "SALON";
-  if (trackType === "open-call") return "오픈콜";
+const isSalonApplication = (app) =>
+  app?.trackType === "salon" || Boolean(app?.salonId || app?.salonTitle);
+
+const isOpenCallApplication = (app) =>
+  app?.trackType === "open-call" || Boolean(app?.openCallId || app?.openCallTitle);
+
+const getTrackLabel = (appOrTrackType) => {
+  const app =
+    typeof appOrTrackType === "string" ? { trackType: appOrTrackType } : appOrTrackType;
+  if (isSalonApplication(app)) return "SALON";
+  if (isOpenCallApplication(app)) return "오픈콜";
   return "공간 대관";
 };
 
@@ -137,11 +145,11 @@ const getApplicationTitle = (app) =>
 const getApplicationMetaLine = (app) => {
   if (!app) return "-";
 
-  if (app.trackType === "open-call") {
+  if (isOpenCallApplication(app)) {
     return [app.medium, app.birthYear].filter(Boolean).join(" · ") || "-";
   }
 
-  if (app.trackType === "salon") {
+  if (isSalonApplication(app)) {
     return [app.applicantName || app.nickname, app.phone ? `•••• ${String(app.phone).slice(-4)}` : ""]
       .filter(Boolean)
       .join(" · ") || "참가 신청";
@@ -232,7 +240,8 @@ const EmptyPanel = ({ title, desc }) => (
 );
 
 const ApplicationCard = ({ app, isActive, onClick }) => {
-  const isSalon = app.trackType === "salon";
+  const isSalon = isSalonApplication(app);
+  const isOpenCall = isOpenCallApplication(app);
   return (
     <button
       type="button"
@@ -247,7 +256,7 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-              {getTrackLabel(app.trackType)}
+              {getTrackLabel(app)}
             </span>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
               {isSalon ? "Salon" : "Application"}
@@ -280,10 +289,10 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
 
         <div className="rounded-2xl bg-zinc-50 border border-zinc-100 px-4 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-1">
-            {app.trackType === "open-call" ? "Medium" : isSalon ? "Contact" : "Date"}
+            {isOpenCall ? "Medium" : isSalon ? "Contact" : "Date"}
           </p>
           <p className="text-sm font-bold text-zinc-700 break-keep">
-            {app.trackType === "open-call" ? app.medium || "-" : isSalon ? app.phone || "-" : app.selectedDate || "-"}
+            {isOpenCall ? app.medium || "-" : isSalon ? app.phone || "-" : app.selectedDate || "-"}
           </p>
         </div>
       </div>
@@ -306,13 +315,13 @@ const ApplicationDetailPanel = ({ app }) => {
   }
 
   const nextAction =
-    app.trackType === "salon" && app.status === "approved"
+    isSalonApplication(app) && app.status === "approved"
       ? app.checkedInAt
         ? "입장이 확인되었습니다. 행사 후속 안내를 확인해 주세요."
         : "참가가 확정되었습니다. 알림톡으로 받은 개인 QR을 행사 당일 보여주세요."
-      : app.trackType === "salon" && app.status === "waitlisted"
+      : isSalonApplication(app) && app.status === "waitlisted"
       ? "대기 신청으로 접수되었습니다. 운영팀 안내를 기다려 주세요."
-      : app.trackType === "salon"
+      : isSalonApplication(app)
       ? "신청이 접수되었습니다. 입금 확인 후 참가 확정 안내를 보내드립니다."
       : app.status === "additional_requested"
       ? "추가자료를 업로드해 주세요."
@@ -331,13 +340,13 @@ const ApplicationDetailPanel = ({ app }) => {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-              {app.trackType === "salon" ? "Selected Salon" : "Selected Application"}
+              {isSalonApplication(app) ? "Selected Salon" : "Selected Application"}
             </p>
             <h3 className="text-2xl md:text-3xl font-black text-zinc-900 leading-tight break-keep">
               {getApplicationTitle(app)}
             </h3>
             <p className="mt-3 text-sm font-bold text-zinc-400 break-keep">
-              {getTrackLabel(app.trackType)} · {getApplicationMetaLine(app)}
+              {getTrackLabel(app)} · {getApplicationMetaLine(app)}
             </p>
           </div>
 
@@ -359,9 +368,9 @@ const ApplicationDetailPanel = ({ app }) => {
       <div className="grid md:grid-cols-2 gap-5">
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
-            {app.trackType === "salon" ? "참가 신청 정보" : "지원 공고"}
+            {isSalonApplication(app) ? "참가 신청 정보" : "지원 공고"}
           </p>
-          {app.trackType === "salon" ? (
+          {isSalonApplication(app) ? (
             <div className="space-y-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
@@ -396,7 +405,7 @@ const ApplicationDetailPanel = ({ app }) => {
                 </p>
               </div>
             </div>
-          ) : app.trackType === "open-call" ? (
+          ) : isOpenCallApplication(app) ? (
             <div className="space-y-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
@@ -473,9 +482,9 @@ const ApplicationDetailPanel = ({ app }) => {
 
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
-            {app.trackType === "salon" ? "참가 상태" : "작업 소개"}
+            {isSalonApplication(app) ? "참가 상태" : "작업 소개"}
           </p>
-          {app.trackType === "salon" ? (
+          {isSalonApplication(app) ? (
             <div className="space-y-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
@@ -513,7 +522,7 @@ const ApplicationDetailPanel = ({ app }) => {
                 </div>
               ) : null}
             </div>
-          ) : app.trackType === "open-call" ? (
+          ) : isOpenCallApplication(app) ? (
             <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep whitespace-pre-wrap">
               {app.artistStatement || "아직 등록된 작업 소개가 없습니다."}
             </p>
@@ -527,7 +536,7 @@ const ApplicationDetailPanel = ({ app }) => {
         </div>
       </div>
 
-      {app.trackType === "open-call" ? (
+      {isOpenCallApplication(app) ? (
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
             지원서 정보
@@ -814,7 +823,7 @@ const HistoryPanel = ({ applications }) => {
                 {getApplicationTitle(app)}
               </h3>
               <p className="mt-2 text-sm font-bold text-zinc-400 break-keep">
-                {getTrackLabel(app.trackType)} · {getApplicationMetaLine(app)}
+                {getTrackLabel(app)} · {getApplicationMetaLine(app)}
               </p>
             </div>
 
@@ -855,7 +864,7 @@ const UpdatesPanel = ({ applications }) => {
                 </p>
                 <p className="mt-2 text-sm font-bold text-zinc-500 leading-relaxed break-keep">
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-zinc-200 bg-zinc-50 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-500 mr-2">
-                    {getTrackLabel(app.trackType)}
+                    {getTrackLabel(app)}
                   </span>
                   현재 상태는 <span className="text-zinc-800">{meta.label}</span> 입니다.
                 </p>
@@ -948,10 +957,10 @@ const DashboardPanel = ({
             Selected Program
           </p>
           <p className="text-sm font-bold text-zinc-700 break-keep">
-            {current?.trackType === "salon"
+            {isSalonApplication(current)
               ? current.salonTitle || "SALON"
-              : current?.trackType === "open-call"
-              ? getTrackLabel(current.trackType)
+              : isOpenCallApplication(current)
+              ? getTrackLabel(current)
               : current?.selectedProgram?.name
               ? `${current.selectedProgram.name} · ${current.selectedProgram.price}만원`
               : "-"}
@@ -965,7 +974,7 @@ const DashboardPanel = ({
             <h3 className="text-lg font-black text-zinc-900">현재 신청 요약</h3>
             <button
               type="button"
-              onClick={() => setActiveTab(current?.trackType === "salon" ? "salon" : "applications")}
+              onClick={() => setActiveTab(isSalonApplication(current) ? "salon" : "applications")}
               className="text-[10px] font-black uppercase tracking-[0.14em] text-[#004aad]"
             >
               See More
@@ -1040,11 +1049,11 @@ const MyPage = ({
 
   const orderedApplications = useMemo(() => sortApplications(applications || []), [applications]);
   const salonApplications = useMemo(
-    () => orderedApplications.filter((app) => app.trackType === "salon"),
+    () => orderedApplications.filter((app) => isSalonApplication(app)),
     [orderedApplications]
   );
   const partnerApplications = useMemo(
-    () => orderedApplications.filter((app) => app.trackType !== "salon"),
+    () => orderedApplications.filter((app) => !isSalonApplication(app)),
     [orderedApplications]
   );
 
@@ -1082,7 +1091,7 @@ const MyPage = ({
   useEffect(() => {
     if (!focusedApplicationId) return;
     const focused = orderedApplications.find((app) => app.id === focusedApplicationId);
-    if (focused?.trackType === "salon") {
+    if (isSalonApplication(focused)) {
       setActiveTab("salon");
     } else if (focused) {
       setActiveTab("applications");
