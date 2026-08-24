@@ -610,11 +610,18 @@ const App = () => {
               salonMode === "detail" ? (
                 <SalonDetail
                   slug={salonSlug}
+                  user={user}
+                  applications={applications}
                   onBack={() => {
                     setSalonMode("landing");
                     setSalonSlug("");
                   }}
                   onApply={handleSalonApply}
+                  onViewApplication={(application) => {
+                    setFocusedApplicationId(application.id);
+                    setViewMode("my-page");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
                 />
               ) : salonMode === "apply" ? (
                 !user || user.isAnonymous ? (
