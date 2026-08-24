@@ -458,6 +458,18 @@ const App = () => {
 
   const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
+  const handleSalonApply = async () => {
+    if (!user || user.isAnonymous) {
+      try {
+        await handleLogin();
+      } catch (error) {
+        console.error(error);
+        return;
+      }
+    }
+    setSalonMode("apply");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const resetAll = () => {
     setCurrentStep(1);
@@ -602,20 +614,29 @@ const App = () => {
                     setSalonMode("landing");
                     setSalonSlug("");
                   }}
-                  onApply={() => setSalonMode("apply")}
+                  onApply={handleSalonApply}
                 />
               ) : salonMode === "apply" ? (
-                <SalonApplicationForm
-                  slug={salonSlug}
-                  user={user}
-                  initialProfileData={savedProfileData}
-                  onBack={() => setSalonMode("detail")}
-                  onComplete={(context) => {
-                    setSalonCompleteContext(context);
-                    setSalonMode("complete");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                />
+                !user || user.isAnonymous ? (
+                  <div className="mx-auto max-w-xl rounded-[32px] border-2 border-zinc-900 bg-white p-7 text-center shadow-[6px_6px_0px_#000]">
+                    <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#004aad]">Login required</p>
+                    <h1 className="mt-3 text-3xl font-black tracking-tight">로그인 후 신청할 수 있습니다.</h1>
+                    <p className="mt-3 text-sm font-bold leading-6 text-zinc-500 break-keep">참가 신청서를 작성하기 전에 먼저 로그인해 주세요.</p>
+                    <button type="button" onClick={handleSalonApply} className="mt-6 rounded-full bg-[#004aad] px-6 py-3 text-sm font-black text-white">로그인하고 신청하기</button>
+                  </div>
+                ) : (
+                  <SalonApplicationForm
+                    slug={salonSlug}
+                    user={user}
+                    initialProfileData={savedProfileData}
+                    onBack={() => setSalonMode("detail")}
+                    onComplete={(context) => {
+                      setSalonCompleteContext(context);
+                      setSalonMode("complete");
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                )
               ) : salonMode === "complete" ? (
                 <SalonApplicationComplete
                   context={salonCompleteContext}
