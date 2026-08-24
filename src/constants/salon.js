@@ -106,6 +106,7 @@ const normalizeSalonCustomFields = (customFields) =>
       label: String(field?.label || "추가 질문").trim(),
       description: String(field?.description || "").trim(),
       type,
+      layout: field?.layout === "full" ? "full" : "half",
       required: Boolean(field?.required),
       ...(options.length ? { options } : {}),
     };
