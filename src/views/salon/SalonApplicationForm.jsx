@@ -54,8 +54,13 @@ const MusicSearchField = ({ field, value, onChange, className = "" }) => {
       <button type="button" onClick={searchMusic} disabled={searching} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 py-3 text-sm font-black text-white disabled:opacity-40"><Search size={15} />{searching ? "검색 중" : "검색"}</button>
     </div>
     {error && <p className="mt-2 text-xs font-bold text-red-600">{error}</p>}
-    {selected && <a href={selected.url} target="_blank" rel="noreferrer" className="mt-3 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border-2 border-[#004aad] bg-blue-50 p-3 text-left"><img src={selected.thumbnailUrl} alt="" className="h-14 w-20 shrink-0 rounded-xl object-cover" /><span className="min-w-0 flex-1"><b className="block truncate text-sm">{selected.title}</b><small className="block truncate font-bold text-zinc-500">{selected.channelTitle}</small></span></a>}
-    {results.length > 0 && <div className="mt-3 grid max-h-72 min-w-0 gap-2 overflow-y-auto pr-1">{results.map((item) => <button key={item.videoId} type="button" onClick={() => onChange({ ...(value || {}), query, selected: item })} className={`flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-2 text-left ${selected?.videoId === item.videoId ? "border-[#004aad] bg-blue-50" : "border-zinc-200 bg-white"}`}><img src={item.thumbnailUrl} alt="" className="h-12 w-16 shrink-0 rounded-xl object-cover" /><span className="min-w-0 flex-1"><b className="block truncate text-sm">{item.title}</b><small className="block truncate font-bold text-zinc-500">{item.channelTitle}</small></span></button>)}</div>}
+    {selected && <a href={selected.url} target="_blank" rel="noreferrer" className="mt-3 flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border-2 border-[#004aad] bg-blue-50 p-3 text-left"><img src={selected.thumbnailUrl} alt="" className="h-14 w-20 shrink-0 rounded-xl object-cover" /><span className="min-w-0 flex-1"><b className="block truncate text-sm">{selected.title}</b><small className="block truncate font-bold text-blue-900/70">{selected.channelTitle}</small></span></a>}
+    {results.length > 0 && <div className="mt-3 grid max-h-72 min-w-0 gap-2 overflow-y-auto pr-1">{results.map((item) => {
+      const isSelected = selected?.videoId === item.videoId;
+      const buttonTone = isSelected ? "border-[#004aad] bg-blue-50" : "border-zinc-200 bg-white";
+      const channelTone = isSelected ? "text-blue-900/70" : "text-neutral-500";
+      return <button key={item.videoId} type="button" onClick={() => onChange({ ...(value || {}), query, selected: item })} className={`flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-2xl border p-2 text-left ${buttonTone}`}><img src={item.thumbnailUrl} alt="" className="h-12 w-16 shrink-0 rounded-xl object-cover" /><span className="min-w-0 flex-1"><b className="block truncate text-sm">{item.title}</b><small className={`block truncate font-bold ${channelTone}`}>{item.channelTitle}</small></span></button>;
+    })}</div>}
     <input value={manual} onChange={(e) => onChange({ ...(value || {}), manual: e.target.value })} placeholder="검색이 안 되면 곡명/아티스트/링크를 직접 입력해 주세요." className="mt-3 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 font-bold outline-none focus:border-[#004aad]" />
   </div>;
 };
@@ -83,7 +88,7 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
     if (requiredCustomField) return setSubmitError(`${requiredCustomField.label || "필수 질문"} 항목을 입력해 주세요.`);
     setSubmitting(true);
     try {
-      const customFieldAnswers = Object.fromEntries((event.formSettings?.customFields || []).map((field) => [field.id, { label: field.label || field.id, description: field.description || "", type: field.type || "text", value: customAnswers[field.id] ?? (field.type === "checkboxes" ? [] : ""), options: choiceFieldTypes.has(field.type) ? getFieldOptions(field).map((option) => option.label) : [] }]));
+      const customFieldAnswers = Object.fromEntries((event.formSettings?.customFields || []).map((field, index) => [field.id, { label: field.label || field.id, description: field.description || "", type: field.type || "text", order: index, value: customAnswers[field.id] ?? (field.type === "checkboxes" ? [] : ""), options: choiceFieldTypes.has(field.type) ? getFieldOptions(field).map((option) => option.label) : [] }]));
       const result = await callSalonFunction("submit-salon-application", { salonId: event.id, ...form, customFieldAnswers });
       onComplete({
         salonTitle: event.title,

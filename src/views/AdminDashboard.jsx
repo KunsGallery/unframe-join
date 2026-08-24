@@ -59,13 +59,24 @@ const ADMIN_TABS = [
   { id: "system", label: "시스템", description: "로그인 상태, 메시지 설정, 진단 도구를 확인합니다." },
 ];
 
+const getCustomFieldAnswerOrder = (fieldId, answer, index) => {
+  const explicitOrder = Number(answer?.order);
+  if (Number.isFinite(explicitOrder)) return explicitOrder;
+
+  const timestampLikeId = Number(String(fieldId).match(/\d{10,}/)?.[0]);
+  return Number.isFinite(timestampLikeId) ? timestampLikeId : index;
+};
+
 const getCustomFieldAnswersList = (answers) =>
-  Object.entries(answers || {}).map(([fieldId, answer]) => ({
-    fieldId,
-    label: answer?.label || fieldId,
-    type: answer?.type || "text",
-    value: answer?.value,
-  }));
+  Object.entries(answers || {})
+    .map(([fieldId, answer], index) => ({
+      fieldId,
+      label: answer?.label || fieldId,
+      type: answer?.type || "text",
+      value: answer?.value,
+      order: getCustomFieldAnswerOrder(fieldId, answer, index),
+    }))
+    .sort((a, b) => a.order - b.order);
 
 const getCustomFieldAnswerDisplayValue = (answer) => {
   if (!answer) return "-";

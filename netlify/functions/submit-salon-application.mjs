@@ -63,6 +63,11 @@ export async function handler(event) {
       }
     }
 
+    const customFieldOrderMap = new Map(
+      (Array.isArray(salon.formSettings?.customFields) ? salon.formSettings.customFields : [])
+        .map((field, index) => [String(field?.id || ""), index])
+    );
+
     const result = await adminDb.runTransaction(async (transaction) => {
       const stableId = crypto.createHash("sha256").update(`${salonId}:${user.uid}`).digest("hex").slice(0, 40);
       const ref = adminDb.collection(applicationsPath).doc(stableId);
@@ -87,7 +92,18 @@ export async function handler(event) {
         nickname: safeNickname,
         status,
         privacyAgreed: Boolean(privacyAgreed),
-        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => [clean(key, 80), { label: clean(value?.label || key, 100), description: clean(value?.description, 500), type: clean(value?.type || "text", 30), value: sanitizeAnswerValue(value?.value), options: Array.isArray(value?.options) ? value.options.slice(0, 50).map((option) => clean(option, 300)).filter(Boolean) : [] }])),
+        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => {
+          const normalizedKey = clean(key, 80);
+          const submittedOrder = Number(value?.order);
+          return [normalizedKey, {
+            label: clean(value?.label || key, 100),
+            description: clean(value?.description, 500),
+            type: clean(value?.type || "text", 30),
+            order: Number.isFinite(submittedOrder) ? submittedOrder : customFieldOrderMap.get(String(key)) ?? 999,
+            value: sanitizeAnswerValue(value?.value),
+            options: Array.isArray(value?.options) ? value.options.slice(0, 50).map((option) => clean(option, 300)).filter(Boolean) : [],
+          }];
+        })),
         qrTokenHash: null,
         qrTokenNonce: null,
         qrTokenVersion: 0,
