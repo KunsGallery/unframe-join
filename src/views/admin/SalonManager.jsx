@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { CalendarCheck, Download, ExternalLink, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
+import { CalendarCheck, Download, ExternalLink, Music, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDateTimeLocalValue } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
 import { uploadImageToR2 } from "../../lib/uploads";
