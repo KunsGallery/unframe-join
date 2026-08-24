@@ -52,7 +52,7 @@ export async function handler(event) {
     if (fields.name?.enabled !== false && fields.name?.required !== false && !safeName) return json(400, { error: "이름을 입력해 주세요." });
     if (fields.phone?.enabled !== false && fields.phone?.required !== false && !safePhone) return json(400, { error: "연락처를 입력해 주세요." });
     if (fields.email?.enabled !== false && fields.email?.required === true && !safeEmail) return json(400, { error: "이메일을 입력해 주세요." });
-    if (fields.nickname?.enabled !== false && fields.nickname?.required === true && !safeNickname) return json(400, { error: "사용할 이름을 입력해 주세요." });
+    if (fields.nickname?.enabled !== false && fields.nickname?.required === true && !safeNickname) return json(400, { error: `${fields.nickname?.label || "관심 분야"} 항목을 입력해 주세요.` });
     if (salon.formSettings?.privacy?.enabled !== false && salon.formSettings?.privacy?.required !== false && !privacyAgreed) {
       return json(400, { error: "개인정보 수집 및 이용에 동의해 주세요." });
     }

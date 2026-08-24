@@ -1859,7 +1859,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 {isSalonApplication(app) ? (
                                   <div className="grid gap-4 text-left">
                                     <DetailItem label="신청자" value={app.applicantName || app.nickname || "-"} />
-                                    <DetailItem label="사용할 이름" value={app.nickname || "-"} />
+                                    <DetailItem label="관심 분야" value={app.nickname || "-"} />
                                     <DetailItem label="연락처" value={app.phone || "-"} />
                                     <DetailItem label="이메일" value={app.email || "-"} />
                                     <DetailItem label="SALON" value={app.salonTitle || "-"} />

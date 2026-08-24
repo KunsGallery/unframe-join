@@ -416,6 +416,14 @@ const ApplicationDetailPanel = ({ app }) => {
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  관심 분야
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-keep">
+                  {app.nickname || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
                   제출일
                 </p>
                 <p className="text-sm font-bold text-zinc-700">

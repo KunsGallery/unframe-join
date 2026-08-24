@@ -42,7 +42,7 @@ export const DEFAULT_SALON_EVENT = {
       name: { enabled: true, required: true, label: "이름" },
       phone: { enabled: true, required: true, label: "연락처" },
       email: { enabled: false, required: false, label: "이메일" },
-      nickname: { enabled: true, required: false, label: "사용할 이름" },
+      nickname: { enabled: true, required: false, label: "관심 분야" },
     },
     privacy: {
       enabled: true,
