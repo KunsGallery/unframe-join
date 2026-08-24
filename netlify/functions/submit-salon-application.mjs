@@ -4,6 +4,15 @@ import { applicationsPath, asDate, json, parseBody, salonEventsPath } from "./_l
 
 const clean = (value, max = 500) => String(value ?? "").trim().slice(0, max);
 const normalizePhone = (value) => String(value ?? "").replace(/\D/g, "").slice(0, 20);
+const isEmptyAnswer = (value) =>
+  Array.isArray(value)
+    ? value.length === 0
+    : value === undefined || value === null || value === "" || value === false;
+const sanitizeAnswerValue = (value) => {
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.slice(0, 30).map((item) => clean(item, 300)).filter(Boolean);
+  return clean(value, 1000);
+};
 
 export async function handler(event) {
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
@@ -35,7 +44,7 @@ export async function handler(event) {
     }
     for (const field of salon.formSettings?.customFields || []) {
       const answer = customFieldAnswers?.[field.id]?.value;
-      if (field.required && (answer === undefined || answer === null || answer === "" || answer === false)) {
+      if (field.required && isEmptyAnswer(answer)) {
         return json(400, { error: `${field.label || "필수 질문"} 항목을 입력해 주세요.` });
       }
     }
@@ -64,7 +73,7 @@ export async function handler(event) {
         nickname: safeNickname,
         status,
         privacyAgreed: Boolean(privacyAgreed),
-        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => [clean(key, 80), { label: clean(value?.label || key, 100), type: clean(value?.type || "text", 30), value: typeof value?.value === "boolean" ? value.value : clean(value?.value, 1000) }])),
+        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => [clean(key, 80), { label: clean(value?.label || key, 100), type: clean(value?.type || "text", 30), value: sanitizeAnswerValue(value?.value), options: Array.isArray(value?.options) ? value.options.slice(0, 50).map((option) => clean(option, 300)).filter(Boolean) : [] }])),
         qrTokenHash: null,
         qrTokenNonce: null,
         qrTokenVersion: 0,

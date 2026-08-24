@@ -125,6 +125,28 @@ export const uploadDocumentToR2 = async ({ file, folder, userId }) => {
   };
 };
 
+export const uploadImageToR2 = async ({ file, folder = "images", userId = "anonymous" }) => {
+  const error = validateImageFile(file);
+  if (error) throw new Error(error);
+
+  const signed = await getSignedUpload({
+    fileName: file.name,
+    contentType: file.type,
+    folder,
+    userId,
+  });
+
+  await uploadFileToSignedUrl({
+    file,
+    signedUrl: signed.signedUrl,
+  });
+
+  return {
+    key: signed.key,
+    url: signed.publicUrl,
+  };
+};
+
 export const sendApplicationEmails = async ({
   applicantName,
   applicantEmail,

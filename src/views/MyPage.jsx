@@ -178,6 +178,9 @@ const getCustomFieldAnswerDisplayValue = (answer) => {
   if (answer.type === "checkbox") {
     return answer.value === true ? "예" : "아니오";
   }
+  if (Array.isArray(answer.value)) {
+    return answer.value.filter(Boolean).join(", ") || "-";
+  }
 
   const text = String(answer.value ?? "").trim();
   return text || "-";

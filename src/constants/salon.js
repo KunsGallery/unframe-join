@@ -41,7 +41,6 @@ export const DEFAULT_SALON_EVENT = {
     fields: {
       name: { enabled: true, required: true, label: "이름" },
       phone: { enabled: true, required: true, label: "연락처" },
-      email: { enabled: true, required: false, label: "이메일" },
       nickname: { enabled: true, required: false, label: "사용할 이름" },
     },
     privacy: {
@@ -91,6 +90,26 @@ const mergePaymentSettings = (source) => {
   return merged;
 };
 
+const normalizeCustomFieldOption = (option, index) => ({
+  id: String(option?.id || `option-${index + 1}`).trim() || `option-${index + 1}`,
+  label: String(option?.label || option || `선택지 ${index + 1}`).trim(),
+});
+
+const normalizeSalonCustomFields = (customFields) =>
+  (Array.isArray(customFields) ? customFields : []).slice(0, 40).map((field, index) => {
+    const type = String(field?.type || "text");
+    const options = Array.isArray(field?.options)
+      ? field.options.map(normalizeCustomFieldOption).filter((option) => option.label)
+      : [];
+    return {
+      id: String(field?.id || `custom-${index + 1}`).trim() || `custom-${index + 1}`,
+      label: String(field?.label || "추가 질문").trim(),
+      type,
+      required: Boolean(field?.required),
+      ...(options.length ? { options } : {}),
+    };
+  });
+
 export const normalizeSalonEvent = (source = {}) => {
   const base = mergeDefined(DEFAULT_SALON_EVENT, source);
   const sourceForm = source.formSettings || {};
@@ -107,7 +126,7 @@ export const normalizeSalonEvent = (source = {}) => {
         ])
       ),
       privacy: mergeDefined(DEFAULT_SALON_EVENT.formSettings.privacy, sourceForm.privacy),
-      customFields: Array.isArray(sourceForm.customFields) ? sourceForm.customFields : [],
+      customFields: normalizeSalonCustomFields(sourceForm.customFields),
     },
     links: mergeDefined(DEFAULT_SALON_EVENT.links, source.links),
     paymentSettings: mergePaymentSettings(source.paymentSettings),

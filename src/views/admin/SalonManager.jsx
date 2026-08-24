@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { CalendarCheck, Download, ExternalLink, Plus, QrCode, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { CalendarCheck, Download, ExternalLink, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDateTimeLocalValue } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
+import { uploadImageToR2 } from "../../lib/uploads";
 
 const fieldClass = "mt-2 w-full rounded-xl border-2 border-zinc-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-[#004aad]";
 const labelClass = "block text-[11px] font-black text-zinc-600";
@@ -19,8 +20,16 @@ const asCsv = (items) => {
   items.forEach((item) => rows.push([item.applicantName, item.phone, item.email, item.nickname, getStatusLabel(item.status), item.qrTokenHash ? "발급" : "미발급", item.approvalNotificationStatus, item.checkedInAt ? "완료" : "미입장", item.checkedInAt?.toDate?.()?.toISOString?.() || item.checkedInAt || "", item.welcomeNotificationStatus]));
   return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
 };
+const choiceFieldTypes = new Set(["select", "radio", "checkboxes"]);
+const createCustomOption = (index) => ({ id: `option-${Date.now()}-${index}`, label: `선택지 ${index + 1}` });
+const ensureChoiceOptions = (field) => {
+  const options = Array.isArray(field.options) ? field.options : [];
+  return options.length ? options : [createCustomOption(0), createCustomOption(1)];
+};
 
 const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
+  const [posterUploading, setPosterUploading] = useState(false);
+  const [posterUploadError, setPosterUploadError] = useState("");
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const nested = (group, key, value) => setDraft((current) => ({ ...current, [group]: { ...current[group], [key]: value } }));
   const notification = (key, value) => nested("notificationSettings", key, value);
@@ -30,13 +39,51 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
   const formField = (field, key, value) => setDraft((current) => ({ ...current, formSettings: { ...current.formSettings, fields: { ...current.formSettings.fields, [field]: { ...current.formSettings.fields[field], [key]: value } } } }));
   const privacy = (key, value) => setDraft((current) => ({ ...current, formSettings: { ...current.formSettings, privacy: { ...current.formSettings.privacy, [key]: value } } }));
   const setCustomFields = (customFields) => setDraft((current) => ({ ...current, formSettings: { ...current.formSettings, customFields } }));
+  const updateCustomField = (index, patch) => setCustomFields((draft.formSettings.customFields || []).map((item, i) => i === index ? { ...item, ...patch } : item));
+  const updateCustomOption = (fieldIndex, optionIndex, label) => updateCustomField(fieldIndex, {
+    options: ensureChoiceOptions(draft.formSettings.customFields[fieldIndex]).map((option, i) => i === optionIndex ? { ...option, label } : option),
+  });
+  const addCustomOption = (fieldIndex) => {
+    const field = draft.formSettings.customFields[fieldIndex];
+    const options = ensureChoiceOptions(field);
+    updateCustomField(fieldIndex, { options: [...options, createCustomOption(options.length)] });
+  };
+  const removeCustomOption = (fieldIndex, optionIndex) => {
+    const field = draft.formSettings.customFields[fieldIndex];
+    const options = ensureChoiceOptions(field).filter((_, i) => i !== optionIndex);
+    updateCustomField(fieldIndex, { options: options.length ? options : [createCustomOption(0)] });
+  };
+  const uploadPoster = async (file) => {
+    if (!file) return;
+    setPosterUploading(true);
+    setPosterUploadError("");
+    try {
+      const result = await uploadImageToR2({ file, folder: "salon-posters", userId: draft.slug || draft.id || "salon" });
+      update("posterImageUrl", result.url);
+    } catch (error) {
+      setPosterUploadError(error.message || "포스터 업로드에 실패했습니다.");
+    } finally {
+      setPosterUploading(false);
+    }
+  };
   return <div className="rounded-[28px] border-2 border-zinc-900 bg-white p-5 shadow-[4px_4px_0px_#000] md:p-7">
     <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#004aad]">Event editor</p><h3 className="mt-1 text-2xl font-black">SALON 행사 설정</h3></div>{draft.id && <button type="button" onClick={onDelete} className="rounded-full border border-red-200 p-3 text-red-600"><Trash2 size={17} /></button>}</div>
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <label className={labelClass}>제목 *<input className={fieldClass} value={draft.title} onChange={(e) => update("title", e.target.value)} /></label>
       <label className={labelClass}>공유 slug *<input className={fieldClass} value={draft.slug} onChange={(e) => update("slug", e.target.value)} placeholder="july-salon" /></label>
       <label className={labelClass}>부제<input className={fieldClass} value={draft.subtitle} onChange={(e) => update("subtitle", e.target.value)} /></label>
-      <label className={labelClass}>포스터 이미지 URL<input className={fieldClass} value={draft.posterImageUrl} onChange={(e) => update("posterImageUrl", e.target.value)} /></label>
+      <div className={labelClass}>
+        포스터 이미지
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-zinc-900 bg-white px-4 py-2.5 text-xs font-black text-zinc-900 shadow-[2px_2px_0px_#000]">
+            <Upload size={14} /> {posterUploading ? "업로드 중..." : "이미지 업로드"}
+            <input type="file" accept="image/*" disabled={posterUploading} onChange={(e) => uploadPoster(e.target.files?.[0])} className="sr-only" />
+          </label>
+          {draft.posterImageUrl && <a href={draft.posterImageUrl} target="_blank" rel="noreferrer" className="text-xs font-black text-[#004aad] underline">현재 포스터 보기</a>}
+        </div>
+        <input className={fieldClass} value={draft.posterImageUrl} onChange={(e) => update("posterImageUrl", e.target.value)} placeholder="업로드하면 URL이 자동 입력됩니다." />
+        {posterUploadError && <p className="mt-2 text-xs font-bold text-red-600">{posterUploadError}</p>}
+      </div>
       <label className={labelClass}>신청 버튼 문구<input className={fieldClass} value={draft.applicationButtonText} onChange={(e) => update("applicationButtonText", e.target.value)} /></label>
       <label className={`${labelClass} sm:col-span-2`}>소개<textarea className={`${fieldClass} min-h-28`} value={draft.description} onChange={(e) => update("description", e.target.value)} /></label>
       <label className={labelClass}>상태<select className={fieldClass} value={draft.status} onChange={(e) => update("status", e.target.value)}><option value="draft">초안</option><option value="open">모집 중</option><option value="closed">마감</option><option value="archived">보관</option></select></label>
@@ -73,7 +120,7 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
         <label className={`${labelClass} sm:col-span-2`}>추가 안내<textarea className={`${fieldClass} min-h-20`} value={draft.paymentSettings.note} onChange={(e) => payment("note", e.target.value)} /></label>
       </div>
     </div>
-    <div className="mt-7 rounded-[22px] bg-zinc-100 p-4"><div className="flex items-center justify-between"><h4 className="font-black">신청 양식 필드</h4><button type="button" onClick={() => setCustomFields([...(draft.formSettings.customFields || []), { id: `custom-${Date.now()}`, label: "추가 질문", type: "text", required: false }])} className="rounded-full bg-white px-3 py-2 text-xs font-black"><Plus size={13} className="mr-1 inline" />질문 추가</button></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{Object.entries(draft.formSettings.fields).map(([key, field]) => <div key={key} className="rounded-2xl bg-white p-3"><input value={field.label} onChange={(e) => formField(key, "label", e.target.value)} className="w-full border-b pb-2 text-sm font-black outline-none" /><div className="mt-3 flex gap-4 text-xs font-bold"><label><input type="checkbox" checked={field.enabled} onChange={(e) => formField(key, "enabled", e.target.checked)} /> 사용</label><label><input type="checkbox" checked={field.required} onChange={(e) => formField(key, "required", e.target.checked)} /> 필수</label></div></div>)}</div>{(draft.formSettings.customFields || []).map((field, index) => <div key={field.id} className="mt-3 grid gap-2 rounded-2xl bg-white p-3 sm:grid-cols-[1fr_0.5fr_auto_auto]"><input value={field.label} onChange={(e) => setCustomFields(draft.formSettings.customFields.map((item, i) => i === index ? { ...item, label: e.target.value } : item))} className="rounded-xl border px-3 py-2 text-sm font-bold" /><select value={field.type} onChange={(e) => setCustomFields(draft.formSettings.customFields.map((item, i) => i === index ? { ...item, type: e.target.value } : item))} className="rounded-xl border px-3 py-2 text-sm font-bold"><option value="text">한 줄</option><option value="textarea">긴 글</option><option value="checkbox">체크</option></select><label className="self-center text-xs font-bold"><input type="checkbox" checked={field.required} onChange={(e) => setCustomFields(draft.formSettings.customFields.map((item, i) => i === index ? { ...item, required: e.target.checked } : item))} /> 필수</label><button type="button" onClick={() => setCustomFields(draft.formSettings.customFields.filter((_, i) => i !== index))} className="text-red-600"><Trash2 size={16} /></button></div>)}
+    <div className="mt-7 rounded-[22px] bg-zinc-100 p-4"><div className="flex items-center justify-between"><h4 className="font-black">신청 양식 필드</h4><button type="button" onClick={() => setCustomFields([...(draft.formSettings.customFields || []), { id: `custom-${Date.now()}`, label: "추가 질문", type: "text", required: false }])} className="rounded-full bg-white px-3 py-2 text-xs font-black"><Plus size={13} className="mr-1 inline" />질문 추가</button></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{Object.entries(draft.formSettings.fields).map(([key, field]) => <div key={key} className="rounded-2xl bg-white p-3"><input value={field.label} onChange={(e) => formField(key, "label", e.target.value)} className="w-full border-b pb-2 text-sm font-black outline-none" /><div className="mt-3 flex gap-4 text-xs font-bold"><label><input type="checkbox" checked={field.enabled} onChange={(e) => formField(key, "enabled", e.target.checked)} /> 사용</label><label><input type="checkbox" checked={field.required} onChange={(e) => formField(key, "required", e.target.checked)} /> 필수</label></div></div>)}</div>{(draft.formSettings.customFields || []).map((field, index) => <div key={field.id} className="mt-3 rounded-2xl bg-white p-3"><div className="grid gap-2 sm:grid-cols-[1fr_0.5fr_auto_auto]"><input value={field.label} onChange={(e) => updateCustomField(index, { label: e.target.value })} className="rounded-xl border px-3 py-2 text-sm font-bold" /><select value={field.type} onChange={(e) => { const nextType = e.target.value; updateCustomField(index, { type: nextType, ...(choiceFieldTypes.has(nextType) ? { options: ensureChoiceOptions(field) } : {}) }); }} className="rounded-xl border px-3 py-2 text-sm font-bold"><option value="text">단답형</option><option value="textarea">서술형</option><option value="select">드롭다운</option><option value="radio">객관식</option><option value="checkboxes">체크박스</option><option value="checkbox">동의 체크</option></select><label className="self-center text-xs font-bold"><input type="checkbox" checked={field.required} onChange={(e) => updateCustomField(index, { required: e.target.checked })} /> 필수</label><button type="button" onClick={() => setCustomFields(draft.formSettings.customFields.filter((_, i) => i !== index))} className="text-red-600"><Trash2 size={16} /></button></div>{choiceFieldTypes.has(field.type) && <div className="mt-3 rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-3"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Options</p><div className="mt-2 space-y-2">{ensureChoiceOptions(field).map((option, optionIndex) => <div key={option.id || optionIndex} className="flex items-center gap-2"><input value={option.label} onChange={(e) => updateCustomOption(index, optionIndex, e.target.value)} className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-bold" /><button type="button" onClick={() => removeCustomOption(index, optionIndex)} className="rounded-full border border-red-100 bg-white p-2 text-red-600"><Trash2 size={13} /></button></div>)}</div><button type="button" onClick={() => addCustomOption(index)} className="mt-3 rounded-full bg-white px-3 py-2 text-xs font-black"><Plus size={13} className="mr-1 inline" />선택지 추가</button></div>}</div>)}
       <div className="mt-5 grid gap-3 sm:grid-cols-2"><label className={labelClass}>개인정보 동의 제목<input className={fieldClass} value={draft.formSettings.privacy.title} onChange={(e) => privacy("title", e.target.value)} /></label><label className={labelClass}>체크박스 문구<input className={fieldClass} value={draft.formSettings.privacy.checkboxLabel} onChange={(e) => privacy("checkboxLabel", e.target.value)} /></label><label className={`${labelClass} sm:col-span-2`}>개인정보 안내문<textarea className={`${fieldClass} min-h-20`} value={draft.formSettings.privacy.body} onChange={(e) => privacy("body", e.target.value)} /></label><label className="flex items-center gap-2 text-xs font-black"><input type="checkbox" checked={draft.formSettings.privacy.enabled} onChange={(e) => privacy("enabled", e.target.checked)} /> 개인정보 동의 사용</label><label className="flex items-center gap-2 text-xs font-black"><input type="checkbox" checked={draft.formSettings.privacy.required} onChange={(e) => privacy("required", e.target.checked)} /> 동의 필수</label></div>
     </div>
     {((draft.notificationSettings.approvalEnabled && !draft.notificationSettings.approvalTemplateId) || (draft.notificationSettings.welcomeEnabled && !draft.notificationSettings.welcomeTemplateId)) && <p className="mt-5 rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-800">템플릿 ID가 비어 있습니다. 서버 환경변수로 설정하지 않았다면 알림톡이 실패합니다.</p>}
