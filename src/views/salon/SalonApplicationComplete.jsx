@@ -49,20 +49,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
     [payment.amount, payment.bankName, payment.accountNumber, payment.accountHolder].some(hasText);
   const formattedAmount = formatKrwAmount(payment.amount);
 
-  const copyText = useMemo(
-    () =>
-      [
-        `${salonTitle} 참여비 입금 안내`,
-        hasText(formattedAmount) ? `금액: ${formattedAmount}` : "",
-        hasText(payment.bankName) ? `은행: ${payment.bankName}` : "",
-        hasText(payment.accountNumber) ? `계좌: ${payment.accountNumber}` : "",
-        hasText(payment.accountHolder) ? `예금주: ${payment.accountHolder}` : "",
-        hasText(payment.depositorGuide) ? payment.depositorGuide : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    [formattedAmount, payment, salonTitle]
-  );
+  const copyText = hasText(payment.accountNumber) ? payment.accountNumber.trim() : "";
 
   const copyPaymentInfo = async () => {
     if (!copyText) return;
@@ -119,7 +106,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
                   ? "복사 완료"
                   : copyState === "failed"
                   ? "복사 실패"
-                  : "입금 정보 복사"}
+                  : "계좌번호 복사"}
               </button>
             ) : null}
           </div>
