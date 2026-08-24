@@ -11,6 +11,20 @@ const isEmptyAnswer = (value) =>
 const sanitizeAnswerValue = (value) => {
   if (typeof value === "boolean") return value;
   if (Array.isArray(value)) return value.slice(0, 30).map((item) => clean(item, 300)).filter(Boolean);
+  if (value && typeof value === "object") {
+    const selected = value.selected && typeof value.selected === "object" ? value.selected : {};
+    return {
+      query: clean(value.query, 120),
+      manual: clean(value.manual, 500),
+      selected: selected.videoId ? {
+        videoId: clean(selected.videoId, 80),
+        title: clean(selected.title, 300),
+        channelTitle: clean(selected.channelTitle, 200),
+        thumbnailUrl: clean(selected.thumbnailUrl, 500),
+        url: clean(selected.url, 500),
+      } : null,
+    };
+  }
   return clean(value, 1000);
 };
 
@@ -73,7 +87,7 @@ export async function handler(event) {
         nickname: safeNickname,
         status,
         privacyAgreed: Boolean(privacyAgreed),
-        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => [clean(key, 80), { label: clean(value?.label || key, 100), type: clean(value?.type || "text", 30), value: sanitizeAnswerValue(value?.value), options: Array.isArray(value?.options) ? value.options.slice(0, 50).map((option) => clean(option, 300)).filter(Boolean) : [] }])),
+        customFieldAnswers: Object.fromEntries(Object.entries(customFieldAnswers || {}).slice(0, 30).map(([key, value]) => [clean(key, 80), { label: clean(value?.label || key, 100), description: clean(value?.description, 500), type: clean(value?.type || "text", 30), value: sanitizeAnswerValue(value?.value), options: Array.isArray(value?.options) ? value.options.slice(0, 50).map((option) => clean(option, 300)).filter(Boolean) : [] }])),
         qrTokenHash: null,
         qrTokenNonce: null,
         qrTokenVersion: 0,

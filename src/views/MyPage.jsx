@@ -181,6 +181,10 @@ const getCustomFieldAnswerDisplayValue = (answer) => {
   if (Array.isArray(answer.value)) {
     return answer.value.filter(Boolean).join(", ") || "-";
   }
+  if (answer.value && typeof answer.value === "object") {
+    const selected = answer.value.selected;
+    return selected?.title || answer.value.manual || "-";
+  }
 
   const text = String(answer.value ?? "").trim();
   return text || "-";

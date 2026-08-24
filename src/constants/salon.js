@@ -104,6 +104,7 @@ const normalizeSalonCustomFields = (customFields) =>
     return {
       id: String(field?.id || `custom-${index + 1}`).trim() || `custom-${index + 1}`,
       label: String(field?.label || "추가 질문").trim(),
+      description: String(field?.description || "").trim(),
       type,
       required: Boolean(field?.required),
       ...(options.length ? { options } : {}),
