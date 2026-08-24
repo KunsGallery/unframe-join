@@ -18,6 +18,9 @@ const formatKrwAmount = (value) => {
   return `${Number(digits).toLocaleString("ko-KR")}원`;
 };
 
+const formatAccountCopyText = (payment) =>
+  [payment?.bankName, payment?.accountNumber].filter(hasText).map((value) => value.trim()).join(" ");
+
 const PaymentLine = ({ label, value, strong = false }) => {
   if (!hasText(value)) return null;
 
@@ -49,7 +52,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
     [payment.amount, payment.bankName, payment.accountNumber, payment.accountHolder].some(hasText);
   const formattedAmount = formatKrwAmount(payment.amount);
 
-  const copyText = hasText(payment.accountNumber) ? payment.accountNumber.trim() : "";
+  const copyText = formatAccountCopyText(payment);
 
   const copyPaymentInfo = async () => {
     if (!copyText) return;
@@ -106,7 +109,7 @@ const SalonApplicationComplete = ({ context, onHome }) => {
                   ? "복사 완료"
                   : copyState === "failed"
                   ? "복사 실패"
-                  : "계좌번호 복사"}
+                  : "은행/계좌 복사"}
               </button>
             ) : null}
           </div>
