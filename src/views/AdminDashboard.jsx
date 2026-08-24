@@ -423,6 +423,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [activeDetailTool, setActiveDetailTool] = useState({});
   const [activeAdminTab, setActiveAdminTab] = useState("applications");
 
   const [manualBlock, setManualBlock] = useState(DEFAULT_MANUAL_BLOCK);
@@ -438,6 +439,11 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [guideDrafts, setGuideDrafts] = useState({});
   const [requestDrafts, setRequestDrafts] = useState({});
+  const setDetailTool = (applicationId, tool) =>
+    setActiveDetailTool((current) => ({
+      ...current,
+      [applicationId]: current[applicationId] === tool ? "" : tool,
+    }));
 
   const stats = useMemo(
     () => ({
@@ -1641,6 +1647,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                   const reviewDraft = getReviewDraft(app);
                   const guideDraft = getGuideDraft(app);
                   const requestDraft = getRequestDraft(app);
+                  const activeTool = activeDetailTool[app.id] || "";
 
                   return (
                     <div
@@ -1788,12 +1795,8 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
                                 <button
                                   onClick={() => {
-                                    const message = (requestDraft.requestMessage || "").trim();
-                                    if (!message) {
-                                      alert("추가로 요청할 자료 내용을 먼저 입력해 주세요.");
-                                      return;
-                                    }
-                                    handleAction(app, date, "additional_requested", message);
+                                    setExpandedId(app.id);
+                                    setDetailTool(app.id, "request");
                                   }}
                                   className="w-full py-5 border border-amber-200 text-amber-700 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-amber-50 transition-all text-center"
                                 >
@@ -1801,8 +1804,22 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 </button>
 
                                 <button
+                                  onClick={() => {
+                                    setExpandedId(app.id);
+                                    setDetailTool(app.id, "guide");
+                                  }}
+                                  className="w-full py-5 border border-blue-100 text-[#004aad] rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-blue-50 transition-all text-center"
+                                >
+                                  Guide
+                                </button>
+
+                                <button
                                   disabled={app.status === "rejected"}
-                                  onClick={() => setRejectId(app.id)}
+                                  onClick={() => {
+                                    setExpandedId(app.id);
+                                    setDetailTool(app.id, "review");
+                                    setRejectId(app.id);
+                                  }}
                                   className="w-full py-5 border border-red-100 text-red-400 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-red-50 transition-all text-center"
                                 >
                                   Reject
@@ -1822,7 +1839,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
                       {expandedId === app.id && (
                         <div className="bg-zinc-50 border-t border-gray-100 p-8 md:p-16 animate-in slide-in-from-top-4 duration-500 text-left space-y-10">
-                          <div className="grid md:grid-cols-2 gap-20 text-left">
+                          <div className={`grid text-left ${isSalonApplication(app) ? "gap-10" : "md:grid-cols-2 gap-20"}`}>
                             <div className="space-y-12 text-left">
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
@@ -1872,20 +1889,20 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  작업 소개
+                                  {isSalonApplication(app) ? "SALON 신청 답변" : "작업 소개"}
                                 </h5>
                                 {isSalonApplication(app) ? (
-                                  <div className="rounded-2xl border border-zinc-100 bg-white p-5">
+                                  <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
                                     <p className="text-sm font-bold leading-relaxed text-zinc-600 break-keep">
                                       SALON 참가 신청입니다. 신청 상태 변경, 확정 알림톡, QR 발급과 체크인은
                                       살롱 관리 탭에서 처리해 주세요.
                                     </p>
                                     {getCustomFieldAnswersList(app.customFieldAnswers).length > 0 ? (
-                                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                                      <div className="mt-6 grid gap-4">
                                         {getCustomFieldAnswersList(app.customFieldAnswers).map((answer) => (
                                           <div
                                             key={`${app.id}-${answer.fieldId}`}
-                                            className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-4"
+                                            className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-5 py-4"
                                           >
                                             <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
                                               {answer.label}
@@ -1910,7 +1927,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                               </div>
                             </div>
 
-                            <div className="space-y-12 text-left">
+                            {!isSalonApplication(app) ? <div className="space-y-12 text-left">
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
                                   포트폴리오 / 외부 링크
@@ -2056,7 +2073,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   </p>
                                 </div>
                               ) : null}
-                            </div>
+                            </div> : null}
                           </div>
 
                           <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
@@ -2101,8 +2118,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                             </div>
                           </div>
 
-                          <div className="grid lg:grid-cols-3 gap-8">
-                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                          {!isSalonApplication(app) && activeTool ? (
+                          <div className="max-w-5xl">
+                            {activeTool === "review" ? <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
                               <div className="flex items-center gap-2 mb-5">
                                 <NotebookPen size={16} />
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
@@ -2161,9 +2179,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   검토 결과 저장
                                 </button>
                               </div>
-                            </div>
+                            </div> : null}
 
-                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                            {activeTool === "guide" ? <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
                               <div className="flex items-center gap-2 mb-5">
                                 <Mail size={16} />
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
@@ -2228,9 +2246,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   가이드 저장
                                 </button>
                               </div>
-                            </div>
+                            </div> : null}
 
-                            <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                            {activeTool === "request" ? <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
                               <div className="flex items-center gap-2 mb-5">
                                 <Mail size={16} />
                                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-zinc-300">
@@ -2295,8 +2313,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   </button>
                                 </div>
                               </div>
-                            </div>
+                            </div> : null}
                           </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
