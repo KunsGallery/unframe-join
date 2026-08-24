@@ -84,6 +84,31 @@ const getCustomFieldAnswerDisplayValue = (answer) => {
   return text || "-";
 };
 
+const getMusicAnswerLink = (answer) => {
+  if (!answer?.value || typeof answer.value !== "object") return "";
+  return answer.value.selected?.url || answer.value.manual || "";
+};
+
+const renderCustomFieldAnswerValue = (answer) => {
+  const displayValue = getCustomFieldAnswerDisplayValue(answer);
+  const link = answer?.type === "music" ? getMusicAnswerLink(answer) : "";
+  if (!link) return displayValue;
+  return (
+    <>
+      <span className="block">{displayValue}</span>
+      <a
+        href={link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#004aad] px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white"
+      >
+        <Globe size={13} />
+        YouTube에서 열기
+      </a>
+    </>
+  );
+};
+
 const DashboardPanel = ({ children, className = "" }) => (
   <section
     className={`rounded-[28px] border-2 border-zinc-900 bg-white p-4 shadow-[3px_3px_0px_#000] md:p-6 ${className}`}
@@ -1866,7 +1891,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                               {answer.label}
                                             </p>
                                             <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-                                              {getCustomFieldAnswerDisplayValue(answer)}
+                                              {renderCustomFieldAnswerValue(answer)}
                                             </p>
                                           </div>
                                         ))}
@@ -1935,7 +1960,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                                 {answer.label}
                                               </p>
                                               <p className="mt-2 whitespace-pre-line text-sm font-bold leading-relaxed text-zinc-700 break-keep">
-                                                {getCustomFieldAnswerDisplayValue(answer)}
+                                                {renderCustomFieldAnswerValue(answer)}
                                               </p>
                                               <p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-400">
                                                 {answer.type}
