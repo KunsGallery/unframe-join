@@ -47,7 +47,7 @@ const SalonLanding = ({ onBack, onOpen }) => {
             {visibleEvents.map((event) => {
               const availability = getSalonAvailability(event);
               return <article key={event.id} className="overflow-hidden rounded-[32px] border-2 border-zinc-900 bg-white shadow-[5px_5px_0px_#000]">
-                {event.posterImageUrl ? <img src={event.posterImageUrl} alt={event.title} className="h-56 w-full object-cover" /> : <div className="flex h-44 items-center justify-center bg-[#004aad] text-white"><Users size={54} /></div>}
+                {event.posterImageUrl ? <div className="aspect-video w-full bg-[#f6f4ee]"><img src={event.posterImageUrl} alt={event.title} className="h-full w-full object-contain" /></div> : <div className="flex aspect-video w-full items-center justify-center bg-[#004aad] text-white"><Users size={54} /></div>}
                 <div className="p-6">
                   <div className="flex flex-wrap gap-2"><span className={`rounded-full px-3 py-1 text-[10px] font-black ${availability.available ? "bg-[#AAD004]" : "bg-zinc-200"}`}>{availability.available ? "신청 가능" : "접수 마감"}</span>{event.isFeatured && <span className="rounded-full bg-[#004aad] px-3 py-1 text-[10px] font-black text-white">FEATURED</span>}</div>
                   <h3 className="mt-4 text-2xl font-black tracking-tight break-keep">{event.title || "제목 없는 SALON"}</h3>
