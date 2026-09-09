@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { CalendarCheck, Download, ExternalLink, Music, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
-import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDateTimeLocalValue } from "../../constants/salon";
+import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDate, toDateTimeLocalValue } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
 import { uploadImageToR2 } from "../../lib/uploads";
 
@@ -120,7 +120,7 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
       <label className={`${labelClass} sm:col-span-2`}>소개<textarea className={`${fieldClass} min-h-28`} value={draft.description} onChange={(e) => update("description", e.target.value)} /></label>
       <label className={labelClass}>상태<select className={fieldClass} value={draft.status} onChange={(e) => update("status", e.target.value)}><option value="draft">초안</option><option value="open">모집 중</option><option value="closed">마감</option><option value="archived">보관</option></select></label>
       <label className={labelClass}>정원 (0=제한 없음)<input type="number" min="0" className={fieldClass} value={draft.capacity} onChange={(e) => update("capacity", Number(e.target.value || 0))} /></label>
-      {[['applicationStartAt','모집 시작'],['applicationEndAt','모집 종료'],['eventStartAt','행사 시작'],['eventEndAt','행사 종료']].map(([key,label]) => <label key={key} className={labelClass}>{label}<input type="datetime-local" className={fieldClass} value={toDateTimeLocalValue(draft[key])} onChange={(e) => update(key, e.target.value)} /></label>)}
+      {[['applicationStartAt','모집 시작'],['applicationEndAt','모집 종료'],['eventStartAt','살롱 날짜·시간 *'],['eventEndAt','행사 종료']].map(([key,label]) => <label key={key} className={labelClass}>{label}<input type="datetime-local" required={key === "eventStartAt"} className={fieldClass} value={toDateTimeLocalValue(draft[key])} onChange={(e) => update(key, e.target.value)} />{key === "eventStartAt" && <span className="mt-1 block text-[10px] font-bold text-zinc-400">참가 확정 알림톡에 이 날짜가 표시됩니다.</span>}</label>)}
       <label className={labelClass}>장소명<input className={fieldClass} value={draft.venueName} onChange={(e) => update("venueName", e.target.value)} /></label><label className={labelClass}>주소<input className={fieldClass} value={draft.venueAddress} onChange={(e) => update("venueAddress", e.target.value)} /></label>
       <label className={labelClass}>오늘의 프로그램 URL<input className={fieldClass} value={draft.links.programUrl} onChange={(e) => links("programUrl", e.target.value)} /></label><label className={labelClass}>온라인 방명록 URL<input className={fieldClass} value={draft.links.guestbookUrl} onChange={(e) => links("guestbookUrl", e.target.value)} /></label><label className={labelClass}>인스타그램 URL<input className={fieldClass} value={draft.links.instagramUrl} onChange={(e) => links("instagramUrl", e.target.value)} /></label>
       <label className={labelClass}>QR 만료 시각<input type="datetime-local" className={fieldClass} value={toDateTimeLocalValue(draft.checkInSettings.qrExpiresAt)} onChange={(e) => checkIn("qrExpiresAt", e.target.value)} /></label>
@@ -166,7 +166,34 @@ const SalonManager = ({ db, appId, applications }) => {
   useEffect(() => onSnapshot(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION), (snapshot) => setEvents(snapshot.docs.map((item) => normalizeSalonEvent({ id: item.id, ...item.data() })))), [db, appId]);
   const choose = (event) => { setSelectedId(event.id); setDraft(normalizeSalonEvent(event)); };
   const createNew = () => { setSelectedId(""); setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT)); };
-  const save = async () => { setSaving(true); try { const id = draft.id || doc(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION)).id; const current = events.find((item) => item.id === id); await setDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, id), { ...draft, id, slug: toSlug(draft.slug || draft.title), createdAt: current?.createdAt || serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true }); setSelectedId(id); setDraft((v) => ({ ...v, id })); } catch (error) { alert(error.message); } finally { setSaving(false); } };
+  const save = async () => {
+    if (!toDate(draft.eventStartAt)) {
+      alert("살롱 날짜·시간을 입력해 주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const id = draft.id || doc(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION)).id;
+      const current = events.find((item) => item.id === id);
+      const dateFields = ["applicationStartAt", "applicationEndAt", "eventStartAt", "eventEndAt"];
+      const dateValues = Object.fromEntries(dateFields.map((key) => [key, draft[key] ? toDate(draft[key]) : null]));
+      const checkInSettings = {
+        ...draft.checkInSettings,
+        ...Object.fromEntries(["checkInStartAt", "checkInEndAt", "qrExpiresAt"].map((key) => [key, draft.checkInSettings?.[key] ? toDate(draft.checkInSettings[key]) : null])),
+      };
+      await setDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, id), {
+        ...draft,
+        ...dateValues,
+        checkInSettings,
+        id,
+        slug: toSlug(draft.slug || draft.title),
+        createdAt: current?.createdAt || serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      setSelectedId(id);
+      setDraft((v) => ({ ...v, id, ...dateValues, checkInSettings }));
+    } catch (error) { alert(error.message); } finally { setSaving(false); }
+  };
   const remove = async () => { if (!draft.id || !window.confirm("이 SALON 행사를 삭제하시겠습니까? 참가 신청 문서는 삭제되지 않습니다.")) return; await deleteDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, draft.id)); createNew(); };
   const selectedEvent = events.find((event) => event.id === selectedId) || (draft.id ? draft : null);
   const participants = useMemo(() => (applications || []).filter((item) => item.trackType === "salon" && (!selectedEvent || item.salonId === selectedEvent.id)).filter((item) => filter === "all" || item.status === filter).filter((item) => `${item.applicantName} ${item.phone}`.toLowerCase().includes(search.toLowerCase())), [applications, selectedEvent, filter, search]);
