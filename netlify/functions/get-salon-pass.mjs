@@ -30,7 +30,7 @@ export async function handler(event) {
     return json(200, {
       valid: true,
       salonTitle: salon.title || application.salonTitle || "UNFRAME SALON",
-      applicantDisplayName: application.nickname || application.applicantName || "참가자",
+      applicantDisplayName: application.applicantName || application.nickname || "참가자",
       eventDateTime: formatDateParts(salon.eventStartAt).eventDateTime,
       venueName: salon.venueName || "",
       qrPayload: `${getBaseUrl()}/salon/check-in-token?token=${encodeURIComponent(token)}`,
