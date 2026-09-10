@@ -35,6 +35,7 @@ export const DEFAULT_SALON_EVENT = {
   eventEndAt: "",
   venueName: "",
   venueAddress: "",
+  groupChatUrl: "",
   capacity: 0,
   applicationButtonText: "참가 신청",
   formSettings: {

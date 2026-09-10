@@ -69,6 +69,14 @@ const replaceMessageVariables = (message, variables) =>
     String(message || "")
   );
 
+// Solapi's button template uses https://#{openChatCode}, so only the Kakao code
+// should be sent even when the admin pasted a full URL or a markdown link.
+export const extractOpenChatCode = (value) => {
+  const raw = String(value || "").trim();
+  const match = raw.match(/open\.kakao\.com\/o\/([A-Za-z0-9_-]+)/i);
+  return match?.[1] || raw.replace(/^\/+|\/+$/g, "");
+};
+
 const buildAuthHeaders = ({ apiKey, apiSecret }) => {
   const date = new Date().toISOString();
   const salt = crypto.randomUUID();
@@ -102,7 +110,10 @@ export const sendSalonAlimtalk = async ({ kind, application, salon, passUrl = ""
     ...dateParts,
     venueName: salon.venueName || "",
     venueAddress: salon.venueAddress || "",
-    passUrl,
+    // The Solapi button is configured as https://#{passUrl}.
+    passUrl: String(passUrl || "").replace(/^https?:\/\//i, ""),
+    passUrlFull: passUrl,
+    openChatCode: extractOpenChatCode(salon.groupChatUrl),
     checkedInAt: formatDateParts(checkedInAt).eventDateTime,
     programUrl: salon.links?.programUrl || "",
     guestbookUrl: salon.links?.guestbookUrl || "",
