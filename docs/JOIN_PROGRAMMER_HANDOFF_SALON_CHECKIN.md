@@ -117,6 +117,8 @@ Salon은 `ok: true`와 `status: checked_in`을 확인한 뒤 자체 출석 명�
 
 이미 체크인된 요청도 성공적인 상태 동기화로 처리한다. 단, 환영 알림톡은 다시 발송하지 않는다.
 
+`notificationStatus`는 기존 발송 상태를 그대로 반환하며, 이전 발송이 실패했다면 `notificationError`도 함께 반환할 수 있다.
+
 ### 알림톡만 실패한 경우
 
 `notificationStatus`가 `failed`여도 체크인 자체는 성공이다.
@@ -125,7 +127,8 @@ Salon은 `ok: true`와 `status: checked_in`을 확인한 뒤 자체 출석 명�
 {
   "ok": true,
   "status": "checked_in",
-  "notificationStatus": "failed"
+  "notificationStatus": "failed",
+  "notificationError": "알림톡 발송 실패 사유"
 }
 ```
 

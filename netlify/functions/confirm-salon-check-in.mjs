@@ -14,6 +14,16 @@ import {
 
 const getHeader = (event, name) => event.headers?.[name] || event.headers?.[name.toLowerCase()] || "";
 
+const extractToken = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(raw).searchParams.get("token") || raw;
+  } catch {
+    return raw;
+  }
+};
+
 const verifySalonIntegration = (event) => {
   const expected = String(process.env.SALON_CHECKIN_SHARED_SECRET || "");
   const received = getHeader(event, "x-salon-checkin-secret");
@@ -37,7 +47,7 @@ export async function handler(event) {
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
   const body = parseBody(event);
   const salonId = String(body.salonId || "").trim();
-  const token = String(body.token || body.qrPayload || "").trim();
+  const token = extractToken(body.token || body.qrPayload);
 
   try {
     verifySalonIntegration(event);
@@ -102,6 +112,8 @@ export async function handler(event) {
         status: "already_checked_in",
         message: "이미 입장 처리된 참가자입니다.",
         checkedInAt: result.application.checkedInAt,
+        notificationStatus: result.application.welcomeNotificationStatus || "unknown",
+        ...(result.application.welcomeNotificationError ? { notificationError: result.application.welcomeNotificationError } : {}),
         participant,
       });
     }
@@ -114,7 +126,9 @@ export async function handler(event) {
         await appRef.update({ welcomeNotificationStatus: "sent", welcomeNotificationSentAt: new Date(), welcomeNotificationError: null, updatedAt: new Date() });
       } catch (error) {
         notificationStatus = "failed";
-        await appRef.update({ welcomeNotificationStatus: "failed", welcomeNotificationError: String(error.message || "알림톡 발송 실패").slice(0, 500), updatedAt: new Date() });
+        const notificationError = String(error.message || "알림톡 발송 실패").slice(0, 500);
+        await appRef.update({ welcomeNotificationStatus: "failed", welcomeNotificationError: notificationError, updatedAt: new Date() });
+        result.notificationError = notificationError;
       }
     } else {
       await appRef.update({ welcomeNotificationStatus: "disabled", updatedAt: new Date() });
@@ -128,6 +142,7 @@ export async function handler(event) {
       message: "입장이 확인되었습니다.",
       checkedInAt: result.application.checkedInAt,
       notificationStatus,
+      ...(result.notificationError ? { notificationError: result.notificationError } : {}),
       participant,
     });
   } catch (error) {
@@ -135,4 +150,3 @@ export async function handler(event) {
     return json(error.statusCode || 500, { error: error.message || "입장 확인에 실패했습니다.", result: error.result || "error" });
   }
 }
-
