@@ -119,6 +119,8 @@ Salon은 `ok: true`와 `status: checked_in`을 확인한 뒤 자체 출석 명�
 
 `notificationStatus`는 기존 발송 상태를 그대로 반환하며, 이전 발송이 실패했다면 `notificationError`도 함께 반환할 수 있다.
 
+최초 체크인 성공 응답은 현장 응답 속도를 위해 알림톡 발송 전에 반환될 수 있다. 이때 `notificationStatus`는 `pending`이며, Salon은 `ok: true`를 기준으로 즉시 입장 완료 처리한다. 최종 알림톡 발송 결과는 Join 신청 문서의 `welcomeNotificationStatus`와 관리자 화면에서 확인한다.
+
 ### 알림톡만 실패한 경우
 
 `notificationStatus`가 `failed`여도 체크인 자체는 성공이다.

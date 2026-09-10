@@ -43,7 +43,7 @@ const logAttempt = async (data) => {
   }
 };
 
-export async function handler(event) {
+export async function handler(event, context) {
   if (event.httpMethod !== "POST") return json(405, { error: "Method not allowed" });
   const body = parseBody(event);
   const salonId = String(body.salonId || "").trim();
@@ -105,7 +105,7 @@ export async function handler(event) {
       name: result.application.applicantName || result.application.nickname || "참가자",
     };
     if (result.duplicate) {
-      await logAttempt({ salonId, applicationId: result.application.id, result: "already_checked_in", method: "qr" });
+      context?.waitUntil?.(logAttempt({ salonId, applicationId: result.application.id, result: "already_checked_in", method: "qr" }));
       return json(200, {
         ok: true,
         duplicate: true,
@@ -118,35 +118,40 @@ export async function handler(event) {
       });
     }
 
-    let notificationStatus = "disabled";
-    if (salon.notificationSettings?.welcomeEnabled !== false) {
+    const notificationEnabled = salon.notificationSettings?.welcomeEnabled !== false;
+    const sendNotification = async () => {
+      if (!notificationEnabled) {
+        await appRef.update({ welcomeNotificationStatus: "disabled", updatedAt: new Date() });
+        await logAttempt({ salonId, applicationId: result.application.id, result: "success", method: "qr", notificationStatus: "disabled" });
+        return;
+      }
       try {
         await sendSalonAlimtalk({ kind: "welcome", application: result.application, salon, checkedInAt: result.application.checkedInAt });
-        notificationStatus = "sent";
         await appRef.update({ welcomeNotificationStatus: "sent", welcomeNotificationSentAt: new Date(), welcomeNotificationError: null, updatedAt: new Date() });
+        await logAttempt({ salonId, applicationId: result.application.id, result: "success", method: "qr", notificationStatus: "sent" });
       } catch (error) {
-        notificationStatus = "failed";
         const notificationError = String(error.message || "알림톡 발송 실패").slice(0, 500);
         await appRef.update({ welcomeNotificationStatus: "failed", welcomeNotificationError: notificationError, updatedAt: new Date() });
-        result.notificationError = notificationError;
+        await logAttempt({ salonId, applicationId: result.application.id, result: "success", method: "qr", notificationStatus: "failed", error: notificationError });
       }
+    };
+    if (typeof context?.waitUntil === "function") {
+      context.waitUntil(sendNotification());
     } else {
-      await appRef.update({ welcomeNotificationStatus: "disabled", updatedAt: new Date() });
+      // Local Netlify emulation may not expose waitUntil; retain correctness there.
+      await sendNotification();
     }
-
-    await logAttempt({ salonId, applicationId: result.application.id, result: "success", method: "qr", notificationStatus });
     return json(200, {
       ok: true,
       duplicate: false,
       status: "checked_in",
       message: "입장이 확인되었습니다.",
       checkedInAt: result.application.checkedInAt,
-      notificationStatus,
-      ...(result.notificationError ? { notificationError: result.notificationError } : {}),
+      notificationStatus: notificationEnabled ? "pending" : "disabled",
       participant,
     });
   } catch (error) {
-    await logAttempt({ salonId, applicationId: null, result: error.result || "error", method: "qr", error: String(error.message || "").slice(0, 500) });
+    context?.waitUntil?.(logAttempt({ salonId, applicationId: null, result: error.result || "error", method: "qr", error: String(error.message || "").slice(0, 500) }));
     return json(error.statusCode || 500, { error: error.message || "입장 확인에 실패했습니다.", result: error.result || "error" });
   }
 }
