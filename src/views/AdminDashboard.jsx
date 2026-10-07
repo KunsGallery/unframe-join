@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import SalonImageAnswer from "../components/ui/SalonImageAnswer";
 import {
   Activity,
   FileText,
@@ -101,6 +102,7 @@ const getMusicAnswerLink = (answer) => {
 };
 
 const renderCustomFieldAnswerValue = (answer) => {
+  if (answer?.type === "image") return <SalonImageAnswer answer={answer} />;
   const displayValue = getCustomFieldAnswerDisplayValue(answer);
   const link = answer?.type === "music" ? getMusicAnswerLink(answer) : "";
   if (!link) return displayValue;

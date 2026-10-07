@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import SalonImageAnswer from "../components/ui/SalonImageAnswer";
 import {
   ArrowLeft,
   User2,
@@ -186,6 +187,7 @@ const getCustomFieldAnswersList = (answers) =>
 
 const getCustomFieldAnswerDisplayValue = (answer) => {
   if (!answer) return "-";
+  if (answer.type === "image") return <SalonImageAnswer answer={answer} />;
   if (answer.type === "checkbox") {
     return answer.value === true ? "예" : "아니오";
   }

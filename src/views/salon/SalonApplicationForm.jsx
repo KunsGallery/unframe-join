@@ -1,11 +1,44 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Music, Search } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Music, Search, Upload, Trash2 } from "lucide-react";
+import { uploadImageToR2 } from "../../lib/uploads";
 import { getSalonAvailability } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
 import { unframeDesign } from "../../components/ui/unframeDesign";
 import { useSalonEvent } from "./useSalonEvent";
 
 const EMPTY = { applicantName: "", phone: "", nickname: "", privacyAgreed: false };
+const ImageUploadField = ({ field, value, onChange, onUploading, userId, disabled, className }) => {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const upload = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    onUploading(field.id, true);
+    setError("");
+    try {
+      const result = await uploadImageToR2({ file, folder: "salon-answers", userId });
+      onChange(result.url);
+    } catch (err) {
+      setError(err.message || "이미지 업로드에 실패했습니다. 다시 선택해 주세요.");
+    } finally {
+      setUploading(false);
+      onUploading(field.id, false);
+    }
+  };
+  return <div className={`min-w-0 ${className || ""}`}>
+    <p className="text-xs font-black">{field.label}{field.required && <b className="text-red-500"> *</b>}</p>
+    {field.description && <p className="mt-1 whitespace-pre-line text-xs font-bold leading-5 text-zinc-500">{field.description}</p>}
+    {value && <a href={value} target="_blank" rel="noopener noreferrer"><img src={value} alt={`${field.label} 첨부 이미지`} className="mt-3 max-h-64 w-full rounded-lg object-contain" /></a>}
+    <div className="mt-3 flex items-center gap-3">
+      <label className={`relative inline-flex items-center gap-2 rounded-lg border-2 border-zinc-200 px-4 py-3 text-sm font-bold focus-within:border-[#004aad] ${(uploading || disabled) ? "opacity-50" : "cursor-pointer"}`}>
+        <Upload size={16} />{uploading ? "업로드 중..." : value ? "이미지 교체" : "이미지 업로드"}
+        <input aria-label={`${field.label} 이미지 선택`} type="file" accept="image/*" disabled={uploading || disabled} className="absolute inset-0 w-full cursor-pointer opacity-0" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {value && <button type="button" disabled={uploading || disabled} onClick={() => onChange("")} aria-label={`${field.label} 이미지 삭제`} title="이미지 삭제" className="p-3 text-red-700 disabled:opacity-50"><Trash2 size={18} /></button>}
+    </div>
+    {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+  </div>;
+};
 const choiceFieldTypes = new Set(["select", "radio", "checkboxes"]);
 const getFieldOptions = (field) => (Array.isArray(field?.options) ? field.options : []).filter((option) => String(option?.label || "").trim());
 const isEmptyAnswer = (value) => {
@@ -71,6 +104,9 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
   const [customAnswers, setCustomAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [uploadingFields, setUploadingFields] = useState({});
+  const uploading = Object.values(uploadingFields).some(Boolean);
+  const setUploading = (id, busy) => setUploadingFields((current) => ({ ...current, [id]: busy }));
   useEffect(() => {
     setForm((current) => ({ ...current, applicantName: current.applicantName || initialProfileData?.realName || user?.displayName || "", phone: current.phone || initialProfileData?.phone || "" }));
   }, [initialProfileData, user]);
@@ -81,6 +117,7 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
   const setValue = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const submit = async (e) => {
     e.preventDefault(); setSubmitError("");
+    if (uploading || submitting) return;
     if (!availability.available) return setSubmitError(availability.reason);
     const privacy = event.formSettings?.privacy;
     if (privacy?.enabled !== false && privacy?.required !== false && !form.privacyAgreed) return setSubmitError("개인정보 수집 및 이용에 동의해 주세요.");
@@ -109,6 +146,7 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
           const setCustomValue = (nextValue) => setCustomAnswers((v) => ({ ...v, [field.id]: nextValue }));
           const fieldLayoutClass = field.layout === "full" ? "sm:col-span-2" : "";
           const commonTitle = <><span className="text-xs font-black">{field.label}{field.required && <b className="text-red-500"> *</b>}</span>{field.description && <p className="mt-1 whitespace-pre-line text-xs font-bold leading-5 text-zinc-500">{field.description}</p>}</>;
+          if (field.type === "image") return <ImageUploadField key={field.id} field={field} value={value || ""} onChange={setCustomValue} onUploading={setUploading} userId={user?.uid} disabled={submitting} className={fieldLayoutClass} />;
           if (field.type === "music") return <MusicSearchField key={field.id} field={field} value={value || {}} onChange={setCustomValue} className={fieldLayoutClass} />;
           if (field.type === "textarea") return <label key={field.id} className={`block ${fieldLayoutClass}`}>{commonTitle}<textarea required={field.required} value={value || ""} onChange={(e) => setCustomValue(e.target.value)} className="mt-2 min-h-28 w-full rounded-2xl border-2 border-zinc-200 px-4 py-3 font-bold" /></label>;
           if (field.type === "checkbox") return <label key={field.id} className={`block rounded-2xl border-2 border-zinc-200 px-4 py-3 font-bold ${fieldLayoutClass}`}><input type="checkbox" required={field.required} checked={Boolean(value)} onChange={(e) => setCustomValue(e.target.checked)} className="mr-3 h-5 w-5 align-middle" />{commonTitle}</label>;
@@ -120,7 +158,7 @@ const SalonApplicationForm = ({ slug, user, initialProfileData, onBack, onComple
       </div>
       {event.formSettings?.privacy?.enabled !== false && <div className="mt-7 rounded-[24px] bg-zinc-100 p-5"><h2 className="font-black">{event.formSettings.privacy.title}</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-zinc-600">{event.formSettings.privacy.body}</p><label className="mt-4 flex items-start gap-3 font-bold"><input type="checkbox" checked={form.privacyAgreed} onChange={(e) => setValue("privacyAgreed", e.target.checked)} className="mt-1 h-5 w-5" />{event.formSettings.privacy.checkboxLabel}</label></div>}
       {submitError && <p className="mt-5 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-700">{submitError}</p>}
-      <button type="submit" disabled={submitting || !availability.available} className={`${unframeDesign.primaryButton} mt-7 w-full justify-center disabled:opacity-40`}><CheckCircle2 size={17} />{submitting ? "신청 저장 중..." : "참가 신청 완료"}</button>
+      <button type="submit" disabled={submitting || uploading || !availability.available} className={`${unframeDesign.primaryButton} mt-7 w-full justify-center disabled:opacity-40`}><CheckCircle2 size={17} />{submitting ? "신청 저장 중..." : uploading ? "이미지 업로드 중..." : "참가 신청 완료"}</button>
     </form>
   </section>;
 };

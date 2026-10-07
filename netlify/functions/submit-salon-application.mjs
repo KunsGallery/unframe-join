@@ -58,6 +58,15 @@ export async function handler(event) {
     }
     for (const field of salon.formSettings?.customFields || []) {
       const answer = customFieldAnswers?.[field.id]?.value;
+      if (field.type === "image" && answer) {
+        let valid = false;
+        try {
+          const url = new URL(answer);
+          const base = new URL(process.env.R2_PUBLIC_BASE_URL);
+          valid = typeof answer === "string" && answer.length <= 1000 && url.origin === base.origin && url.pathname.startsWith(`${base.pathname.replace(/\/$/, "")}/salon-answers/`) && url.protocol === "https:";
+        } catch { /* Invalid or unconfigured upload URL. */ }
+        if (!valid) return json(400, { error: `${field.label || "이미지"} 항목에 업로드한 이미지를 선택해 주세요.` });
+      }
       if (field.required && isEmptyAnswer(answer)) {
         return json(400, { error: `${field.label || "필수 질문"} 항목을 입력해 주세요.` });
       }
