@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { beforeEach, mock, test } from 'node:test';
 import * as shared from '../netlify/functions/_lib/salonShared.mjs';
 
@@ -21,7 +22,7 @@ const adminDb = {
     });
   },
 };
-mock.module('../netlify/functions/_lib/firebaseAdmin.mjs', { namedExports: { adminDb } });
+mock.module('../netlify/functions/_lib/firebaseDatabase.mjs', { namedExports: { adminDb } });
 mock.module('../netlify/functions/_lib/salonShared.mjs', { namedExports: {
   ...shared,
   sendSalonAlimtalk: async () => { sent += 1; return send(); },
@@ -119,4 +120,17 @@ test('expired QR and closed check-in windows cannot admit guests', async () => {
     assert.equal(response.status, expected);
   }
   assert.equal(writes.length, 0);
+});
+
+test('check-in loads when the deployment runtime disables require(ESM)', () => {
+  const result = spawnSync(process.execPath, [
+    '--no-experimental-require-module', '--input-type=module', '-e',
+    'await import("./netlify/functions/confirm-salon-check-in.mjs");',
+  ], {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+    timeout: 10000,
+    env: { ...process.env, FIREBASE_PROJECT_ID: 'runtime-probe', FIREBASE_SERVICE_ACCOUNT_JSON: '', FIREBASE_CLIENT_EMAIL: '', FIREBASE_PRIVATE_KEY: '' },
+  });
+  assert.equal(result.status, 0, result.stderr);
 });

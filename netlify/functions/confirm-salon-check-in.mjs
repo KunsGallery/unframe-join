@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { adminDb } from "./_lib/firebaseAdmin.mjs";
+import { adminDb } from "./_lib/firebaseDatabase.mjs";
 import {
   applicationsPath,
   asDate,
