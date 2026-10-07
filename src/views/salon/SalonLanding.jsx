@@ -8,6 +8,12 @@ import { unframeDesign } from "../../components/ui/unframeDesign";
 const SalonLanding = ({ onBack, onOpen }) => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION);
@@ -19,7 +25,10 @@ const SalonLanding = ({ onBack, onOpen }) => {
 
   const visibleEvents = useMemo(() => events
     .filter((event) => event.isVisible !== false && !["draft", "archived"].includes(event.status))
-    .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured)), [events]);
+    .sort((a, b) =>
+      Number(getSalonAvailability(b, now).available) - Number(getSalonAvailability(a, now).available)
+      || Number(b.isFeatured) - Number(a.isFeatured)
+    ), [events, now]);
 
   return (
     <section className={`${unframeDesign.surface} py-4 md:py-8`}>
@@ -45,7 +54,7 @@ const SalonLanding = ({ onBack, onOpen }) => {
         ) : (
           <div className="mt-6 grid gap-6 md:grid-cols-2">
             {visibleEvents.map((event) => {
-              const availability = getSalonAvailability(event);
+              const availability = getSalonAvailability(event, now);
               return <article key={event.id} className="overflow-hidden rounded-[32px] border-2 border-zinc-900 bg-white shadow-[5px_5px_0px_#000]">
                 {event.posterImageUrl ? <div className="aspect-video w-full bg-[#f6f4ee]"><img src={event.posterImageUrl} alt={event.title} className="h-full w-full object-contain" /></div> : <div className="flex aspect-video w-full items-center justify-center bg-[#004aad] text-white"><Users size={54} /></div>}
                 <div className="p-6">
