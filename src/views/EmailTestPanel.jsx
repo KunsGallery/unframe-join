@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { unframeDesign } from "../components/ui/unframeDesign";
+import { auth } from "../lib/firebase";
 
 const DEFAULT_EMAIL = "";
 const DEFAULT_NAME = "김재우";
@@ -46,7 +47,7 @@ const EmailTestPanel = () => {
 
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser?.getIdToken() || ""}` },
         body: JSON.stringify(payload),
       });
 
@@ -68,6 +69,7 @@ const EmailTestPanel = () => {
   const testApplicationId = `test-${Date.now()}`;
 
   const commonEmailPayload = {
+    adminTest: true,
     applicantName: DEFAULT_NAME,
     applicantEmail: email.trim(),
     exhibitionTitle: DEFAULT_TITLE,
@@ -78,6 +80,7 @@ const EmailTestPanel = () => {
   };
 
   const commonKakaoPayload = {
+    adminTest: true,
     to: phone.trim(),
     applicantName: DEFAULT_NAME,
     exhibitionTitle: DEFAULT_TITLE,

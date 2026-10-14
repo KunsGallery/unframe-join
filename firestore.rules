@@ -24,11 +24,18 @@ service cloud.firestore {
         data.trackType == 'salon';
     }
 
-    // 1. 공용 예약 정보
-    // 공간 대관 / 파트너십 일정 관리 전용
+    // Availability is public, but only trusted admin/server workflows mutate it.
     match /artifacts/unframe-join/public/data/reservations/{date} {
       allow read: if true;
-      allow create, update: if isAdmin() || isNonAnonymous();
+      allow create, update: if isAdmin();
+      allow create: if isNonAnonymous() &&
+        request.resource.data.keys().hasOnly(['writingUsers', 'writingCount', 'status', 'updatedAt']) &&
+        request.resource.data.status == 'writing' &&
+        request.resource.data.writingUsers.keys().hasOnly([request.auth.uid]);
+      allow update: if isNonAnonymous() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['writingUsers', 'writingCount', 'status', 'updatedAt']) &&
+        request.resource.data.writingUsers.diff(resource.data.writingUsers).affectedKeys().hasOnly([request.auth.uid]) &&
+        request.resource.data.status in ['writing', null];
       allow delete: if isAdmin();
     }
 
@@ -38,7 +45,10 @@ service cloud.firestore {
     match /artifacts/unframe-join/public/data/applications/{docId} {
       allow create: if isNonAnonymous() &&
         request.resource.data.userId == request.auth.uid &&
-        !isSalonApplication(request.resource.data);
+        !isSalonApplication(request.resource.data) &&
+        request.resource.data.status == "review" &&
+        request.resource.data.trackType in ["rental", "open-call", "collaboration"] &&
+        request.resource.data.keys().hasAll(["trackType", "userId", "status", "submittedAt"]);
 
       allow read: if isAdmin() || (
         isSignedIn() &&
@@ -56,7 +66,11 @@ service cloud.firestore {
         !isSalonApplication(resource.data) &&
         resource.data.status == "additional_requested" &&
         request.resource.data.userId == resource.data.userId &&
-        request.resource.data.status == "review"
+        request.resource.data.status == "review" &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "updatedAt", "customFieldAnswers", "works", "artistStatement",
+          "portfolioUrl", "additionalFiles", "additionalResponse"
+        ])
       );
     }
 

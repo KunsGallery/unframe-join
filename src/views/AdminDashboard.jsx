@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import SalonImageAnswer from "../components/ui/SalonImageAnswer";
 import {
   Activity,
@@ -168,11 +168,12 @@ const getTrackLabel = (appOrTrackType) => {
     typeof appOrTrackType === "string" ? { trackType: appOrTrackType } : appOrTrackType;
   if (isSalonApplication(app)) return "SALON";
   if (isOpenCallApplication(app)) return "오픈콜";
+  if (app?.trackType === "collaboration") return "협업 문의";
   return "공간 대관";
 };
 
 const getApplicationTitle = (app) =>
-  app?.salonTitle || app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
+  app?.salonTitle || app?.openCallTitle || app?.exhibitionTitle || app?.title || "제목 없음";
 
 const getApplicationDateKey = (app) => {
   if (app?.selectedDate) return app.selectedDate;
@@ -448,6 +449,20 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [sortOrder, setSortOrder] = useState("date-desc");
   const [applicationScope, setApplicationScope] = useState("rental");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("adminTab");
+    if (ADMIN_TABS.some((tab) => tab.id === requested)) setActiveAdminTab(requested);
+  }, []);
+
+  const selectAdminTab = (id) => {
+    setActiveAdminTab(id);
+    const params = new URLSearchParams(window.location.search);
+    params.set("view", "admin");
+    params.set("adminTab", id);
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+  };
 
   const [reviewDrafts, setReviewDrafts] = useState({});
   const [guideDrafts, setGuideDrafts] = useState({});
@@ -737,6 +752,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
 
   const getApplicantName = (appDoc) =>
   appDoc.name ||
+  appDoc.applicantName ||
   appDoc.realName ||
   appDoc.brandName ||
   appDoc.stageName ||
@@ -802,18 +818,20 @@ const handleAction = async (appDoc, date, status, reason = "") => {
         updatedAt: serverTimestamp(),
       });
 
-      await setDoc(
-        doc(db, "artifacts", appId, "public", "data", "reservations", date),
-        {
-          status: "confirmed",
-          confirmedArtist: appDoc.stageName || appDoc.name,
-          confirmedTitle: appDoc.exhibitionTitle,
-          partnerType: appDoc.partnerType,
-          selectedProgram: appDoc.selectedProgram || null,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      if (appDoc.trackType !== "collaboration") {
+        await setDoc(
+          doc(db, "artifacts", appId, "public", "data", "reservations", date),
+          {
+            status: "confirmed",
+            confirmedArtist: appDoc.stageName || appDoc.name,
+            confirmedTitle: appDoc.exhibitionTitle,
+            partnerType: appDoc.partnerType,
+            selectedProgram: appDoc.selectedProgram || null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       if (appDoc.applicantEmail && !mailAlreadySent) {
         try {
@@ -840,7 +858,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
         try {
           const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user?.getIdToken?.() || ""}` },
             body: JSON.stringify({
               type: "approved",
               to: appDoc.phone,
@@ -905,7 +923,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
         try {
           const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user?.getIdToken?.() || ""}` },
             body: JSON.stringify({
               type: "additional_requested",
               to: appDoc.phone,
@@ -974,7 +992,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           try {
             const res = await fetch("/.netlify/functions/send-kakao-alimtalk", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user?.getIdToken?.() || ""}` },
               body: JSON.stringify({
                 type: "rejected",
                 to: appDoc.phone,
@@ -1042,11 +1060,13 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
     let list = [...applications].filter((app) => {
       const matchesScope =
-        applicationScope === "salon"
+        applicationScope === "collaboration"
+          ? app.trackType === "collaboration"
+          : applicationScope === "salon"
           ? isSalonApplication(app)
           : applicationScope === "open-call"
           ? isOpenCallApplication(app)
-          : !isSalonApplication(app) && !isOpenCallApplication(app);
+          : !isSalonApplication(app) && !isOpenCallApplication(app) && app.trackType !== "collaboration";
 
       const matchesSearch =
         !term ||
@@ -1136,11 +1156,17 @@ const handleAction = async (appDoc, date, status, reason = "") => {
   const applicationScopeTabs = useMemo(
     () => [
       {
+        id: "collaboration",
+        label: "협업 문의",
+        description: "함께 만들 프로젝트 제안",
+        count: applications.filter((app) => app.trackType === "collaboration").length,
+      },
+      {
         id: "rental",
         label: "공간 대관",
         description: "공간 대관 / 파트너십 신청",
         count: applications.filter(
-          (app) => !isOpenCallApplication(app) && !isSalonApplication(app)
+          (app) => !isOpenCallApplication(app) && !isSalonApplication(app) && app.trackType !== "collaboration"
         ).length,
       },
       {
@@ -1162,9 +1188,9 @@ const handleAction = async (appDoc, date, status, reason = "") => {
     applicationScopeTabs.find((tab) => tab.id === applicationScope) || applicationScopeTabs[0];
 
   return (
-    <section className="min-h-screen bg-[#F6F4EE] py-10 text-zinc-900 md:py-14">
+    <section className="min-h-screen bg-[#F6F4EE] py-5 text-zinc-900 md:py-8">
       <div className="mx-auto max-w-7xl px-4">
-        <div className="mb-8 flex flex-col gap-6">
+        <div className="mb-5 flex flex-col gap-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="space-y-3">
               <div className="inline-flex items-center gap-3 rounded-full border border-zinc-950/10 bg-white/80 px-4 py-2 shadow-[0_8px_28px_rgba(0,0,0,0.05)]">
@@ -1177,13 +1203,10 @@ const handleAction = async (appDoc, date, status, reason = "") => {
               </div>
 
               <div>
-                <h2 className="text-4xl font-black tracking-tighter text-zinc-950 md:text-6xl">
-                  Control Center
+                <h2 className="text-3xl font-black tracking-tighter text-zinc-950 md:text-4xl">
+                  관리자 콘솔
                 </h2>
-                <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep md:text-base">
-                  운영자는 탭 하나씩만 집중해서 작업할 수 있습니다. 신청 현황, 오픈콜, 메인 문구,
-                  메인 입구, 팝업, 시스템 도구를 목적별로 분리해 정리했습니다.
-                </p>
+                <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">신청 검토와 공개 콘텐츠를 관리합니다.</p>
               </div>
             </div>
 
@@ -1202,40 +1225,44 @@ const handleAction = async (appDoc, date, status, reason = "") => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatCard icon={<FileText size={20} />} label="Total Proposals" value={stats.total} color="blue" />
-            <StatCard icon={<Users size={20} />} label="Pending Review" value={stats.pending} color="orange" />
-            <CheckCard icon={<CheckCircle size={20} />} label="Confirmed" value={stats.confirmed} />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <StatCard icon={<FileText size={16} />} label="전체 신청" value={stats.total} color="blue" />
+            <StatCard icon={<Users size={16} />} label="검토 대기" value={stats.pending} color="orange" />
+            <CheckCard icon={<CheckCircle size={16} />} label="확정" value={stats.confirmed} />
           </div>
         </div>
       </div>
 
-      <div className="sticky top-0 z-30 border-y border-zinc-950/10 bg-[#F6F4EE]/92 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 py-4">
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {ADMIN_TABS.map((tab) => {
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 lg:grid-cols-[210px_minmax(0,1fr)] lg:items-start">
+        <nav aria-label="관리자 메뉴" className="sticky top-3 z-30 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+          <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            {ADMIN_TABS.map((tab, index) => {
               const isActive = activeAdminTab === tab.id;
+              const group = ["applications"].includes(tab.id) ? "운영" : ["openCalls", "salons"].includes(tab.id) ? "모집" : ["joinHome", "joinTracks", "popups"].includes(tab.id) ? "사이트 콘텐츠" : "설정";
+              const previous = ADMIN_TABS[index - 1];
+              const previousGroup = previous ? (["applications"].includes(previous.id) ? "운영" : ["openCalls", "salons"].includes(previous.id) ? "모집" : ["joinHome", "joinTracks", "popups"].includes(previous.id) ? "사이트 콘텐츠" : "설정") : "";
 
               return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveAdminTab(tab.id)}
-                  className={`shrink-0 rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.18em] transition-all ${
-                    isActive
-                      ? "border-zinc-950 bg-zinc-950 text-white shadow-lg shadow-zinc-950/10"
-                      : "border-zinc-950/10 bg-white/75 text-zinc-500 hover:border-zinc-950/30 hover:text-zinc-950"
-                  }`}
-                >
-                  {tab.label}
-                </button>
+                <React.Fragment key={tab.id}>
+                  {group !== previousGroup && <span className="hidden px-3 pb-1 pt-4 text-[10px] font-bold text-zinc-400 lg:block">{group}</span>}
+                  <button
+                    type="button"
+                    onClick={() => selectAdminTab(tab.id)}
+                    className={`shrink-0 rounded-lg border px-3 py-2.5 text-left text-xs font-bold transition-all lg:w-full ${
+                      isActive
+                        ? "border-zinc-950 bg-zinc-950 text-white"
+                        : "border-transparent bg-white text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                </React.Fragment>
               );
             })}
           </div>
-        </div>
-      </div>
+        </nav>
 
-      <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="min-w-0 pb-10">
         <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004AAD]">
@@ -1277,7 +1304,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
             <AdminAuthDebug user={user} isAdmin={isAdmin} />
             <OpenCallMessageSettingsManager db={db} appId={appId} currentUser={user} />
-            <EmailTestPanel />
+            <EmailTestPanel user={user} />
 
             <div className="rounded-[24px] border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-4 text-sm font-bold leading-relaxed text-[#004aad] break-keep">
               Firebase Console &gt; Firestore Rules에 joinHome / joinTracks / joinPopups 권한이
@@ -1287,35 +1314,25 @@ const handleAction = async (appDoc, date, status, reason = "") => {
         </div>
       ) : null}
 
-      {activeAdminTab === "openCalls" ? (
-        <div className="mt-6">
-          <OpenCallManager db={db} appId={appId} applications={applications} />
-        </div>
-      ) : null}
+      <div className={`mt-6 ${activeAdminTab === "openCalls" ? "" : "hidden"}`}>
+        <OpenCallManager db={db} appId={appId} applications={applications} />
+      </div>
 
-      {activeAdminTab === "salons" ? (
-        <div className="mt-6">
-          <SalonManager db={db} appId={appId} applications={applications} />
-        </div>
-      ) : null}
+      <div className={`mt-6 ${activeAdminTab === "salons" ? "" : "hidden"}`}>
+        <SalonManager db={db} appId={appId} applications={applications} />
+      </div>
 
-      {activeAdminTab === "joinHome" ? (
-        <div className="mt-6">
-          <JoinHomeContentManager db={db} appId={appId} currentUser={user} />
-        </div>
-      ) : null}
+      <div className={`mt-6 ${activeAdminTab === "joinHome" ? "" : "hidden"}`}>
+        <JoinHomeContentManager db={db} appId={appId} currentUser={user} />
+      </div>
 
-      {activeAdminTab === "joinTracks" ? (
-        <div className="mt-6">
-          <JoinTrackManager db={db} appId={appId} currentUser={user} />
-        </div>
-      ) : null}
+      <div className={`mt-6 ${activeAdminTab === "joinTracks" ? "" : "hidden"}`}>
+        <JoinTrackManager db={db} appId={appId} currentUser={user} />
+      </div>
 
-      {activeAdminTab === "popups" ? (
-        <div className="mt-6">
-          <JoinPopupManager db={db} appId={appId} currentUser={user} />
-        </div>
-      ) : null}
+      <div className={`mt-6 ${activeAdminTab === "popups" ? "" : "hidden"}`}>
+        <JoinPopupManager db={db} appId={appId} currentUser={user} />
+      </div>
 
       {activeAdminTab === "applications" ? (
         <DashboardPanel className="space-y-8">
@@ -1326,10 +1343,10 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                   신청 분류
                 </h3>
                 <p className="mt-1 text-sm font-bold leading-6 text-zinc-500 break-keep">
-                  공간 대관, 오픈콜, SALON 참가 신청을 분리해서 확인합니다.
+                  대관, 오픈콜, SALON, 협업 제안을 구분해 검토합니다.
                 </p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[42rem]">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[42rem]">
                 {applicationScopeTabs.map((tab) => {
                   const isActive = applicationScope === tab.id;
                   return (
@@ -1692,6 +1709,12 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                               {getApplicationTitle(app)}
                             </h4>
 
+                            {app.trackType === "collaboration" ? (
+                              <dl className="grid gap-3 rounded-xl bg-[#F6F4EE] p-4 text-left sm:grid-cols-2">
+                                {[["제안 제목", app.title], ["팀 / 브랜드", app.organization], ["제안자", app.name], ["이메일", app.email || app.applicantEmail], ["분야", app.category], ["연락처", app.phone], ["아이디어와 목표", app.idea], ["희망 역할", app.desiredRole], ["일정 / 예산", app.timelineBudget]].filter(([,value]) => value).map(([label,value]) => <div key={label} className="min-w-0"><dt className="text-[10px] font-black text-zinc-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold">{value}</dd></div>)}
+                              </dl>
+                            ) : null}
+
                             <div className="flex items-center gap-6 flex-wrap text-left">
                               <p className="text-sm font-black text-zinc-400 uppercase">
                                 {isOpenCallApplication(app)
@@ -1877,6 +1900,18 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                     <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
                                     <DetailItem label="매체" value={app.medium || "-"} />
                                   </div>
+                                ) : app.inquiryType === "space-rental" ? (
+                                  <div className="grid gap-4 text-left">
+                                    <DetailItem label="문의자" value={app.name || "-"} />
+                                    <DetailItem label="팀 / 브랜드" value={app.organization || "-"} />
+                                    <DetailItem label="연락처" value={app.phone || "-"} />
+                                    <DetailItem label="회신 이메일" value={app.email || app.applicantEmail || "-"} />
+                                    <DetailItem label="이용 목적" value={app.purpose || "-"} />
+                                    <DetailItem label="희망 날짜" value={app.date || "미정"} />
+                                    <DetailItem label="이용 시간 / 기간" value={app.hours || "미정"} />
+                                    <DetailItem label="예상 인원" value={app.attendees || "미정"} />
+                                    <DetailItem label="예산 범위" value={app.budget || "미정"} />
+                                  </div>
                                 ) : (
                                   <div className="grid gap-4 text-left">
                                     <DetailItem
@@ -1902,7 +1937,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
                               <div>
                                 <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                  {isSalonApplication(app) ? "SALON 신청 답변" : "작업 소개"}
+                                  {isSalonApplication(app) ? "SALON 신청 답변" : app.inquiryType === "space-rental" ? "공간 이용 계획" : "작업 소개"}
                                 </h5>
                                 {isSalonApplication(app) ? (
                                   <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
@@ -1932,6 +1967,11 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                   <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
                                     {app.artistStatement || "-"}
                                   </p>
+                                ) : app.inquiryType === "space-rental" ? (
+                                  <div className="rounded-[28px] border border-zinc-100 bg-white p-6 md:p-7">
+                                    <p className="whitespace-pre-wrap text-sm font-semibold leading-7 text-zinc-700">{app.plan || "-"}</p>
+                                    {app.equipment && <div className="mt-5 border-t border-zinc-100 pt-4"><p className="text-[10px] font-black text-zinc-400">반입 장비 / 설치 요청</p><p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-zinc-700">{app.equipment}</p></div>}
+                                  </div>
                                 ) : (
                                   <p className="text-sm font-bold text-zinc-700 leading-relaxed whitespace-pre-wrap text-left">
                                     {app.partnerType === "brand" ? app.projectPurpose : app.artistNote}
@@ -2346,6 +2386,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
       </div>
         </DashboardPanel>
       ) : null}
+      </div>
       </div>
     </section>
   );

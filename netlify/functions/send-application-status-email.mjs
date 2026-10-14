@@ -1,3 +1,5 @@
+import { verifyAdminRequest } from "./_lib/firebaseAdmin.mjs";
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -412,6 +414,7 @@ export async function handler(event) {
   }
 
   try {
+    await verifyAdminRequest(event);
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.MAIL_FROM;
 
@@ -492,9 +495,9 @@ export async function handler(event) {
 
     return json(200, { ok: true });
   } catch (error) {
-    console.error("send-application-status-email error:", error);
-    return json(500, {
-      error: error?.message || "Failed to send status email",
+    console.error("send-application-status-email error:", error?.statusCode || 500);
+    return json(error?.statusCode || 500, {
+      error: error?.statusCode ? error.message : "Failed to send status email",
     });
   }
 }

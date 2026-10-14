@@ -28,21 +28,18 @@ import {
 import {
   OPEN_CALL_FALLBACK,
   OPEN_CALL_CUSTOM_FIELD_TYPES,
-  OPEN_CALL_TEMPLATE_VARIABLES,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
   buildFallbackDescriptionSections,
   getOpenCallDisplayStatus,
   getOpenCallDescriptionSections,
-  parseOpenCallDate,
-  pickActiveOpenCall,
   normalizeOpenCallCompletionSettings,
+  pickActiveOpenCall,
   normalizeOpenCallDescriptionSections,
   normalizeOpenCallFormSettings,
   normalizeOpenCallFaqs,
   normalizeOpenCallLandingLabels,
   normalizeOpenCallNotificationSettings,
-  renderOpenCallTemplate,
 } from "../../constants/openCall";
 import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
 
@@ -227,8 +224,6 @@ const escapeCsv = (value) => {
 
 const getPlainText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
-const getMultilinePreview = (value) => String(value ?? "").trim() || "비어 있음";
-
 const getWorkValue = (work, key) => getPlainText(work?.[key] || "");
 
 const getOpenCallFileSlug = (call) => {
@@ -239,20 +234,6 @@ const getOpenCallFileSlug = (call) => {
 const getOpenCallDraftFormSettings = (draft, call) =>
   normalizeOpenCallFormSettings(
     draft?.formSettings || call?.formSettings || OPEN_CALL_FALLBACK.formSettings
-  );
-
-const getOpenCallDraftCompletionSettings = (draft, call) =>
-  normalizeOpenCallCompletionSettings(
-    draft?.completionSettings ||
-      call?.completionSettings ||
-      OPEN_CALL_FALLBACK.completionSettings
-  );
-
-const getOpenCallDraftNotificationSettings = (draft, call) =>
-  normalizeOpenCallNotificationSettings(
-    draft?.notificationSettings ||
-      call?.notificationSettings ||
-      OPEN_CALL_FALLBACK.notificationSettings
   );
 
 const normalizeFeaturedOpenCallStatus = (status) => {
@@ -437,16 +418,6 @@ const getSaveButtonLabel = (call) => {
 
   return isReflectableFeatured ? "저장하고 /opencall에 반영" : "저장하기";
 };
-
-const buildOpenCallPreviewContext = (call, draft) => ({
-  name: "김언프레임",
-  email: "artist@example.com",
-  phone: "010-0000-0000",
-  openCallTitle: draft?.title || call?.title || OPEN_CALL_TITLE,
-  openCallId: call?.id || "open-call-preview",
-  applicationId: "preview-application-id",
-  submittedAt: "2026-06-17 15:00",
-});
 
 const createEmptyFaq = (order = 1) => ({
   question: "",
@@ -854,54 +825,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
   };
 
-  const updateCompletionSettings = (callId, key, value) => {
-    setSaveFeedbacks((prev) => ({
-      ...prev,
-      [callId]: null,
-    }));
-    setDrafts((prev) => {
-      const current = prev[callId] || {};
-      const nextCompletionSettings = normalizeOpenCallCompletionSettings(
-        current.completionSettings || OPEN_CALL_FALLBACK.completionSettings
-      );
-
-      return {
-        ...prev,
-        [callId]: {
-          ...current,
-          completionSettings: {
-            ...nextCompletionSettings,
-            [key]: value,
-          },
-        },
-      };
-    });
-  };
-
-  const updateNotificationSettings = (callId, key, value) => {
-    setSaveFeedbacks((prev) => ({
-      ...prev,
-      [callId]: null,
-    }));
-    setDrafts((prev) => {
-      const current = prev[callId] || {};
-      const nextNotificationSettings = normalizeOpenCallNotificationSettings(
-        current.notificationSettings || OPEN_CALL_FALLBACK.notificationSettings
-      );
-
-      return {
-        ...prev,
-        [callId]: {
-          ...current,
-          notificationSettings: {
-            ...nextNotificationSettings,
-            [key]: value,
-          },
-        },
-      };
-    });
-  };
-
   const updateDescriptionSection = (callId, index, key, value) => {
     setSaveFeedbacks((prev) => ({
       ...prev,
@@ -1136,6 +1059,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
 
     try {
+      // Message settings have a dedicated editor; do not overwrite its newer draft here.
+      delete payload.notificationSettings;
       await setDoc(
         doc(db, "artifacts", appId, "public", "data", "openCalls", call.id),
         payload,
@@ -2257,11 +2182,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const isPreviewed = previewOpenCallId === call.id;
             const statusMeta = STATUS_META[draft.status || call.status || "draft"];
             const formSettings = getOpenCallDraftFormSettings(draft, call);
-            const completionSettings = getOpenCallDraftCompletionSettings(draft, call);
-            const notificationSettings = getOpenCallDraftNotificationSettings(draft, call);
             const customFields = normalizeCustomFieldDrafts(formSettings.customFields);
             const faqItems = normalizeFaqDrafts(draft.faqs);
-            const previewContext = buildOpenCallPreviewContext(call, draft);
             const previewHeroAccent = String(draft.heroAccent || call.heroAccent || "").trim();
             const previewHeroTitle = draft.heroTitle || call.heroTitle || OPEN_CALL_FALLBACK.heroTitle;
             const previewBadgeText = draft.badgeText || call.badgeText || OPEN_CALL_FALLBACK.badgeText;
@@ -2295,7 +2217,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const faqEditId = `open-call-${call.id}-faq`;
             const formEditId = `open-call-${call.id}-form`;
             const completionEditId = `open-call-${call.id}-completion`;
-            const notificationEditId = `open-call-${call.id}-notification`;
             const privacyEditId = `open-call-${call.id}-privacy`;
 
             return (

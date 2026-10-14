@@ -91,7 +91,7 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
     setPosterUploading(true);
     setPosterUploadError("");
     try {
-      const result = await uploadImageToR2({ file, folder: "salon-posters", userId: draft.slug || draft.id || "salon" });
+      const result = await uploadImageToR2({ file, folder: "salon-posters", isAdminUpload: true });
       update("posterImageUrl", result.url);
     } catch (error) {
       setPosterUploadError(error.message || "포스터 업로드에 실패했습니다.");
@@ -166,8 +166,20 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
 const SalonManager = ({ db, appId, applications }) => {
   const [events, setEvents] = useState([]); const [selectedId, setSelectedId] = useState(""); const [draft, setDraft] = useState(normalizeSalonEvent(DEFAULT_SALON_EVENT)); const [saving, setSaving] = useState(false); const [filter, setFilter] = useState("all"); const [search, setSearch] = useState(""); const [busyId, setBusyId] = useState("");
   useEffect(() => onSnapshot(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION), (snapshot) => setEvents(snapshot.docs.map((item) => normalizeSalonEvent({ id: item.id, ...item.data() })))), [db, appId]);
-  const choose = (event) => { setSelectedId(event.id); setDraft(normalizeSalonEvent(event)); };
-  const createNew = () => { setSelectedId(""); setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT)); };
+  const hasUnsavedChanges = () => {
+    const baseline = events.find((event) => event.id === selectedId) || DEFAULT_SALON_EVENT;
+    return JSON.stringify(draft) !== JSON.stringify(normalizeSalonEvent(baseline));
+  };
+  const choose = (event) => {
+    if (hasUnsavedChanges() && !window.confirm("저장하지 않은 수정이 있습니다. 버리고 다른 살롱을 여시겠습니까?")) return;
+    setSelectedId(event.id);
+    setDraft(normalizeSalonEvent(event));
+  };
+  const createNew = () => {
+    if (hasUnsavedChanges() && !window.confirm("저장하지 않은 수정이 있습니다. 버리고 새 살롱을 만드시겠습니까?")) return;
+    setSelectedId("");
+    setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT));
+  };
   const save = async () => {
     if (!toDate(draft.eventStartAt)) {
       alert("살롱 날짜·시간을 입력해 주세요.");
@@ -196,7 +208,7 @@ const SalonManager = ({ db, appId, applications }) => {
       setDraft((v) => ({ ...v, id, ...dateValues, checkInSettings }));
     } catch (error) { alert(error.message); } finally { setSaving(false); }
   };
-  const remove = async () => { if (!draft.id || !window.confirm("이 SALON 행사를 삭제하시겠습니까? 참가 신청 문서는 삭제되지 않습니다.")) return; await deleteDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, draft.id)); createNew(); };
+  const remove = async () => { if (!draft.id || !window.confirm("이 SALON 행사를 삭제하시겠습니까? 참가 신청 문서는 삭제되지 않습니다.")) return; await deleteDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, draft.id)); setSelectedId(""); setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT)); };
   const selectedEvent = events.find((event) => event.id === selectedId) || (draft.id ? draft : null);
   const participants = useMemo(() => (applications || []).filter((item) => item.trackType === "salon" && (!selectedEvent || item.salonId === selectedEvent.id)).filter((item) => filter === "all" || item.status === filter).filter((item) => `${item.applicantName} ${item.phone}`.toLowerCase().includes(search.toLowerCase())), [applications, selectedEvent, filter, search]);
   const act = async (item, action, extra = {}) => { const messages = { approve: "참가 승인 및 QR을 발급하시겠습니까?\n참가 확정 알림톡이 함께 발송됩니다.", reissue: "기존 QR은 즉시 사용할 수 없게 됩니다.\n새 QR을 발급하시겠습니까?" }; if (messages[action] && !window.confirm(messages[action])) return; setBusyId(item.id); try { let result; if (["approve", "reissue", "resend"].includes(action)) result = await callSalonFunction("approve-salon-participant", { applicationId: item.id, action }); else result = await callSalonFunction("manage-salon-participant", { applicationId: item.id, action, ...extra }); if (result.passUrl && result.notification?.status === "failed") { await navigator.clipboard?.writeText(result.passUrl); alert("승인은 완료되었지만 알림톡은 실패했습니다. 새 QR 링크를 클립보드에 복사했습니다."); } } catch (error) { alert(error.message); } finally { setBusyId(""); } };

@@ -29,6 +29,9 @@ import SalonApplicationForm from "./views/salon/SalonApplicationForm";
 import SalonApplicationComplete from "./views/salon/SalonApplicationComplete";
 import SalonPassPage from "./views/salon/SalonPassPage";
 import SalonCheckInScanner from "./views/admin/SalonCheckInScanner";
+import RentalInfoPage from "./views/RentalInfoPage";
+import RentalInquiryForm from "./views/RentalInquiryForm";
+import CollaborationInfoPage from "./views/CollaborationInfoPage";
 import { createFallbackOpenCall, pickActiveOpenCall } from "./constants/openCall";
 
 const EMPTY_FORM_DATA = {
@@ -68,6 +71,8 @@ const EMPTY_PROFILE_DATA = {
 };
 
 const getSelectedTrackFromPathname = (pathname) => {
+  if (pathname === "/rental" || pathname === "/rental/apply") return "rental";
+  if (pathname === "/collaboration" || pathname === "/collaboration/apply") return "collaboration";
   if (pathname === "/opencall" || pathname === "/opencall/apply") return "open-call";
   if (pathname === "/salon" || pathname.startsWith("/salon/") || pathname.startsWith("/admin/salon/")) return "salon";
   return null;
@@ -92,6 +97,8 @@ const getOpenCallModeFromUrl = (pathname, params) => {
 };
 
 const getPathnameForSelectedTrack = (selectedTrack, openCallMode = "landing") => {
+  if (selectedTrack === "rental") return "/rental";
+  if (selectedTrack === "collaboration") return "/collaboration";
   if (selectedTrack === "open-call") {
     return openCallMode === "form" ? "/opencall/apply" : "/opencall";
   }
@@ -104,6 +111,7 @@ const getUrlState = () => {
   const salonRoute = getSalonRouteFromUrl(window.location.pathname, params);
   return {
     selectedTrack: getSelectedTrackFromPathname(window.location.pathname),
+    rentalMode: window.location.pathname === "/rental/apply" ? "apply" : "detail",
     view: salonRoute.salonMode === "admin-check-in" ? "admin" : params.get("view") || "user",
     app: params.get("app") || "",
     openCallMode: getOpenCallModeFromUrl(window.location.pathname, params),
@@ -119,11 +127,13 @@ const buildUrl = ({
   openCallMode = "landing",
   openCallId = "",
   salonMode = "landing",
+  rentalMode = "detail",
   salonSlug = "",
   salonId = "",
   salonToken = "",
 }) => {
   let pathname = getPathnameForSelectedTrack(selectedTrack, openCallMode);
+  if (selectedTrack === "rental" && rentalMode === "apply") pathname = "/rental/apply";
   const params = new URLSearchParams();
 
   if (selectedTrack === "salon") {
@@ -142,6 +152,10 @@ const buildUrl = ({
   if (app) {
     params.set("app", app);
   }
+  if (view === "admin") {
+    const currentAdminTab = new URLSearchParams(window.location.search).get("adminTab");
+    if (currentAdminTab) params.set("adminTab", currentAdminTab);
+  }
 
   if (selectedTrack === "open-call" && openCallMode === "form" && openCallId) {
     params.set("openCallId", openCallId);
@@ -157,6 +171,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedTrack, setSelectedTrack] = useState(initialUrlState.selectedTrack);
+  const [rentalMode, setRentalMode] = useState(initialUrlState.rentalMode);
   const [viewMode, setViewMode] = useState(initialUrlState.view);
   const [focusedApplicationId, setFocusedApplicationId] = useState(initialUrlState.app);
   const [openCallMode, setOpenCallMode] = useState(initialUrlState.openCallMode);
@@ -194,7 +209,7 @@ const App = () => {
       return openCalls.find((call) => call.id === requestedOpenCallId) || null;
     }
 
-    return pickActiveOpenCall(openCalls) || openCalls[0] || null;
+    return pickActiveOpenCall(openCalls);
   }, [openCalls, requestedOpenCallId]);
 
   const selectedOpenCallView = useMemo(
@@ -227,6 +242,7 @@ const App = () => {
     const handlePopState = () => {
       const next = getUrlState();
       setSelectedTrack(next.selectedTrack);
+      setRentalMode(next.rentalMode);
       setViewMode(next.view);
       setFocusedApplicationId(next.app);
       setOpenCallMode(next.openCallMode);
@@ -248,6 +264,7 @@ const App = () => {
       view: viewMode,
       app: focusedApplicationId,
       openCallMode,
+      rentalMode,
       openCallId:
         selectedTrack === "open-call" && openCallMode === "form"
           ? selectedOpenCallView?.id || requestedOpenCallId
@@ -265,6 +282,7 @@ const App = () => {
   }, [
     focusedApplicationId,
     openCallMode,
+    rentalMode,
     requestedOpenCallId,
     selectedOpenCallView?.id,
     selectedTrack,
@@ -551,7 +569,7 @@ const App = () => {
               selectedTrack === "open-call" ? handleReturnToOpenCallLanding : undefined
             }
           />
-        ) : viewMode === "admin" ? (
+        ) : viewMode === "admin" && isAdmin ? (
           <AdminDashboard
             applications={applications}
             reservations={reservations}
@@ -579,8 +597,16 @@ const App = () => {
                 onSelectRental={() => handleSelectRentalTrack()}
                 onSelectOpenCall={() => handleSelectOpenCallTrack()}
                 onSelectSalon={() => handleSelectSalonTrack()}
+                onSelectCollaboration={() => setSelectedTrack("collaboration")}
               />
             ) : selectedTrack === "open-call" ? (
+              !resolvedOpenCall ? (
+                <section className="mx-auto max-w-3xl rounded-2xl border border-zinc-200 bg-white p-8 text-center">
+                  <h1 className="text-2xl font-black">현재 공개된 오픈콜이 없습니다.</h1>
+                  <p className="mt-3 text-sm text-zinc-600">새 모집이 시작되면 이곳에서 확인하실 수 있습니다.</p>
+                  <button type="button" onClick={handleReturnToJoinHome} className="mt-6 rounded-full bg-zinc-950 px-5 py-3 text-sm font-bold text-white">메인으로</button>
+                </section>
+              ) :
               openCallMode === "landing" ? (
                 <OpenCallLanding
                   onBack={handleReturnToJoinHome}
@@ -606,6 +632,26 @@ const App = () => {
                   }}
                 />
               )
+            ) : selectedTrack === "rental" ? (
+              rentalMode === "detail" ? (
+                <RentalInfoPage onBack={handleReturnToJoinHome} onContinue={() => {
+                  setRentalMode("apply");
+                  handleSelectRentalTrack();
+                  window.history.pushState({}, "", "/rental/apply");
+                }} />
+              ) : (
+                <RentalInquiryForm
+                  db={db}
+                  user={user}
+                  handleLogin={handleLogin}
+                  onBack={() => {
+                    setRentalMode("detail");
+                    window.history.pushState({}, "", "/rental");
+                  }}
+                />
+              )
+            ) : selectedTrack === "collaboration" ? (
+              <CollaborationInfoPage db={db} onBack={handleReturnToJoinHome} handleLogin={handleLogin} />
             ) : selectedTrack === "salon" ? (
               salonMode === "detail" ? (
                 <SalonDetail

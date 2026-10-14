@@ -17,7 +17,6 @@ import {
   doc,
   setDoc,
   serverTimestamp,
-  runTransaction,
   addDoc,
   collection,
   getDoc,
@@ -34,6 +33,7 @@ import {
   sendApplicationEmails,
 } from "../lib/uploads";
 import AddressSearchField from "../components/ui/AddressSearchField";
+import { auth } from "../lib/firebase";
 
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -280,7 +280,7 @@ const ProposalFormStep = ({
     const now = Date.now();
 
     const prunedUsers = Object.fromEntries(
-      Object.entries(currentUsers).filter(([_, value]) => Number(value) > now)
+      Object.entries(currentUsers).filter((entry) => Number(entry[1]) > now)
     );
 
     if (expiresAtMs) {
@@ -564,34 +564,6 @@ const ProposalFormStep = ({
     setIsSubmitting(true);
 
     try {
-      const resDocRef = doc(
-        db,
-        "artifacts",
-        appId,
-        "public",
-        "data",
-        "reservations",
-        selectedDate
-      );
-
-      await runTransaction(db, async (transaction) => {
-        const resSnap = await transaction.get(resDocRef);
-        const currentCount = resSnap.exists()
-          ? resSnap.data().applicantCount || 0
-          : 0;
-
-        transaction.set(
-          resDocRef,
-          {
-            status: "review",
-            applicantCount: currentCount + 1,
-            updatedAt: serverTimestamp(),
-            partnerType,
-          },
-          { merge: true }
-        );
-      });
-
       const appDocRef = await addDoc(
         collection(db, "artifacts", appId, "public", "data", "applications"),
         {
@@ -639,7 +611,7 @@ const ProposalFormStep = ({
       try {
         await fetch("/.netlify/functions/send-kakao-alimtalk", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
           body: JSON.stringify({
             type: "application_received",
             to: normalizePhone(formData.phone),

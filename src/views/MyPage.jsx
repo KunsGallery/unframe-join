@@ -131,17 +131,19 @@ const isSalonApplication = (app) =>
 
 const isOpenCallApplication = (app) =>
   app?.trackType === "open-call" || Boolean(app?.openCallId || app?.openCallTitle);
+const isCollaborationApplication = (app) => app?.trackType === "collaboration";
 
 const getTrackLabel = (appOrTrackType) => {
   const app =
     typeof appOrTrackType === "string" ? { trackType: appOrTrackType } : appOrTrackType;
   if (isSalonApplication(app)) return "SALON";
   if (isOpenCallApplication(app)) return "오픈콜";
+  if (isCollaborationApplication(app)) return "협업 문의";
   return "공간 대관";
 };
 
 const getApplicationTitle = (app) =>
-  app?.salonTitle || app?.openCallTitle || app?.exhibitionTitle || "제목 없음";
+  app?.salonTitle || app?.openCallTitle || app?.exhibitionTitle || app?.title || "제목 없음";
 
 const getApplicationMetaLine = (app) => {
   if (!app) return "-";
@@ -154,6 +156,10 @@ const getApplicationMetaLine = (app) => {
     return [app.applicantName || app.nickname, app.phone ? `•••• ${String(app.phone).slice(-4)}` : ""]
       .filter(Boolean)
       .join(" · ") || "참가 신청";
+  }
+
+  if (app?.inquiryType === "space-rental") {
+    return [app.purpose, app.date || "희망 일정 미정"].filter(Boolean).join(" · ");
   }
 
   return [
@@ -510,7 +516,7 @@ const ApplicationDetailPanel = ({ app }) => {
 
         <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-3">
-            {isSalonApplication(app) ? "참가 상태" : "작업 소개"}
+            {isSalonApplication(app) ? "참가 상태" : app.inquiryType === "space-rental" ? "공간 이용 계획" : "작업 소개"}
           </p>
           {isSalonApplication(app) ? (
             <div className="space-y-4">
@@ -554,6 +560,13 @@ const ApplicationDetailPanel = ({ app }) => {
             <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep whitespace-pre-wrap">
               {app.artistStatement || "아직 등록된 작업 소개가 없습니다."}
             </p>
+          ) : app.inquiryType === "space-rental" ? (
+            <div className="space-y-4">
+              <p className="whitespace-pre-wrap text-sm font-bold leading-relaxed text-zinc-700">{app.plan || "-"}</p>
+              <dl className="grid gap-3 sm:grid-cols-2">
+                {[["팀 / 브랜드", app.organization], ["이용 시간", app.hours], ["예상 인원", app.attendees], ["예산 범위", app.budget], ["반입 장비 / 설치 요청", app.equipment]].filter(([, value]) => value).map(([label, value]) => <div key={label}><dt className="text-[10px] font-black text-zinc-400">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm font-semibold text-zinc-700">{value}</dd></div>)}
+              </dl>
+            </div>
           ) : (
             <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep">
               {app.partnerType === "brand"
@@ -1081,7 +1094,11 @@ const MyPage = ({
     [orderedApplications]
   );
   const partnerApplications = useMemo(
-    () => orderedApplications.filter((app) => !isSalonApplication(app)),
+    () => orderedApplications.filter((app) => !isSalonApplication(app) && !isCollaborationApplication(app)),
+    [orderedApplications]
+  );
+  const collaborationApplications = useMemo(
+    () => orderedApplications.filter((app) => isCollaborationApplication(app)),
     [orderedApplications]
   );
 
@@ -1195,6 +1212,12 @@ const MyPage = ({
       label: "Salon",
       icon: <Users size={16} />,
       count: salonApplications.length,
+    },
+    {
+      key: "collaboration",
+      label: "Collaboration",
+      icon: <Users size={16} />,
+      count: collaborationApplications.length,
     },
     {
       key: "profile",
@@ -1311,6 +1334,11 @@ const MyPage = ({
               <div>
                 <ApplicationDetailPanel app={selectedSalonApplication} />
               </div>
+            </div>
+          ) : activeTab === "collaboration" ? (
+            <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+              <div className="space-y-3">{collaborationApplications.length ? collaborationApplications.map((app) => <button key={app.id} type="button" onClick={() => setSelectedAppId(app.id)} className={`w-full rounded-xl border p-4 text-left ${selectedAppId === app.id ? "border-[#004AAD] bg-[#EEF4FF]" : "border-zinc-200 bg-white"}`}><span className="text-xs font-bold text-zinc-500">협업 문의 · {app.status}</span><strong className="mt-1 block">{app.title || "제목 없음"}</strong><span className="mt-1 block text-sm text-zinc-600">{app.category || "분야 미정"}</span></button>) : <EmptyPanel title="아직 협업 제안이 없습니다" desc="보낸 협업 문의의 검토 상태를 여기서 확인할 수 있습니다." />}</div>
+              <div className="rounded-xl border border-zinc-200 bg-white p-5">{selectedApplication && isCollaborationApplication(selectedApplication) ? <dl className="grid gap-4">{[["제안 제목",selectedApplication.title],["팀 / 브랜드",selectedApplication.organization],["담당자",selectedApplication.name],["연락처",selectedApplication.phone],["이메일",selectedApplication.email],["분야",selectedApplication.category],["아이디어와 목표",selectedApplication.idea],["희망 역할",selectedApplication.desiredRole],["일정 / 예산",selectedApplication.timelineBudget]].filter(([,value])=>value).map(([label,value])=><div key={label}><dt className="text-xs font-bold text-zinc-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm font-semibold">{value}</dd></div>)}</dl> : <p className="text-sm text-zinc-500">문의 항목을 선택해 주세요.</p>}</div>
             </div>
           ) : activeTab === "profile" ? (
             <ProfileForm

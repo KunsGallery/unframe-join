@@ -14,6 +14,7 @@ import {
   User2,
 } from "lucide-react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { auth } from "../../lib/firebase";
 import InputBlock from "../../components/ui/InputBlock";
 import { unframeDesign } from "../../components/ui/unframeDesign";
 import {
@@ -287,7 +288,6 @@ const OpenCallApplicationForm = ({
   db,
   appId,
   user,
-  handleLogin,
   initialProfileData,
   onBack,
   onSubmitSuccess,
@@ -1286,7 +1286,7 @@ const OpenCallApplicationForm = ({
         try {
           await fetch("/.netlify/functions/send-kakao-alimtalk", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
             body: JSON.stringify({
               type: "application_received",
               to: normalizePhone(formData.phone),

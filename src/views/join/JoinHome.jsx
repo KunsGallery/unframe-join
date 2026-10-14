@@ -223,7 +223,6 @@ const TrackSlice = ({ track, hoveredTrackId, count, onHover, onClick }) => {
   const Icon = TRACK_ICON_MAP[track.routeTrack] || Sparkles;
   const visibilityState = getJoinTrackVisibilityState(track);
   const isClickable = visibilityState === JOIN_TRACK_DISPLAY_STATES.ACTIVE;
-  const isDisabled = visibilityState === JOIN_TRACK_DISPLAY_STATES.DISABLED;
   const visibilityTone = getTrackVisibilityTone(visibilityState);
   const isHovered = hoveredTrackId === track.id;
   const hasHover = Boolean(hoveredTrackId);
@@ -1025,7 +1024,7 @@ const PreparingDialog = ({ track, onClose }) => {
   );
 };
 
-const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
+const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon, onSelectCollaboration }) => {
   const [joinTrackDocs, setJoinTrackDocs] = useState([]);
   const [joinPopupDocs, setJoinPopupDocs] = useState([]);
   const [joinHomeContent, setJoinHomeContent] = useState(
@@ -1143,16 +1142,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
   );
   const activePopup = useMemo(() => popupCandidates[0] || null, [popupCandidates]);
 
-  useEffect(() => {
-    if (featuredProjects.length === 0) {
-      if (featuredIndex !== 0) setFeaturedIndex(0);
-      return;
-    }
-
-    if (featuredIndex >= featuredProjects.length) {
-      setFeaturedIndex(featuredProjects.length - 1);
-    }
-  }, [featuredIndex, featuredProjects.length]);
+  const safeFeaturedIndex = Math.min(featuredIndex, Math.max(0, featuredProjects.length - 1));
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -1187,6 +1177,11 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
 
     if (routeTrack === "salon") {
       onSelectSalon?.();
+      return;
+    }
+
+    if (routeTrack === "collaboration") {
+      onSelectCollaboration?.();
       return;
     }
 
@@ -1293,7 +1288,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon }) => {
         <FeaturedProjectSlider
           items={featuredProjects}
           content={joinHomeContent}
-          activeIndex={featuredProjects.length === 0 ? 0 : featuredIndex}
+          activeIndex={safeFeaturedIndex}
           onPrev={handleFeaturedPrev}
           onNext={handleFeaturedNext}
           onSelect={handleFeaturedProjectCta}

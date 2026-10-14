@@ -1,3 +1,6 @@
+import { adminDb, verifyAdminRequest, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
+import { applicationsPath } from "./_lib/salonShared.mjs";
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -329,6 +332,11 @@ export async function handler(event) {
   }
 
   try {
+    const payload = JSON.parse(event.body || "{}");
+    const adminCaller = payload.adminTest === true || payload.sendApplicantEmail === false;
+    const identity = adminCaller
+      ? await verifyAdminRequest(event)
+      : await verifyUserRequest(event);
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.MAIL_FROM;
     const adminTo = process.env.MAIL_TO_ADMIN;
@@ -337,7 +345,6 @@ export async function handler(event) {
       return json(500, { error: "Missing mail environment variables" });
     }
 
-    const payload = JSON.parse(event.body || "{}");
     const {
       applicantName,
       applicantEmail,
@@ -358,6 +365,16 @@ export async function handler(event) {
       adminEmailSubject = "",
       adminEmailBody = "",
     } = payload;
+
+    if (!applicationId && !adminCaller) return json(400, { error: "신청 정보가 없습니다." });
+    if (applicationId) {
+      const applicationSnap = await adminDb.collection(applicationsPath).doc(applicationId).get();
+      if (!applicationSnap.exists && !adminCaller) return json(404, { error: "신청서를 찾을 수 없습니다." });
+      const application = applicationSnap.exists ? applicationSnap.data() : null;
+      if (application?.trackType === "salon") return json(403, { error: "SALON 알림은 전용 절차로 처리됩니다." });
+      if (!adminCaller && application?.userId !== identity.uid) return json(403, { error: "본인 신청에 대해서만 발송할 수 있습니다." });
+      if (!adminCaller && String(applicantEmail || "").toLowerCase() !== String(application?.applicantEmail || application?.email || "").toLowerCase()) return json(403, { error: "신청서의 이메일 정보가 일치하지 않습니다." });
+    }
 
     if (!applicantEmail) {
       return json(400, { error: "Applicant email is required" });
@@ -412,9 +429,9 @@ export async function handler(event) {
 
     return json(200, { ok: true });
   } catch (error) {
-    console.error("send-application-emails error:", error);
-    return json(500, {
-      error: error?.message || "Failed to send emails",
+    console.error("send-application-emails error:", error?.statusCode || 500);
+    return json(error?.statusCode || 500, {
+      error: error?.statusCode ? error.message : "Failed to send emails",
     });
   }
 }

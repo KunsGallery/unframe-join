@@ -1,3 +1,5 @@
+import { auth } from "./firebase";
+
 const IMGBB_API_KEY = import.meta.env.VITE_IMGBB_API_KEY;
 
 export const IMAGE_MAX_SIZE = 32 * 1024 * 1024;
@@ -59,17 +61,21 @@ export const uploadImageToImgbb = async (file) => {
   };
 };
 
-const getSignedUpload = async ({ fileName, contentType, folder, userId }) => {
+const getSignedUpload = async ({ fileName, contentType, fileSize, folder, isAdminUpload = false }) => {
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("파일 업로드를 위해 로그인해 주세요.");
   const response = await fetch("/.netlify/functions/r2-sign-upload", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
       fileName,
       contentType,
+      fileSize,
       folder,
-      userId,
+      isAdminUpload,
     }),
   });
 
@@ -88,7 +94,6 @@ const getSignedUpload = async ({ fileName, contentType, folder, userId }) => {
 
   return result;
 };
-
 const uploadFileToSignedUrl = async ({ file, signedUrl }) => {
   const response = await fetch(signedUrl, {
     method: "PUT",
@@ -103,15 +108,15 @@ const uploadFileToSignedUrl = async ({ file, signedUrl }) => {
   }
 };
 
-export const uploadDocumentToR2 = async ({ file, folder, userId }) => {
+export const uploadDocumentToR2 = async ({ file, folder }) => {
   const error = validateDocumentFile(file);
   if (error) throw new Error(error);
 
   const signed = await getSignedUpload({
     fileName: file.name,
     contentType: file.type,
+    fileSize: file.size,
     folder,
-    userId,
   });
 
   await uploadFileToSignedUrl({
@@ -125,15 +130,16 @@ export const uploadDocumentToR2 = async ({ file, folder, userId }) => {
   };
 };
 
-export const uploadImageToR2 = async ({ file, folder = "images", userId = "anonymous" }) => {
+export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload = false }) => {
   const error = validateImageFile(file);
   if (error) throw new Error(error);
 
   const signed = await getSignedUpload({
     fileName: file.name,
     contentType: file.type,
+    fileSize: file.size,
     folder,
-    userId,
+    isAdminUpload,
   });
 
   await uploadFileToSignedUrl({
@@ -166,10 +172,12 @@ export const sendApplicationEmails = async ({
   adminEmailSubject = "",
   adminEmailBody = "",
 }) => {
+  const token = await auth.currentUser?.getIdToken();
   const response = await fetch("/.netlify/functions/send-application-emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token || ""}`,
     },
     body: JSON.stringify({
       applicantName,
@@ -223,10 +231,12 @@ export const sendApplicationStatusEmail = async ({
     throw new Error("Valid status is required");
   }
 
+  const token = await auth.currentUser?.getIdToken();
   const response = await fetch("/.netlify/functions/send-application-status-email", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token || ""}`,
     },
     body: JSON.stringify({
       type,
