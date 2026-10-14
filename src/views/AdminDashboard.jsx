@@ -1189,7 +1189,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
   return (
     <section className="min-h-screen bg-[#F6F4EE] py-5 text-zinc-900 md:py-8">
-      <div className="mx-auto max-w-7xl px-4">
+      <div className="mx-auto max-w-[1800px] px-4 md:px-6">
         <div className="mb-5 flex flex-col gap-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div className="space-y-3">
@@ -1233,7 +1233,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 lg:grid-cols-[210px_minmax(0,1fr)] lg:items-start">
+      <div className="mx-auto grid max-w-[1800px] gap-5 px-4 md:px-6 lg:grid-cols-[210px_minmax(0,1fr)] lg:items-start">
         <nav aria-label="관리자 메뉴" className="sticky top-3 z-30 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
           <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
             {ADMIN_TABS.map((tab, index) => {
