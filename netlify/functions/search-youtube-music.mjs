@@ -1,3 +1,6 @@
+import { verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
+import { enforceRateLimit } from "./_lib/rateLimit.mjs";
+
 const json = (statusCode, body) => ({
   statusCode,
   headers: {
@@ -12,11 +15,24 @@ const clean = (value, max = 300) => String(value ?? "").trim().slice(0, max);
 export async function handler(event) {
   if (event.httpMethod !== "GET") return json(405, { error: "Method not allowed" });
 
+  let identity;
+  try {
+    identity = await verifyUserRequest(event);
+  } catch (error) {
+    return json(error.statusCode || 500, { error: error.statusCode ? error.message : "로그인을 확인하지 못했습니다." });
+  }
+
   const query = clean(event.queryStringParameters?.q, 120);
   if (!query) return json(400, { error: "검색어를 입력해 주세요." });
 
-  const apiKey = process.env.YOUTUBE_API_KEY || process.env.VITE_YOUTUBE_API_KEY;
+  const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) return json(503, { error: "YOUTUBE_API_KEY 환경변수가 설정되지 않았습니다." });
+
+  try {
+    await enforceRateLimit({ scope: "search-youtube-music", subject: identity.uid, limit: 30, windowMs: 10 * 60 * 1000 });
+  } catch (error) {
+    return json(error.statusCode || 500, { error: error.statusCode ? error.message : "YouTube 검색 중 오류가 발생했습니다." });
+  }
 
   const params = new URLSearchParams({
     part: "snippet",
@@ -58,6 +74,7 @@ export async function handler(event) {
       }).filter((item) => item.videoId),
     });
   } catch (error) {
-    return json(500, { error: error?.message || "YouTube 검색 중 오류가 발생했습니다." });
+    console.error("search-youtube-music error");
+    return json(500, { error: "YouTube 검색 중 오류가 발생했습니다." });
   }
 }

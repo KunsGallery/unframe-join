@@ -1,7 +1,5 @@
 import { auth } from "./firebase";
 
-const IMGBB_API_KEY = import.meta.env.VITE_IMGBB_API_KEY;
-
 export const IMAGE_MAX_SIZE = 32 * 1024 * 1024;
 export const DOCUMENT_MAX_SIZE = 25 * 1024 * 1024;
 
@@ -31,34 +29,6 @@ export const validateDocumentFile = (file) => {
     return "문서 파일은 25MB 이하만 업로드할 수 있습니다.";
   }
   return "";
-};
-
-export const uploadImageToImgbb = async (file) => {
-  const error = validateImageFile(file);
-  if (error) throw new Error(error);
-  if (!IMGBB_API_KEY) throw new Error("VITE_IMGBB_API_KEY가 설정되지 않았습니다.");
-
-  const formData = new FormData();
-  formData.append("key", IMGBB_API_KEY);
-  formData.append("image", file);
-  formData.append("name", file.name);
-
-  const response = await fetch("https://api.imgbb.com/1/upload", {
-    method: "POST",
-    body: formData,
-  });
-
-  const result = await response.json();
-
-  if (!response.ok || !result?.success) {
-    throw new Error(result?.error?.message || "ImgBB 업로드에 실패했습니다.");
-  }
-
-  return {
-    url: result.data.url,
-    displayUrl: result.data.display_url,
-    deleteUrl: result.data.delete_url,
-  };
 };
 
 const getSignedUpload = async ({ fileName, contentType, fileSize, folder, isAdminUpload = false }) => {

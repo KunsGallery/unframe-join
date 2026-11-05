@@ -3,6 +3,17 @@
   to = "/index.html"
   status = 200
 
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000"
+    # Report-only until production pages run clean; switch the name to Content-Security-Policy to enforce.
+    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' https://*.daumcdn.net https://apis.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.r2.cloudflarestorage.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://*.daum.net; object-src 'none'; base-uri 'self'; form-action 'self'"
+
 [build]
   functions = "netlify/functions"
 

@@ -62,9 +62,7 @@ const MusicSearchField = ({ field, value, onChange, className = "" }) => {
     setSearching(true);
     setError("");
     try {
-      const response = await fetch(`/.netlify/functions/search-youtube-music?q=${encodeURIComponent(query.trim())}`);
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "YouTube 검색에 실패했습니다.");
+      const result = await callSalonFunction(`search-youtube-music?q=${encodeURIComponent(query.trim())}`, null, { method: "GET" });
       setResults(result.items || []);
       if ((result.items || []).length === 0) setError("검색 결과가 없습니다. 직접 입력으로 남겨 주세요.");
     } catch (err) {

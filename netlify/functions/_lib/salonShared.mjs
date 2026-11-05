@@ -5,6 +5,7 @@ export const ROOT_PATH = `artifacts/${APP_ID}/public/data`;
 export const applicationsPath = `${ROOT_PATH}/applications`;
 export const salonEventsPath = `${ROOT_PATH}/salonEvents`;
 export const salonLogsPath = `${ROOT_PATH}/salonCheckInLogs`;
+export const salonPrivatePath = `artifacts/${APP_ID}/admin/data/salonPrivate`;
 
 export const json = (statusCode, body) => ({
   statusCode,
@@ -87,6 +88,14 @@ const buildAuthHeaders = ({ apiKey, apiSecret }) => {
   };
 };
 
+// Falls back to the public document until scripts/migrate-salon-chat-urls.mjs has run.
+// Imported lazily so pass and token helpers load without Firebase credentials.
+const readGroupChatUrl = async (application, salon) => {
+  const { adminDb } = await import("./firebaseDatabase.mjs");
+  const snapshot = await adminDb.collection(salonPrivatePath).doc(String(application.salonId)).get();
+  return snapshot.data()?.groupChatUrl || salon.groupChatUrl || "";
+};
+
 export const sendSalonAlimtalk = async ({ kind, application, salon, passUrl = "", checkedInAt = null }) => {
   const setting = salon.notificationSettings || {};
   const enabled = kind === "approval" ? setting.approvalEnabled !== false : setting.welcomeEnabled !== false;
@@ -113,7 +122,7 @@ export const sendSalonAlimtalk = async ({ kind, application, salon, passUrl = ""
     // The Solapi button is configured as https://#{passUrl}.
     passUrl: String(passUrl || "").replace(/^https?:\/\//i, ""),
     passUrlFull: passUrl,
-    openChatCode: extractOpenChatCode(salon.groupChatUrl),
+    openChatCode: extractOpenChatCode(await readGroupChatUrl(application, salon)),
     checkedInAt: formatDateParts(checkedInAt).eventDateTime,
     programUrl: salon.links?.programUrl || "",
     guestbookUrl: salon.links?.guestbookUrl || "",

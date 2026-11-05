@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, deleteField, doc, onSnapshot, serverTimestamp, writeBatch } from "firebase/firestore";
 import { CalendarCheck, Download, ExternalLink, Music, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
 import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDate, toDateTimeLocalValue } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
@@ -194,8 +194,11 @@ const EventEditor = ({ draft, setDraft, onSave, onDelete, saving }) => {
 };
 
 const SalonManager = ({ db, appId, applications }) => {
-  const [events, setEvents] = useState([]); const [selectedId, setSelectedId] = useState(""); const [draft, setDraft] = useState(normalizeSalonEvent(DEFAULT_SALON_EVENT)); const [saving, setSaving] = useState(false); const [filter, setFilter] = useState("all"); const [search, setSearch] = useState(""); const [busyId, setBusyId] = useState("");
-  useEffect(() => onSnapshot(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION), (snapshot) => setEvents(snapshot.docs.map((item) => normalizeSalonEvent({ id: item.id, ...item.data() })))), [db, appId]);
+  const [publicEvents, setPublicEvents] = useState([]); const [salonPrivate, setSalonPrivate] = useState(null); const [selectedId, setSelectedId] = useState(""); const [draft, setDraft] = useState(normalizeSalonEvent(DEFAULT_SALON_EVENT)); const [saving, setSaving] = useState(false); const [filter, setFilter] = useState("all"); const [search, setSearch] = useState(""); const [busyId, setBusyId] = useState("");
+  useEffect(() => onSnapshot(collection(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION), (snapshot) => setPublicEvents(snapshot.docs.map((item) => normalizeSalonEvent({ id: item.id, ...item.data() })))), [db, appId]);
+  useEffect(() => onSnapshot(collection(db, "artifacts", appId, "admin", "data", "salonPrivate"), (snapshot) => setSalonPrivate(Object.fromEntries(snapshot.docs.map((item) => [item.id, item.data()]))), (error) => { console.error(error); setSalonPrivate({}); }), [db, appId]);
+  // Hold the list until private settings load, or a save could blank an unloaded chat URL.
+  const events = useMemo(() => salonPrivate === null ? [] : publicEvents.map((event) => ({ ...event, groupChatUrl: salonPrivate[event.id]?.groupChatUrl ?? event.groupChatUrl ?? "" })), [publicEvents, salonPrivate]);
   const hasUnsavedChanges = () => {
     const baseline = events.find((event) => event.id === selectedId) || DEFAULT_SALON_EVENT;
     return JSON.stringify(draft) !== JSON.stringify(normalizeSalonEvent(baseline));
@@ -225,20 +228,24 @@ const SalonManager = ({ db, appId, applications }) => {
         ...draft.checkInSettings,
         ...Object.fromEntries(["checkInStartAt", "checkInEndAt", "qrExpiresAt"].map((key) => [key, draft.checkInSettings?.[key] ? toDate(draft.checkInSettings[key]) : null])),
       };
-      await setDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, id), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, id), {
         ...draft,
         ...dateValues,
         checkInSettings,
+        groupChatUrl: deleteField(),
         id,
         slug: toSlug(draft.slug || draft.title),
         createdAt: current?.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
+      batch.set(doc(db, "artifacts", appId, "admin", "data", "salonPrivate", id), { groupChatUrl: draft.groupChatUrl || "" }, { merge: true });
+      await batch.commit();
       setSelectedId(id);
       setDraft((v) => ({ ...v, id, ...dateValues, checkInSettings }));
     } catch (error) { alert(error.message); } finally { setSaving(false); }
   };
-  const remove = async () => { if (!draft.id || !window.confirm("이 SALON 행사를 삭제하시겠습니까? 참가 신청 문서는 삭제되지 않습니다.")) return; await deleteDoc(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, draft.id)); setSelectedId(""); setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT)); };
+  const remove = async () => { if (!draft.id || !window.confirm("이 SALON 행사를 삭제하시겠습니까? 참가 신청 문서는 삭제되지 않습니다.")) return; const batch = writeBatch(db); batch.delete(doc(db, "artifacts", appId, "public", "data", SALON_EVENT_COLLECTION, draft.id)); batch.delete(doc(db, "artifacts", appId, "admin", "data", "salonPrivate", draft.id)); await batch.commit(); setSelectedId(""); setDraft(normalizeSalonEvent(DEFAULT_SALON_EVENT)); };
   const selectedEvent = events.find((event) => event.id === selectedId) || (draft.id ? draft : null);
   const participants = useMemo(() => (applications || []).filter((item) => item.trackType === "salon" && (!selectedEvent || item.salonId === selectedEvent.id)).filter((item) => filter === "all" || item.status === filter).filter((item) => `${item.applicantName} ${item.phone}`.toLowerCase().includes(search.toLowerCase())), [applications, selectedEvent, filter, search]);
   const act = async (item, action, extra = {}) => { const messages = { approve: "참가 승인 및 QR을 발급하시겠습니까?\n참가 확정 알림톡이 함께 발송됩니다.", reissue: "기존 QR은 즉시 사용할 수 없게 됩니다.\n새 QR을 발급하시겠습니까?" }; if (messages[action] && !window.confirm(messages[action])) return; setBusyId(item.id); try { let result; if (["approve", "reissue", "resend"].includes(action)) result = await callSalonFunction("approve-salon-participant", { applicationId: item.id, action }); else result = await callSalonFunction("manage-salon-participant", { applicationId: item.id, action, ...extra }); if (result.passUrl && result.notification?.status === "failed") { await navigator.clipboard?.writeText(result.passUrl); alert("승인은 완료되었지만 알림톡은 실패했습니다. 새 QR 링크를 클립보드에 복사했습니다."); } } catch (error) { alert(error.message); } finally { setBusyId(""); } };

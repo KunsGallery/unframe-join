@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Send } from "lucide-react";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { callSalonFunction } from "../lib/salonApi";
 
 const PURPOSES = ["전시", "팝업·쇼룸", "촬영", "토크·워크숍", "기타"];
 const INITIAL = { title: "", organization: "", name: "", phone: "", email: "", purpose: PURPOSES[0], date: "", hours: "", attendees: "", plan: "", equipment: "", budget: "", privacyAgreed: false };
 const inputClass = "min-h-12 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15";
 
-export default function RentalInquiryForm({ db, user, handleLogin, onBack }) {
+export default function RentalInquiryForm({ user, handleLogin, onBack }) {
   const [form, setForm] = useState(INITIAL);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -17,12 +17,9 @@ export default function RentalInquiryForm({ db, user, handleLogin, onBack }) {
     if (!form.privacyAgreed) { setError("개인정보 수집 및 이용에 동의해 주세요."); return; }
     setStatus("saving"); setError("");
     try {
-      await addDoc(collection(db, "artifacts", "unframe-join", "public", "data", "applications"), {
-        ...form, inquiryType: "space-rental", trackType: "rental", status: "review",
-        userId: user.uid, applicantEmail: form.email || user.email || "", submittedAt: serverTimestamp(),
-      });
+      await callSalonFunction("submit-application", { ...form, trackType: "rental" });
       setStatus("done");
-    } catch (e) { console.error(e); setError("문의 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."); setStatus("idle"); }
+    } catch (e) { console.error(e); setError(e.message || "문의 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."); setStatus("idle"); }
   };
   if (status === "done") return <section className="mx-auto max-w-3xl py-14"><span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"><Check size={20}/></span><h1 className="mt-5 text-3xl font-black">대관 문의가 접수되었습니다.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-800">문의 내용을 검토한 뒤 입력하신 연락처로 안내드립니다. 일정과 비용은 별도 협의 후 확정되며, 지금은 예약 상태가 아닙니다.</p><button type="button" onClick={onBack} className="mt-7 rounded-full bg-zinc-950 px-5 py-3 text-sm font-bold text-white">대관 안내로</button></section>;
   return <main className="mx-auto max-w-5xl pb-14 text-zinc-950">

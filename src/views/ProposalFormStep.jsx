@@ -26,7 +26,7 @@ import InputBlock from "../components/ui/InputBlock";
 import { unframeDesign } from "../components/ui/unframeDesign";
 import { addDays } from "../utils/date";
 import {
-  uploadImageToImgbb,
+  uploadImageToR2,
   uploadDocumentToR2,
   validateImageFile,
   validateDocumentFile,
@@ -431,7 +431,7 @@ const ProposalFormStep = ({
     setUploading(fieldName, true);
 
     try {
-      const result = await uploadImageToImgbb(file);
+      const result = await uploadImageToR2({ file, folder: "documents" });
       setFormData((prev) => ({ ...prev, [fieldName]: result.url }));
     } catch (err) {
       setUploadErrors((prev) => ({

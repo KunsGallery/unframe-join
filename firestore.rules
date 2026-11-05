@@ -37,16 +37,16 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // 참가자 오픈채팅 URL 등 공개 행사 문서에 둘 수 없는 SALON 설정.
+    match /artifacts/unframe-join/admin/data/salonPrivate/{salonId} {
+      allow read, write: if isAdmin();
+    }
+
     // 2. 신청서 / 지원서 데이터
     // rental 신청서와 open-call 지원서를 함께 저장
-    // SALON 신청 생성과 변경은 Firebase Admin SDK 서버 함수만 수행
+    // 모든 신청 생성은 입력을 검증하는 Admin SDK 서버 함수만 수행
     match /artifacts/unframe-join/public/data/applications/{docId} {
-      allow create: if isNonAnonymous() &&
-        request.resource.data.userId == request.auth.uid &&
-        !isSalonApplication(request.resource.data) &&
-        request.resource.data.status == "review" &&
-        request.resource.data.trackType in ["rental", "open-call", "collaboration"] &&
-        request.resource.data.keys().hasAll(["trackType", "userId", "status", "submittedAt"]);
+      allow create: if false;
 
       allow read: if isAdmin() || (
         isSignedIn() &&

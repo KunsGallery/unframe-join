@@ -10,11 +10,19 @@ const ADMIN_EMAILS = new Set([
   "sylove887@gmail.com",
 ]);
 
-export const verifyAdminRequest = async (event) => {
+const decodeBearerToken = async (event, missingMessage) => {
   const header = event.headers?.authorization || event.headers?.Authorization || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw Object.assign(new Error("관리자 로그인이 필요합니다."), { statusCode: 401 });
-  const decoded = await adminAuth.verifyIdToken(match[1]);
+  if (!match) throw Object.assign(new Error(missingMessage), { statusCode: 401 });
+  try {
+    return await adminAuth.verifyIdToken(match[1]);
+  } catch {
+    throw Object.assign(new Error(missingMessage), { statusCode: 401 });
+  }
+};
+
+export const verifyAdminRequest = async (event) => {
+  const decoded = await decodeBearerToken(event, "관리자 로그인이 필요합니다.");
   const email = String(decoded.email || "").trim().toLowerCase();
   const isTrustedLogin = decoded.email_verified === true && decoded.firebase?.sign_in_provider === "google.com";
   if (!ADMIN_EMAILS.has(email) || !isTrustedLogin) {
@@ -24,10 +32,7 @@ export const verifyAdminRequest = async (event) => {
 };
 
 export const verifyUserRequest = async (event) => {
-  const header = event.headers?.authorization || event.headers?.Authorization || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) throw Object.assign(new Error("로그인 정보가 필요합니다."), { statusCode: 401 });
-  const decoded = await adminAuth.verifyIdToken(match[1]);
+  const decoded = await decodeBearerToken(event, "로그인 정보가 필요합니다.");
   if (decoded.firebase?.sign_in_provider === "anonymous") {
     throw Object.assign(new Error("로그인 후 신청해 주세요."), { statusCode: 403 });
   }

@@ -13,14 +13,13 @@ import {
   Upload,
   User2,
 } from "lucide-react";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { auth } from "../../lib/firebase";
 import InputBlock from "../../components/ui/InputBlock";
 import { unframeDesign } from "../../components/ui/unframeDesign";
 import {
   sendApplicationEmails,
   uploadDocumentToR2,
-  uploadImageToImgbb,
+  uploadImageToR2,
   validateDocumentFile,
   validateImageFile,
 } from "../../lib/uploads";
@@ -35,6 +34,7 @@ import {
   normalizeOpenCallFormSettings,
   normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
+import { callSalonFunction } from "../../lib/salonApi";
 import AddressField from "./AddressField";
 
 const EMPTY_WORK = {
@@ -284,8 +284,6 @@ const createEditableCustomField = (order) => ({
 
 const OpenCallApplicationForm = ({
   openCall,
-  db,
-  appId,
   user,
   initialProfileData,
   onBack,
@@ -1049,9 +1047,8 @@ const OpenCallApplicationForm = ({
     setUploading(key, true);
 
     try {
-      const result = await uploadImageToImgbb(file);
-      const uploadedUrl = result?.url || result?.publicUrl || "";
-      console.log("WORK_IMAGE_UPLOADED", { index, url: uploadedUrl, result });
+      const result = await uploadImageToR2({ file, folder: "open-call/works" });
+      const uploadedUrl = result?.url || "";
       clearFieldError(`work${index + 1}Image`);
       setWorkField(index, "imageUrl", uploadedUrl);
     } catch (err) {
@@ -1092,7 +1089,6 @@ const OpenCallApplicationForm = ({
       });
 
       const uploadedUrl = result?.url || result?.publicUrl || "";
-      console.log("PORTFOLIO_UPLOADED", result);
       clearFieldError("portfolioUrl");
       setField("portfolioUrl", uploadedUrl);
     } catch (err) {
@@ -1118,9 +1114,6 @@ const OpenCallApplicationForm = ({
     setFieldErrors(nextErrors);
 
     if (Object.keys(nextErrors).length > 0) {
-      console.log("OPEN_CALL_VALIDATION_ERRORS", nextErrors);
-      console.log("OPEN_CALL_FORM_DATA", formData);
-      console.log("OPEN_CALL_WORKS", works);
       alert("필수항목을 확인해 주세요. 화면에 표시된 항목을 확인해 주세요.");
       setTimeout(() => {
         document.getElementById("open-call-error-summary")?.scrollIntoView({
@@ -1164,54 +1157,24 @@ const OpenCallApplicationForm = ({
         return acc;
       }, {});
 
-      const appDocRef = await addDoc(
-        collection(db, "artifacts", appId, "public", "data", "applications"),
-        {
-          trackType: "open-call",
-          openCallId: currentOpenCall.id || OPEN_CALL_ID,
-          openCallTitle: currentOpenCall.title || OPEN_CALL_TITLE,
-          status: "review",
-          userId: user.uid,
-          applicantEmail: trimValue(formData.email) || user.email || "",
-          name: trimValue(formData.name),
-          phone: normalizePhone(formData.phone),
-          email: trimValue(formData.email),
-          birthYear: isFieldEnabled(formSettings.fields.birthYear)
-            ? trimValue(formData.birthYear)
-            : "",
-          addressMain: isFieldEnabled(formSettings.fields.address)
-            ? trimValue(formData.addressMain)
-            : "",
-          addressDetail: isFieldEnabled(formSettings.fields.address)
-            ? addressSettings.mode === "search"
-              ? trimValue(formData.addressDetail)
-              : ""
-            : "",
-          postalCode: isFieldEnabled(formSettings.fields.address)
-            ? addressSettings.mode === "search"
-              ? trimValue(formData.postalCode)
-              : ""
-            : "",
-          medium: isFieldEnabled(formSettings.fields.medium)
-            ? trimValue(formData.medium)
-            : "",
-          snsLink: isFieldEnabled(formSettings.fields.snsLink)
-            ? trimValue(formData.snsLink)
-            : "",
-          artistStatement: isSectionEnabled(formSettings.sections.statement)
-            ? trimValue(formData.artistStatement)
-            : "",
-          works,
-          portfolioUrl: isSectionEnabled(formSettings.sections.portfolio)
-            ? trimValue(formData.portfolioUrl)
-            : "",
-          privacyAgreed: isSectionEnabled(formSettings.sections.privacy)
-            ? formData.privacyAgreed
-            : false,
-          customFieldAnswers,
-          submittedAt: serverTimestamp(),
-        }
-      );
+      const { applicationId } = await callSalonFunction("submit-application", {
+        trackType: "open-call",
+        openCallId: currentOpenCall.id || OPEN_CALL_ID,
+        name: trimValue(formData.name),
+        phone: normalizePhone(formData.phone),
+        email: trimValue(formData.email),
+        birthYear: trimValue(formData.birthYear),
+        addressMain: trimValue(formData.addressMain),
+        addressDetail: trimValue(formData.addressDetail),
+        postalCode: trimValue(formData.postalCode),
+        medium: trimValue(formData.medium),
+        snsLink: trimValue(formData.snsLink),
+        artistStatement: trimValue(formData.artistStatement),
+        works,
+        portfolioUrl: trimValue(formData.portfolioUrl),
+        privacyAgreed: formData.privacyAgreed,
+        customFieldAnswers,
+      });
 
       const templateContext = {
         name: trimValue(formData.name) || user?.displayName || "",
@@ -1219,7 +1182,7 @@ const OpenCallApplicationForm = ({
         phone: normalizePhone(formData.phone),
         openCallTitle: currentOpenCall.title || OPEN_CALL_TITLE,
         openCallId: currentOpenCall.id || OPEN_CALL_ID,
-        applicationId: appDocRef.id,
+        applicationId,
         submittedAt: new Date().toLocaleString("ko-KR"),
       };
 
@@ -1228,7 +1191,7 @@ const OpenCallApplicationForm = ({
         notificationSettings.adminEmailEnabled
       ) {
         try {
-          await sendApplicationEmails({ applicationId: appDocRef.id });
+          await sendApplicationEmails({ applicationId });
         } catch (mailError) {
           console.error("open-call mail failed:", mailError);
         }
@@ -1241,7 +1204,7 @@ const OpenCallApplicationForm = ({
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
             body: JSON.stringify({
               type: "application_received",
-              applicationId: appDocRef.id,
+              applicationId,
             }),
           });
           if (!kakaoResponse.ok) {
@@ -1267,7 +1230,7 @@ const OpenCallApplicationForm = ({
       });
     } catch (error) {
       console.error(error);
-      alert("제출 중 오류가 발생했습니다.");
+      alert(error.message || "제출 중 오류가 발생했습니다.");
     } finally {
       setIsSubmitting(false);
     }

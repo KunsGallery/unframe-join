@@ -177,13 +177,10 @@ describe("applications — 기존 신청", () => {
     await assertFails(setDoc(applicationRef(anonymousDb(), "anonymous-create"), rentalApplication({ userId: "anonymous-user" })));
   });
 
-  test("비익명 본인의 rental/open-call create 허용", async () => {
-    await assertSucceeds(setDoc(applicationRef(ownerDb(), "rental-create"), rentalApplication()));
-    await assertSucceeds(setDoc(applicationRef(ownerDb(), "open-call-create"), openCallApplication()));
-  });
-
-  test("다른 userId로 create 거부", async () => {
-    await assertFails(setDoc(applicationRef(ownerDb(), "wrong-owner"), rentalApplication({ userId: "other-user" })));
+  test("브라우저 직접 create는 본인·관리자 모두 거부 (서버 함수로만 접수)", async () => {
+    await assertFails(setDoc(applicationRef(ownerDb(), "rental-create"), rentalApplication()));
+    await assertFails(setDoc(applicationRef(ownerDb(), "open-call-create"), openCallApplication()));
+    await assertFails(setDoc(applicationRef(adminDb(), "admin-create"), rentalApplication()));
   });
 
   test("본인 read 허용, 타인 read 거부, 관리자 read 허용", async () => {
@@ -332,6 +329,25 @@ describe("관리자 allowlist", () => {
   test("Google 외 로그인 토큰은 관리자 권한 없음", async () => {
     await assertFails(getDoc(applicationRef(passwordAdminDb(), "rental-other")));
     await assertFails(updateDoc(salonEventRef(passwordAdminDb()), { title: "Nope" }));
+  });
+});
+
+describe("서버 전용·관리자 전용 데이터", () => {
+  const privateRef = (db, id = "salon-1") => doc(db, `${ROOT}/admin/data/salonPrivate/${id}`);
+  const rateRef = (db) => doc(db, `${ROOT}/admin/data/rateLimits/some-key`);
+
+  test("SALON 비공개 설정은 관리자만 읽고 쓴다", async () => {
+    await assertSucceeds(setDoc(privateRef(adminDb()), { groupChatUrl: "https://open.kakao.com/o/x" }));
+    await assertSucceeds(getDoc(privateRef(adminDb())));
+    await assertFails(getDoc(privateRef(ownerDb())));
+    await assertFails(getDoc(privateRef(publicDb())));
+    await assertFails(setDoc(privateRef(ownerDb()), { groupChatUrl: "x" }));
+  });
+
+  test("빈도 제한 카운터는 브라우저에서 접근할 수 없다", async () => {
+    await assertFails(getDoc(rateRef(adminDb())));
+    await assertFails(getDoc(rateRef(ownerDb())));
+    await assertFails(setDoc(rateRef(ownerDb()), { count: 0 }));
   });
 });
 
