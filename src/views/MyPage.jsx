@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SalonImageAnswer from "../components/ui/SalonImageAnswer";
+import InquiryAnswers from "../components/ui/InquiryAnswers";
 import {
   ArrowLeft,
   User2,
@@ -339,6 +340,14 @@ const ApplicationDetailPanel = ({ app }) => {
       />
     );
   }
+
+  if (app.inquiryType === "space-rental") return (
+    <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-5 md:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-3"><h2 className="text-xl font-black">{app.title || "대관 문의"}</h2><StatusChip status={app.status} /></div>
+      <p className="my-4 text-sm leading-6 text-zinc-600">문의 내용을 검토한 뒤 입력하신 연락처로 안내드립니다. 이용 일정과 조건은 별도 협의로 확정됩니다.</p>
+      <InquiryAnswers application={app} />
+    </section>
+  );
 
   const nextAction =
     isSalonApplication(app) && app.status === "approved"
@@ -1138,6 +1147,8 @@ const MyPage = ({
     const focused = orderedApplications.find((app) => app.id === focusedApplicationId);
     if (isSalonApplication(focused)) {
       setActiveTab("salon");
+    } else if (isCollaborationApplication(focused)) {
+      setActiveTab("collaboration");
     } else if (focused) {
       setActiveTab("applications");
     }
@@ -1338,7 +1349,7 @@ const MyPage = ({
           ) : activeTab === "collaboration" ? (
             <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
               <div className="space-y-3">{collaborationApplications.length ? collaborationApplications.map((app) => <button key={app.id} type="button" onClick={() => setSelectedAppId(app.id)} className={`w-full rounded-xl border p-4 text-left ${selectedAppId === app.id ? "border-[#004AAD] bg-[#EEF4FF]" : "border-zinc-200 bg-white"}`}><span className="text-xs font-bold text-zinc-500">협업 문의 · {app.status}</span><strong className="mt-1 block">{app.title || "제목 없음"}</strong><span className="mt-1 block text-sm text-zinc-600">{app.category || "분야 미정"}</span></button>) : <EmptyPanel title="아직 협업 제안이 없습니다" desc="보낸 협업 문의의 검토 상태를 여기서 확인할 수 있습니다." />}</div>
-              <div className="rounded-xl border border-zinc-200 bg-white p-5">{selectedApplication && isCollaborationApplication(selectedApplication) ? <dl className="grid gap-4">{[["제안 제목",selectedApplication.title],["팀 / 브랜드",selectedApplication.organization],["담당자",selectedApplication.name],["연락처",selectedApplication.phone],["이메일",selectedApplication.email],["분야",selectedApplication.category],["아이디어와 목표",selectedApplication.idea],["희망 역할",selectedApplication.desiredRole],["일정 / 예산",selectedApplication.timelineBudget]].filter(([,value])=>value).map(([label,value])=><div key={label}><dt className="text-xs font-bold text-zinc-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm font-semibold">{value}</dd></div>)}</dl> : <p className="text-sm text-zinc-500">문의 항목을 선택해 주세요.</p>}</div>
+              <div className="min-w-0 rounded-lg border border-zinc-200 bg-white p-5">{selectedApplication && isCollaborationApplication(selectedApplication) ? <InquiryAnswers application={selectedApplication} /> : <p className="text-sm text-zinc-500">문의 항목을 선택해 주세요.</p>}</div>
             </div>
           ) : activeTab === "profile" ? (
             <ProfileForm

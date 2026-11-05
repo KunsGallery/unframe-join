@@ -165,6 +165,9 @@ const normalizeDescriptionSectionPayload = (sections) =>
 const scrollToOpenCallSection = (id) => {
   if (typeof document === "undefined") return;
   const target = document.getElementById(id);
+  for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+    if (parent.tagName === "DETAILS") parent.open = true;
+  }
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
@@ -1564,9 +1567,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
   };
 
   return (
-    <section className="mb-14 rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
+    <section className="mb-10 min-w-0">
+      <div className="sticky top-20 z-40 mb-5 flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3">
+        <label className="flex min-w-0 flex-1 flex-wrap items-center gap-3 text-sm font-bold">편집할 공고<select value={previewOpenCallId} onChange={event => { setPreviewOpenCallId(event.target.value); setSelectedOpenCallId(event.target.value); }} className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold">{sortedCalls.map(call => <option key={call.id} value={call.id}>{call.title || "제목 없음"}</option>)}</select></label>
+        {previewedOpenCall && <button type="button" onClick={() => handleSave(previewedOpenCall)} disabled={saveFeedbacks[previewedOpenCall.id]?.state === "saving"} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-bold text-white disabled:opacity-50"><Save size={16} />{saveFeedbacks[previewedOpenCall.id]?.state === "saving" ? "저장 중…" : "공고 저장"}</button>}
+      </div>
       {activeOpenCallTab === "landing" ? (
-        <>
+        <details className="mb-5 border-b border-zinc-200">
+          <summary className="cursor-pointer py-3 text-sm font-bold text-zinc-700">공개 상태 · 노출 진단 {diagnosticsAllPass ? "(정상)" : "(확인 필요)"}</summary>
       <div className="mb-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1833,7 +1841,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
           ))}
         </div>
       </div>
-        </>
+        </details>
       ) : null}
 
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -1896,7 +1904,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
       </div>
 
       {activeOpenCallTab === "form" && previewedOpenCallView ? (
-        <div className="mb-6 space-y-5">
+        <details className="mb-6 space-y-5 border-b border-zinc-200">
+          <summary className="cursor-pointer py-3 text-sm font-bold text-zinc-700">신청폼 실시간 미리보기</summary>
           <div className="sticky top-4 z-30 rounded-[32px] border border-[#004aad]/12 bg-white/90 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-6">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
@@ -1999,7 +2008,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
               wideLayout
             />
           </div>
-        </div>
+        </details>
       ) : null}
 
       {activeOpenCallTab === "applications" ? (
@@ -2013,7 +2022,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
         </div>
       ) : null}
 
-      <div className="mb-5 grid gap-3 rounded-[28px] border border-zinc-100 bg-zinc-50/80 p-4 md:grid-cols-2 xl:grid-cols-3">
+      <details className="mb-5 border-b border-zinc-200"><summary className="cursor-pointer py-3 text-sm font-semibold text-zinc-600">고급 진단 정보</summary>
+      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="rounded-[22px] border border-white bg-white px-4 py-3">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
             현재 편집 중인 공고 ID
@@ -2088,6 +2098,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
         </div>
       </div>
 
+      </details>
       {!hasActiveOpenCall ? (
         <div className="mb-5 rounded-[22px] border border-red-200 bg-red-50 px-4 py-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -2188,7 +2199,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
         </div>
       ) : (
         <div className="space-y-5">
-          {sortedCalls.map((call) => {
+          {sortedCalls.filter(call => call.id === previewOpenCallId).map((call) => {
             const rawCall = openCalls.find((item) => item.id === call.id) || call;
             const draft = drafts[call.id] || {};
             const applicantCount = getApplicantItems(applications, call.id).length;
@@ -2314,7 +2325,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
                   </div>
 
-                  <div className="mt-5 rounded-[28px] border border-[#004aad]/10 bg-white p-4 md:p-5">
+                  <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">공고 페이지 미리보기</summary>
+                  <div className="bg-white p-4 md:p-5">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
@@ -2570,6 +2582,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
                   </div>
 
+                  </details>
+                  <details open className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">기본 정보 · 모집 기간 · 소개 문구</summary>
                   <div
                     id={heroEditId}
                     className="mt-5 rounded-[28px] border border-zinc-100 bg-white p-4 md:p-5"
@@ -2902,7 +2916,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col xl:col-span-2">
+                    </div></div></details>
+                    <details open={activeOpenCallTab === "form"} className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">신청 양식 · 기본 항목 · 추가 질문</summary>
+                    <div className="flex flex-col">
                     <div
                       id={completionEditId}
                       className="order-2 mt-4 rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4"
@@ -3442,8 +3458,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <SaveStatusRow call={call} />
-
                     <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-5 xl:col-span-2">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
                         지원 완료 화면 / 알림 설정
@@ -3459,9 +3473,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </p>
                     </div>
 
-                    <SaveStatusRow call={call} />
                     </div>
-
+                    </details>
+                    <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">자주 묻는 질문 · Q&amp;A</summary>
                     <div
                       id={faqEditId}
                       className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2"
@@ -3569,8 +3583,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <SaveStatusRow call={call} />
-
+                    </details>
+                    <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">상세 설명 · 소개 섹션</summary>
                     <div
                       id={descriptionEditId}
                       className="rounded-[28px] border border-zinc-100 bg-white p-4 xl:col-span-2"
@@ -3703,6 +3717,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
+                    </details>
                 <SaveStatusRow call={call} sticky />
 
                 {isSelected ? (
@@ -3932,7 +3947,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     )}
                   </div>
                 ) : null}
-              </div></div></div></div>
+              </div></div>
             );
           })}
         </div>

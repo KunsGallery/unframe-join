@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SalonImageAnswer from "../components/ui/SalonImageAnswer";
+import InquiryAnswers from "../components/ui/InquiryAnswers";
 import {
   Activity,
   FileText,
@@ -1710,9 +1711,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                             </h4>
 
                             {app.trackType === "collaboration" ? (
-                              <dl className="grid gap-3 rounded-xl bg-[#F6F4EE] p-4 text-left sm:grid-cols-2">
-                                {[["제안 제목", app.title], ["팀 / 브랜드", app.organization], ["제안자", app.name], ["이메일", app.email || app.applicantEmail], ["분야", app.category], ["연락처", app.phone], ["아이디어와 목표", app.idea], ["희망 역할", app.desiredRole], ["일정 / 예산", app.timelineBudget]].filter(([,value]) => value).map(([label,value]) => <div key={label} className="min-w-0"><dt className="text-[10px] font-black text-zinc-500">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm font-semibold">{value}</dd></div>)}
-                              </dl>
+                              <InquiryAnswers application={app} />
                             ) : null}
 
                             <div className="flex items-center gap-6 flex-wrap text-left">
@@ -1911,6 +1910,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                     <DetailItem label="이용 시간 / 기간" value={app.hours || "미정"} />
                                     <DetailItem label="예상 인원" value={app.attendees || "미정"} />
                                     <DetailItem label="예산 범위" value={app.budget || "미정"} />
+                                    <DetailItem label="필요한 지원 범위" value={app.supportScope || "공간 이용"} />
                                   </div>
                                 ) : (
                                   <div className="grid gap-4 text-left">

@@ -602,7 +602,7 @@ const BrandHero = ({ content }) => (
       ) : null}
 
       {isVisibleText(content.heroTitle) ? (
-        <h1 className="mt-6 max-w-4xl whitespace-pre-line text-[3rem] font-black tracking-tighter leading-[0.92] text-zinc-950 break-keep md:text-[4.3rem] lg:text-[5.2rem]">
+        <h1 className="mt-5 max-w-4xl whitespace-pre-line text-4xl font-black leading-[1.1] text-zinc-950 break-keep md:text-5xl lg:text-6xl">
           {content.heroTitle}
         </h1>
       ) : null}
@@ -1279,12 +1279,12 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon, onSelectCol
   };
 
   return (
-    <main className="min-h-screen bg-[#F6F4EE] text-zinc-950">
-      <div className="mx-auto max-w-7xl px-5 pt-10 pb-8 md:px-6 md:pt-16 md:pb-10">
+    <div className="min-h-screen text-zinc-950">
+      <div className="mx-auto max-w-7xl pt-4 pb-8 md:pt-6 md:pb-10">
         <BrandHero content={joinHomeContent} />
       </div>
 
-      <div className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
+      <div className="mx-auto max-w-7xl pb-10 md:pb-12">
         <FeaturedProjectSlider
           items={featuredProjects}
           content={joinHomeContent}
@@ -1296,7 +1296,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon, onSelectCol
         />
       </div>
 
-      <div className="mx-auto max-w-7xl px-5 pb-14 md:px-6 md:pb-20">
+      <div className="mx-auto max-w-7xl pb-14 md:pb-20">
         <EntryPanel
           loading={loading}
           content={joinHomeContent}
@@ -1309,7 +1309,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon, onSelectCol
         />
       </div>
 
-      <footer className="mx-auto max-w-7xl px-5 pb-10 md:px-6 md:pb-12">
+      <footer className="mx-auto max-w-7xl pb-10 md:pb-12">
         <div className="flex flex-col gap-2 border-t border-zinc-950/10 pt-4 md:flex-row md:items-center md:justify-between">
           {joinHomeContent.activeTrackCountEnabled ? (
             isVisibleText(
@@ -1336,7 +1336,7 @@ const JoinHome = ({ onSelectRental, onSelectOpenCall, onSelectSalon, onSelectCol
         onHideToday={handlePopupHideToday}
         onCta={handlePopupCta}
       />
-    </main>
+    </div>
   );
 };
 

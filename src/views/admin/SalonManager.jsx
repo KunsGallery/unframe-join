@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, deleteField, doc, onSnapshot, serverTimestamp, writeBatch } from "firebase/firestore";
 import { CalendarCheck, Download, ExternalLink, Music, Plus, QrCode, RefreshCw, Save, Search, Trash2, Upload } from "lucide-react";
-import { DEFAULT_SALON_EVENT, formatSalonDateTime, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDate, toDateTimeLocalValue } from "../../constants/salon";
+import { DEFAULT_SALON_EVENT, formatSalonDateTime, getSalonDisplayStatus, normalizeSalonEvent, SALON_APPLICATION_STATUSES, SALON_EVENT_COLLECTION, toDate, toDateTimeLocalValue } from "../../constants/salon";
 import { callSalonFunction } from "../../lib/salonApi";
 import { uploadImageToR2 } from "../../lib/uploads";
 
@@ -260,12 +260,13 @@ const SalonManager = ({ db, appId, applications }) => {
         <div className="mt-3 space-y-1.5">
           {events.map((event) => {
             const selected = selectedId === event.id;
-            const isOpen = event.status === "open";
+            const displayStatus = getSalonDisplayStatus(event);
+            const isOpen = displayStatus.state === "open";
             return (
               <button key={event.id} type="button" onClick={() => choose(event)} className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${selected ? "border-[#004aad] bg-white" : "border-transparent hover:border-zinc-200 hover:bg-white/70"}`}>
                 <span className="flex items-start justify-between gap-2">
                   <span className="min-w-0 truncate text-sm font-bold">{event.title || "제목 없음"}</span>
-                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold ${isOpen ? "border-emerald-300 text-emerald-800" : "border-zinc-300 text-zinc-700"}`}>{getStatusLabel(event.status)}</span>
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold ${isOpen ? "border-emerald-300 text-emerald-800" : "border-zinc-300 text-zinc-700"}`}>{displayStatus.label}</span>
                 </span>
                 <span className="mt-1 block text-xs text-zinc-600">{formatSalonDateTime(event.eventStartAt)}</span>
               </button>

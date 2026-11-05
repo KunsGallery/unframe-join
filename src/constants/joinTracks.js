@@ -63,17 +63,17 @@ export const DEFAULT_JOIN_TRACKS = [
     routeTrack: "collaboration",
     order: 4,
     enabled: true,
-    entryStatus: "disabled",
+    entryStatus: "open",
     preparingTitle: "준비 중입니다.",
     preparingMessage: "현재 협업 제안 접수는 준비 중입니다.",
     preparingConfirmLabel: "확인",
     title: "기타 협업 제안",
-    eyebrow: "Preparing",
+    eyebrow: "Collaboration",
     description: "브랜드, 매체, 플랫폼,\n콘텐츠 협업",
-    ctaLabel: "준비 중",
-    statusLabel: "PREPARING",
+    ctaLabel: "협업 제안하기",
+    statusLabel: "문의 가능",
     shortLabel: "COLLAB",
-    badgeText: "Preparing",
+    badgeText: "OPEN",
     accentColor: "#6B7280",
     backgroundImageUrl: "",
   },
@@ -137,6 +137,7 @@ export const getJoinTrackVisibilityPatch = (state) => {
     return {
       entryStatus: "hidden",
       enabled: false,
+      inquiryLaunchVersion: 1,
     };
   }
 
@@ -144,12 +145,14 @@ export const getJoinTrackVisibilityPatch = (state) => {
     return {
       entryStatus: "disabled",
       enabled: true,
+      inquiryLaunchVersion: 1,
     };
   }
 
   return {
     entryStatus: "open",
     enabled: true,
+    inquiryLaunchVersion: 1,
   };
 };
 
@@ -183,11 +186,21 @@ export const getPreviewTextValue = (object, key, fallback = "") => {
 
 export const normalizeJoinTrack = (track = {}) => {
   const base = DEFAULT_JOIN_TRACK_MAP[track.id] || {};
+  // Retire the legacy preparing defaults once; subsequent admin visibility edits win.
+  const launchInquiry = ["rental", "collaboration"].includes(track.id) &&
+    !track.inquiryLaunchVersion && track.enabled !== false && track.entryStatus !== "hidden";
+  if (launchInquiry) {
+    track = { ...track, entryStatus: "open", inquiryLaunchVersion: 1 };
+    for (const key of ["ctaLabel", "statusLabel", "badgeText", "eyebrow"]) {
+      if (/준비\s*중|preparing/i.test(track[key] || "")) track[key] = base[key];
+    }
+  }
   const enabled = normalizeEnabled(track.enabled, base.enabled !== false);
   const visibilityState = getJoinTrackVisibilityState({ ...base, ...track, enabled });
 
   return {
     id: normalizeString(track.id || base.id),
+    inquiryLaunchVersion: track.inquiryLaunchVersion || 0,
     routeTrack: normalizeString(track.routeTrack || base.routeTrack || track.id || base.id),
     order: normalizeOrder(track.order, base.order || 0),
     enabled: visibilityState !== JOIN_TRACK_DISPLAY_STATES.HIDDEN,

@@ -181,6 +181,18 @@ export const getSalonAvailability = (event, now = new Date()) => {
   return { available: true, reason: "" };
 };
 
+export const getSalonDisplayStatus = (event, now = new Date()) => {
+  if (event.status === "draft") return { state: "draft", label: "초안" };
+  if (event.status === "archived") return { state: "archived", label: "보관" };
+  const end = toDate(event.eventEndAt) || toDate(event.eventStartAt);
+  if (end && end <= now) return { state: "ended", label: "행사 종료" };
+  if (event.isVisible === false) return { state: "hidden", label: "비공개" };
+  if (getSalonAvailability(event, now).available) return { state: "open", label: "모집 중" };
+  const start = toDate(event.applicationStartAt);
+  if (event.status === "open" && start && start > now) return { state: "upcoming", label: "접수 예정" };
+  return { state: "closed", label: "접수 마감" };
+};
+
 export const isSalonApplicationApproved = (application) =>
   application?.trackType === SALON_APPLICATION_TRACK && application?.status === "approved";
 

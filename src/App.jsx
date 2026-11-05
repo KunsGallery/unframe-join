@@ -360,6 +360,7 @@ const App = () => {
 
   const handleSelectRentalTrack = () => {
     setSelectedTrack("rental");
+    setRentalMode("detail");
     setOpenCallMode("landing");
     setRequestedOpenCallId("");
     setSelectedOpenCall(null);
@@ -478,7 +479,7 @@ const App = () => {
         reset={resetAll}
       />
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left">
+      <main className={`${viewMode === "admin" && isAdmin ? "max-w-[1920px]" : "max-w-7xl"} mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left`}>
         <ErrorBoundary>
         <Suspense fallback={<LoadingOverlay />}>
         {selectedTrack === "salon" && salonMode === "pass" ? (
@@ -568,14 +569,14 @@ const App = () => {
               rentalMode === "detail" ? (
                 <RentalInfoPage onBack={handleReturnToJoinHome} onContinue={() => {
                   setRentalMode("apply");
-                  handleSelectRentalTrack();
-                  window.history.pushState({}, "", "/rental/apply");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }} />
               ) : (
                 <RentalInquiryForm
                   db={db}
                   user={user}
                   handleLogin={handleLogin}
+                  onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }}
                   onBack={() => {
                     setRentalMode("detail");
                     window.history.pushState({}, "", "/rental");
@@ -583,7 +584,7 @@ const App = () => {
                 />
               )
             ) : selectedTrack === "collaboration" ? (
-              <CollaborationInfoPage db={db} onBack={handleReturnToJoinHome} handleLogin={handleLogin} />
+              <CollaborationInfoPage db={db} user={user} onBack={handleReturnToJoinHome} handleLogin={handleLogin} onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }} />
             ) : selectedTrack === "salon" ? (
               salonMode === "detail" ? (
                 <SalonDetail
@@ -632,6 +633,18 @@ const App = () => {
                 />
               ) : (
                 <SalonLanding
+                  user={user}
+                  applications={myApplications}
+                  onViewApplication={(application) => {
+                    setFocusedApplicationId(application.id);
+                    setViewMode("my-page");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  onViewPass={(token) => {
+                    setSalonToken(token);
+                    setSalonMode("pass");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
                   onBack={handleReturnToJoinHome}
                   onOpen={(slug) => {
                     setSalonSlug(slug);
