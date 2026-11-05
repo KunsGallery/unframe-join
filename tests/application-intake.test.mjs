@@ -26,6 +26,7 @@ const docRef = (path, id) => ({
   id,
   get: async () => snapshot(path, id),
   set: async (data) => write(path, id, data),
+  update: async (data) => write(path, id, { ...store[path][id], ...data }),
 });
 const fakeDb = {
   collection: (path) => ({ doc: (id) => docRef(path, id ?? `auto-${(autoId += 1)}`) }),
