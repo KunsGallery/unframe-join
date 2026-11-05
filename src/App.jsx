@@ -22,6 +22,7 @@ const MyPage = lazyPage(() => import("./views/MyPage"));
 const SuccessView = lazyPage(() => import("./views/SuccessView"));
 const JoinHome = lazyPage(() => import("./views/join/JoinHome"));
 const OpenCallLanding = lazyPage(() => import("./views/open-call/OpenCallLanding"));
+const OpenCallEmpty = lazyPage(() => import("./views/open-call/OpenCallEmpty"));
 const OpenCallApplicationForm = lazyPage(() => import("./views/open-call/OpenCallApplicationForm"));
 const SalonLanding = lazyPage(() => import("./views/salon/SalonLanding"));
 const SalonDetail = lazyPage(() => import("./views/salon/SalonDetail"));
@@ -157,6 +158,8 @@ const App = () => {
   const [salonCompleteContext, setSalonCompleteContext] = useState(null);
   const [selectedOpenCall, setSelectedOpenCall] = useState(null);
   const [openCalls, setOpenCalls] = useState([]);
+  const [openCallsLoaded, setOpenCallsLoaded] = useState(false);
+  const [rentalPrefill, setRentalPrefill] = useState(null);
   const [reservations, setReservations] = useState({});
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -272,10 +275,12 @@ const App = () => {
       ref,
       (snapshot) => {
         setOpenCalls(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+        setOpenCallsLoaded(true);
       },
       (error) => {
         console.error(error);
         setOpenCalls([]);
+        setOpenCallsLoaded(true);
       }
     );
 
@@ -449,7 +454,7 @@ const App = () => {
   if (loading) return <LoadingOverlay />;
 
   return (
-    <div className="min-h-screen bg-[#fdfbf7] text-zinc-900 font-sans selection:bg-[#004aad] selection:text-white relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#fdfbf7] text-zinc-900 font-sans selection:bg-[#004aad] selection:text-white relative overflow-x-clip">
       <ParticleBackground />
 
       <Navbar
@@ -533,12 +538,10 @@ const App = () => {
                 onSelectCollaboration={() => setSelectedTrack("collaboration")}
               />
             ) : selectedTrack === "open-call" ? (
-              !resolvedOpenCall ? (
-                <section className="mx-auto max-w-3xl rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-                  <h1 className="text-2xl font-black">현재 공개된 오픈콜이 없습니다.</h1>
-                  <p className="mt-3 text-sm text-zinc-600">새 모집이 시작되면 이곳에서 확인하실 수 있습니다.</p>
-                  <button type="button" onClick={handleReturnToJoinHome} className="mt-6 rounded-full bg-zinc-950 px-5 py-3 text-sm font-bold text-white">메인으로</button>
-                </section>
+              !openCallsLoaded ? (
+                <LoadingOverlay />
+              ) : !resolvedOpenCall ? (
+                <OpenCallEmpty onBack={handleReturnToJoinHome} />
               ) :
               openCallMode === "landing" ? (
                 <OpenCallLanding
@@ -567,13 +570,15 @@ const App = () => {
               )
             ) : selectedTrack === "rental" ? (
               rentalMode === "detail" ? (
-                <RentalInfoPage onBack={handleReturnToJoinHome} onContinue={() => {
+                <RentalInfoPage onBack={handleReturnToJoinHome} onContinue={(prefill) => {
+                  setRentalPrefill(prefill || null);
                   setRentalMode("apply");
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }} />
               ) : (
                 <RentalInquiryForm
-                  db={db}
+                  key={JSON.stringify(rentalPrefill)}
+                  initial={rentalPrefill}
                   user={user}
                   handleLogin={handleLogin}
                   onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }}

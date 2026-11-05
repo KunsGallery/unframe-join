@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --experimental-vm-modules --experimental-test-module-mocks --no-warnings --test tests/lazy-page.test.mjs tests/application-intake.test.mjs tests/application-notifications.test.mjs tests/get-my-salon-pass.test.mjs tests/migrate-admin-memos.test.mjs tests/migrate-salon-chat-urls.test.mjs tests/salon-checkin.test.mjs",
+    "test": "node --experimental-vm-modules --experimental-test-module-mocks --no-warnings --test tests/lazy-page.test.mjs tests/open-call-view.test.mjs tests/application-intake.test.mjs tests/application-notifications.test.mjs tests/get-my-salon-pass.test.mjs tests/migrate-admin-memos.test.mjs tests/migrate-salon-chat-urls.test.mjs tests/salon-checkin.test.mjs",
     "test:rules": "PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH firebase emulators:exec --only firestore --project demo-unframe-join \"node --test tests/firestore.rules.test.mjs\""
   },
   "dependencies": {

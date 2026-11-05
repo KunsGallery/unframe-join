@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Send } from "lucide-react";
 import { callSalonFunction } from "../lib/salonApi";
+import { ChapterPage, MarkFooter } from "./chapters/Chapters";
 
 const PURPOSES = ["전시", "팝업·쇼룸", "촬영", "토크·워크숍", "기타"];
 const INITIAL = { title: "", organization: "", name: "", phone: "", email: "", purpose: PURPOSES[0], date: "", hours: "", attendees: "", plan: "", equipment: "", budget: "", privacyAgreed: false };
+const SUPPORT_SCOPES = ["공간 이용", "공간 이용 + 운영 지원 상담", "전시 기획·디렉팅 상담", "아직 미정"];
 const inputClass = "min-h-12 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15";
 
-export default function RentalInquiryForm({ user, handleLogin, onBack, onViewInquiry }) {
-  const [form, setForm] = useState(() => ({ ...INITIAL, supportScope: "공간 이용" }));
+export default function RentalInquiryForm({ initial, user, handleLogin, onBack, onViewInquiry }) {
+  const [form, setForm] = useState(() => ({ ...INITIAL, supportScope: "공간 이용", ...initial }));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [inquiryId, setInquiryId] = useState("");
@@ -26,9 +28,13 @@ export default function RentalInquiryForm({ user, handleLogin, onBack, onViewInq
     } catch (e) { console.error(e); setError(e.message || "문의 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요."); setStatus("idle"); }
   };
   if (status === "done") return <section className="mx-auto max-w-3xl py-14"><Check size={28} className="text-emerald-700"/><h1 className="mt-5 text-3xl font-black">대관 문의가 접수되었습니다.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-800">문의 내용을 검토한 뒤 입력하신 연락처로 안내드립니다. 일정과 비용은 별도 협의 후 확정되며, 지금은 예약 상태가 아닙니다.</p><div className="mt-7 flex flex-wrap gap-3"><button type="button" onClick={() => onViewInquiry?.(inquiryId)} className="rounded-lg bg-[#004AAD] px-5 py-3 text-sm font-bold text-white">내 문의 확인</button><button type="button" onClick={onBack} className="rounded-lg border border-zinc-300 px-5 py-3 text-sm font-bold">대관 안내로</button></div></section>;
-  return <main className="mx-auto max-w-5xl pb-14 text-zinc-950">
-    <button type="button" onClick={onBack} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-zinc-600"><ArrowLeft size={16}/> 대관 안내</button>
-    <header className="border-b border-zinc-200 pb-6"><h1 className="text-3xl font-black md:text-4xl">공간 이용 문의</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-600">확정되지 않은 일정·인원·예산은 ‘미정’으로 적어도 됩니다. 문의 접수는 일정 예약이나 계약 확정이 아닙니다.</p></header>
+  return <ChapterPage>
+    <header className="ch-field on-blue" style={{ paddingTop: 56, paddingBottom: 56 }}>
+      <button type="button" onClick={onBack} className="ch-back"><ArrowLeft size={18}/> 대관 안내</button>
+      <h1 className="ch-display" style={{ marginTop: 16 }}>{form.title.trim() || "공간 이용 문의"}</h1>
+      <p style={{ marginTop: 16, maxWidth: "52ch" }}>{form.title.trim() ? "인사동 108호에서 열 전시를 알려 주세요. " : ""}확정되지 않은 일정·인원·예산은 ‘미정’으로 적어도 됩니다. 문의 접수는 일정 예약이나 계약 확정이 아닙니다.</p>
+    </header>
+    <main className="mx-auto max-w-5xl px-4 pb-20 pt-4 text-zinc-950 md:px-6">
     {(!user || user.isAnonymous) && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#EEF4FF] px-4 py-3"><p className="text-sm font-semibold text-zinc-700">문의 내용을 마이페이지에서 확인하려면 로그인해 주세요.</p><button type="button" onClick={handleLogin} className="rounded-full bg-[#004AAD] px-4 py-2 text-sm font-bold text-white">로그인</button></div>}
     <form onSubmit={submit}><fieldset disabled={status === "saving" || !user || user.isAnonymous} className="grid min-w-0 gap-x-5 gap-y-5 py-7 sm:grid-cols-2 disabled:opacity-60">
       <label className="grid gap-2 text-sm font-bold">문의 제목<input required className={inputClass} value={form.title} onChange={e=>update("title",e.target.value)} placeholder="예: 11월 브랜드 팝업"/></label>
@@ -41,12 +47,14 @@ export default function RentalInquiryForm({ user, handleLogin, onBack, onViewInq
       <label className="grid gap-2 text-sm font-bold">이용 시간 / 기간<input className={inputClass} value={form.hours} onChange={e=>update("hours",e.target.value)} placeholder="예: 3일, 오전 10시–오후 6시"/></label>
       <label className="grid gap-2 text-sm font-bold">예상 인원<input inputMode="numeric" className={inputClass} value={form.attendees} onChange={e=>update("attendees",e.target.value)} placeholder="미정 가능"/></label>
       <label className="grid gap-2 text-sm font-bold">예산 범위<input className={inputClass} value={form.budget} onChange={e=>update("budget",e.target.value)} placeholder="미정 가능"/></label>
-      <label className="grid gap-2 text-sm font-bold sm:col-span-2">필요한 지원 범위<select className={inputClass} value={form.supportScope || "공간 이용"} onChange={e=>update("supportScope",e.target.value)}>{["공간 이용", "공간 이용 + 운영 지원 상담", "전시 기획·디렉팅 상담", "아직 미정"].map(value => <option key={value}>{value}</option>)}</select></label>
+      <label className="grid gap-2 text-sm font-bold sm:col-span-2">필요한 지원 범위<select className={inputClass} value={form.supportScope || "공간 이용"} onChange={e=>update("supportScope",e.target.value)}>{[...new Set([form.supportScope, ...SUPPORT_SCOPES])].filter(Boolean).map(value => <option key={value}>{value}</option>)}</select></label>
       <label className="grid gap-2 text-sm font-bold sm:col-span-2">공간 활용 계획<textarea required rows={5} className="w-full rounded-lg border border-zinc-300 p-3 text-sm outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15" value={form.plan} onChange={e=>update("plan",e.target.value)} placeholder="행사 내용과 공간을 어떻게 사용할지 적어 주세요."/></label>
       <label className="grid gap-2 text-sm font-bold sm:col-span-2">반입 장비 / 설치 요청<textarea rows={3} className="w-full rounded-lg border border-zinc-300 p-3 text-sm outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15" value={form.equipment} onChange={e=>update("equipment",e.target.value)} placeholder="없으면 비워 두세요."/></label>
       <label className="flex items-start gap-3 text-sm font-medium leading-6 text-zinc-700 sm:col-span-2"><input type="checkbox" checked={form.privacyAgreed} onChange={e=>update("privacyAgreed",e.target.checked)} className="mt-1 h-4 w-4 accent-[#004AAD]"/>문의 검토와 회신을 위한 개인정보 수집 및 이용에 동의합니다.</label>
       {error && <p role="alert" className="sm:col-span-2 text-sm font-bold text-red-700">{error}</p>}
       <div className="sm:col-span-2"><button disabled={status === "saving"} className="inline-flex min-h-12 items-center gap-2 whitespace-nowrap rounded-full bg-[#004AAD] px-6 text-sm font-bold text-white disabled:opacity-50"><Send size={16}/>{status === "saving" ? "문의 접수 중..." : "대관 문의 보내기"}<ArrowRight size={16}/></button></div>
     </fieldset></form>
-  </main>;
+    </main>
+    <MarkFooter credits={[]} />
+  </ChapterPage>;
 }
