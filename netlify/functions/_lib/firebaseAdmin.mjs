@@ -16,7 +16,8 @@ export const verifyAdminRequest = async (event) => {
   if (!match) throw Object.assign(new Error("관리자 로그인이 필요합니다."), { statusCode: 401 });
   const decoded = await adminAuth.verifyIdToken(match[1]);
   const email = String(decoded.email || "").trim().toLowerCase();
-  if (!ADMIN_EMAILS.has(email)) {
+  const isTrustedLogin = decoded.email_verified === true && decoded.firebase?.sign_in_provider === "google.com";
+  if (!ADMIN_EMAILS.has(email) || !isTrustedLogin) {
     throw Object.assign(new Error("관리자 권한이 없습니다."), { statusCode: 403 });
   }
   return { uid: decoded.uid, email };

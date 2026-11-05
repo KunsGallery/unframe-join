@@ -34,7 +34,6 @@ import {
   getOpenCallDisplayStatus,
   normalizeOpenCallFormSettings,
   normalizeOpenCallNotificationSettings,
-  renderOpenCallTemplate,
 } from "../../constants/openCall";
 import AddressField from "./AddressField";
 
@@ -1214,12 +1213,6 @@ const OpenCallApplicationForm = ({
         }
       );
 
-      const applicationDetailUrl =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/?view=my-page&applicationId=${encodeURIComponent(
-              appDocRef.id
-            )}&app=${encodeURIComponent(appDocRef.id)}`
-          : "";
       const templateContext = {
         name: trimValue(formData.name) || user?.displayName || "",
         email: trimValue(formData.email) || user?.email || "",
@@ -1229,54 +1222,13 @@ const OpenCallApplicationForm = ({
         applicationId: appDocRef.id,
         submittedAt: new Date().toLocaleString("ko-KR"),
       };
-      const applicantName =
-        trimValue(formData.name) || user?.displayName || "Applicant";
-      const applicantEmail = trimValue(formData.email) || user?.email || "";
-      const openCallProgram = {
-        name: currentOpenCall.title || OPEN_CALL_TITLE,
-        price: 0,
-      };
-      const openCallDateLabel =
-        currentOpenCall.subtitle || OPEN_CALL_SUBTITLE || "Open Call";
 
       if (
         notificationSettings.applicantEmailEnabled ||
         notificationSettings.adminEmailEnabled
       ) {
         try {
-          await sendApplicationEmails({
-            applicantName,
-            applicantEmail,
-            exhibitionTitle: currentOpenCall.title || OPEN_CALL_TITLE,
-            selectedDate: openCallDateLabel,
-            selectedProgram: openCallProgram,
-            partnerType: "open-call",
-            phone: normalizePhone(formData.phone),
-            brandName: "",
-            stageName: currentOpenCall.heroAccent || "",
-            myPageUrl: applicationDetailUrl,
-            applicationDetailUrl,
-            submittedAt: new Date().toISOString(),
-            applicationId: appDocRef.id,
-            sendApplicantEmail: notificationSettings.applicantEmailEnabled,
-            sendAdminEmail: notificationSettings.adminEmailEnabled,
-            applicantEmailSubject: renderOpenCallTemplate(
-              notificationSettings.applicantEmailSubject,
-              templateContext
-            ),
-            applicantEmailBody: renderOpenCallTemplate(
-              notificationSettings.applicantEmailBody,
-              templateContext
-            ),
-            adminEmailSubject: renderOpenCallTemplate(
-              notificationSettings.adminEmailSubject,
-              templateContext
-            ),
-            adminEmailBody: renderOpenCallTemplate(
-              notificationSettings.adminEmailBody,
-              templateContext
-            ),
-          });
+          await sendApplicationEmails({ applicationId: appDocRef.id });
         } catch (mailError) {
           console.error("open-call mail failed:", mailError);
         }
@@ -1284,24 +1236,17 @@ const OpenCallApplicationForm = ({
 
       if (notificationSettings.kakaoEnabled) {
         try {
-          await fetch("/.netlify/functions/send-kakao-alimtalk", {
+          const kakaoResponse = await fetch("/.netlify/functions/send-kakao-alimtalk", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser?.getIdToken()}` },
             body: JSON.stringify({
               type: "application_received",
-              to: normalizePhone(formData.phone),
-              applicantName,
-              exhibitionTitle: currentOpenCall.title || OPEN_CALL_TITLE,
-              selectedDate: openCallDateLabel,
-              selectedProgram: openCallProgram,
               applicationId: appDocRef.id,
-              applicationDetailUrl,
-              kakaoMessage: renderOpenCallTemplate(
-                notificationSettings.kakaoMessage,
-                templateContext
-              ),
             }),
           });
+          if (!kakaoResponse.ok) {
+            throw new Error(`알림톡 발송 실패 (${kakaoResponse.status})`);
+          }
         } catch (kakaoError) {
           console.error("open-call kakao failed:", kakaoError);
         }

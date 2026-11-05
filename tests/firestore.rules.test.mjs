@@ -32,15 +32,23 @@ const ownerDb = () => dbFor("owner-user", token("password", { email: "owner@exam
 const otherDb = () => dbFor("other-user", token("password", { email: "other@example.com" }));
 const adminDb = () => dbFor(
   "admin-user",
-  token("google.com", { email: "gallerykuns@gmail.com" })
+  token("google.com", { email: "gallerykuns@gmail.com", email_verified: true })
 );
 const secondAdminDb = () => dbFor(
   "admin-user-2",
-  token("google.com", { email: "sylove887@gmail.com" })
+  token("google.com", { email: "sylove887@gmail.com", email_verified: true })
 );
 const typoAdminDb = () => dbFor(
   "typo-admin",
-  token("google.com", { email: "sklove887@gmail.com" })
+  token("google.com", { email: "sklove887@gmail.com", email_verified: true })
+);
+const unverifiedAdminDb = () => dbFor(
+  "impostor-unverified",
+  token("google.com", { email: "gallerykuns@gmail.com", email_verified: false })
+);
+const passwordAdminDb = () => dbFor(
+  "impostor-password",
+  token("password", { email: "gallerykuns@gmail.com", email_verified: true })
 );
 const publicDb = () => testEnv.unauthenticatedContext().firestore();
 
@@ -58,6 +66,7 @@ const rentalApplication = (overrides = {}) => ({
   userId: "owner-user",
   status: "review",
   name: "Owner",
+  submittedAt: new Date(),
   ...overrides,
 });
 
@@ -66,6 +75,7 @@ const openCallApplication = (overrides = {}) => ({
   userId: "owner-user",
   status: "review",
   name: "Owner",
+  submittedAt: new Date(),
   ...overrides,
 });
 
@@ -131,9 +141,28 @@ describe("reservations", () => {
     await assertFails(updateDoc(reservationRef(anonymousDb()), { applicantCount: 2 }));
   });
 
-  test("비익명 사용자 create/update 허용", async () => {
-    await assertSucceeds(setDoc(reservationRef(ownerDb(), "2026-08-02"), { status: "review" }));
-    await assertSucceeds(updateDoc(reservationRef(ownerDb()), { applicantCount: 2 }));
+  test("일반 사용자는 빈 날짜를 선점할 수 없음", async () => {
+    await assertFails(setDoc(reservationRef(ownerDb(), "2026-08-02"), {
+      status: "writing",
+      writingCount: 9999,
+      writingUsers: { "owner-user": 9999999999999 },
+    }));
+  });
+
+  test("일반 사용자는 확정 일정의 status를 지울 수 없음", async () => {
+    await testEnv.withSecurityRulesDisabled((context) =>
+      setDoc(reservationRef(context.firestore(), "2026-08-03"), {
+        status: "confirmed",
+        writingUsers: {},
+        writingCount: 0,
+      })
+    );
+    await assertFails(updateDoc(reservationRef(ownerDb(), "2026-08-03"), { status: null }));
+  });
+
+  test("관리자 create/update 허용", async () => {
+    await assertSucceeds(setDoc(reservationRef(adminDb(), "2026-08-02"), { status: "confirmed" }));
+    await assertSucceeds(updateDoc(reservationRef(adminDb()), { applicantCount: 2 }));
   });
 
   test("일반 사용자 delete 거부, 관리자 delete 허용", async () => {
@@ -293,5 +322,34 @@ describe("관리자 allowlist", () => {
   test("오타 관리자 이메일은 권한 없음", async () => {
     await assertFails(getDoc(applicationRef(typoAdminDb(), "rental-other")));
     await assertFails(updateDoc(salonEventRef(typoAdminDb()), { title: "Nope" }));
+  });
+
+  test("이메일 미인증 토큰은 관리자 권한 없음", async () => {
+    await assertFails(getDoc(applicationRef(unverifiedAdminDb(), "rental-other")));
+    await assertFails(updateDoc(salonEventRef(unverifiedAdminDb()), { title: "Nope" }));
+  });
+
+  test("Google 외 로그인 토큰은 관리자 권한 없음", async () => {
+    await assertFails(getDoc(applicationRef(passwordAdminDb(), "rental-other")));
+    await assertFails(updateDoc(salonEventRef(passwordAdminDb()), { title: "Nope" }));
+  });
+});
+
+describe("관리자 메모", () => {
+  const noteRef = (db, id = "rental-owner") =>
+    doc(db, `${ROOT}/admin/data/applicationNotes/${id}`);
+
+  test("관리자는 메모를 읽고 쓸 수 있음", async () => {
+    await assertSucceeds(setDoc(noteRef(adminDb()), { memo: "내부 메모" }));
+    await assertSucceeds(getDoc(noteRef(secondAdminDb())));
+  });
+
+  test("신청자 본인과 비로그인 사용자는 메모에 접근할 수 없음", async () => {
+    await testEnv.withSecurityRulesDisabled((context) =>
+      setDoc(noteRef(context.firestore()), { memo: "내부 메모" })
+    );
+    await assertFails(getDoc(noteRef(ownerDb())));
+    await assertFails(getDoc(noteRef(publicDb())));
+    await assertFails(setDoc(noteRef(ownerDb()), { memo: "변조" }));
   });
 });

@@ -13,6 +13,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.firebase.sign_in_provider == "google.com" &&
         (
           request.auth.token.email == 'gallerykuns@gmail.com' ||
           request.auth.token.email == 'sylove887@gmail.com'
@@ -24,19 +26,15 @@ service cloud.firestore {
         data.trackType == 'salon';
     }
 
-    // Availability is public, but only trusted admin/server workflows mutate it.
+    // Availability is public, but only admins mutate it.
     match /artifacts/unframe-join/public/data/reservations/{date} {
       allow read: if true;
-      allow create, update: if isAdmin();
-      allow create: if isNonAnonymous() &&
-        request.resource.data.keys().hasOnly(['writingUsers', 'writingCount', 'status', 'updatedAt']) &&
-        request.resource.data.status == 'writing' &&
-        request.resource.data.writingUsers.keys().hasOnly([request.auth.uid]);
-      allow update: if isNonAnonymous() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['writingUsers', 'writingCount', 'status', 'updatedAt']) &&
-        request.resource.data.writingUsers.diff(resource.data.writingUsers).affectedKeys().hasOnly([request.auth.uid]) &&
-        request.resource.data.status in ['writing', null];
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 관리자 전용 신청 메모. 신청자가 읽을 수 있는 신청 문서에 저장하지 않는다.
+    match /artifacts/unframe-join/admin/data/applicationNotes/{applicationId} {
+      allow read, write: if isAdmin();
     }
 
     // 2. 신청서 / 지원서 데이터

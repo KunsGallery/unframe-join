@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 import {
   collection,
+  deleteField,
   doc,
   onSnapshot,
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   OPEN_CALL_FALLBACK,
@@ -578,7 +580,23 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const [reviewSavingMap, setReviewSavingMap] = useState({});
   const [memoDrafts, setMemoDrafts] = useState({});
   const [memoSavingMap, setMemoSavingMap] = useState({});
+  const [adminNotes, setAdminNotes] = useState({});
   const clearTimersRef = useRef({});
+
+  useEffect(
+    () =>
+      onSnapshot(
+        collection(db, "artifacts", appId, "admin", "data", "applicationNotes"),
+        (snapshot) => {
+          setAdminNotes(Object.fromEntries(snapshot.docs.map((d) => [d.id, d.data()])));
+        },
+        (error) => console.error(error)
+      ),
+    [appId, db]
+  );
+
+  // Falls back to the legacy field until scripts/migrate-admin-memos.mjs has run.
+  const getAdminMemo = (app) => adminNotes[app.id]?.memo ?? app.openCallAdminMemo ?? "";
 
   useEffect(() => {
     const ref = collection(db, "artifacts", appId, "public", "data", "openCalls");
@@ -679,21 +697,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
       return next;
     });
   }, [sortedCalls]);
-
-  useEffect(() => {
-    setMemoDrafts((prev) => {
-      const next = { ...prev };
-      sortedCalls.forEach((call) => {
-        const callApplications = getApplicantItems(applications, call.id);
-        callApplications.forEach((app) => {
-          if (next[app.id] === undefined) {
-            next[app.id] = app.openCallAdminMemo || "";
-          }
-        });
-      });
-      return next;
-    });
-  }, [applications, sortedCalls]);
 
   const updateDraft = (callId, key, value) => {
     setSaveFeedbacks((prev) => ({
@@ -1226,14 +1229,25 @@ const OpenCallManager = ({ db, appId, applications }) => {
   };
 
   const handleMemoSave = async (app) => {
-    const memo = memoDrafts[app.id] ?? app.openCallAdminMemo ?? "";
+    const memo = memoDrafts[app.id] ?? getAdminMemo(app);
     setMemoSavingMap((prev) => ({ ...prev, [app.id]: true }));
 
     try {
-      await updateApplicationDoc(app.id, {
-        openCallAdminMemo: memo,
-        memoUpdatedAt: serverTimestamp(),
-      });
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, "artifacts", appId, "admin", "data", "applicationNotes", app.id),
+        { memo, updatedAt: serverTimestamp() },
+        { merge: true }
+      );
+      batch.update(
+        doc(db, "artifacts", appId, "public", "data", "applications", app.id),
+        {
+          openCallAdminMemo: deleteField(),
+          memoUpdatedAt: deleteField(),
+          updatedAt: serverTimestamp(),
+        }
+      );
+      await batch.commit();
     } catch (error) {
       console.error(error);
       alert(formatFirestorePermissionMessage(error));
@@ -1333,7 +1347,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
           getWorkValue(works[2], "year"),
           getWorkValue(works[2], "imageUrl"),
           app.portfolioUrl || "",
-          app.openCallAdminMemo || "",
+          getAdminMemo(app),
           formatDate(app.submittedAt),
           ...customFieldColumns.map((column) =>
             getCustomFieldCsvValue(customFieldAnswers[column.fieldId])
@@ -3895,10 +3909,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   </label>
                                   <textarea
                                     rows={7}
-                                    value={memoDrafts[app.id] ?? app.openCallAdminMemo ?? ""}
+                                    value={memoDrafts[app.id] ?? getAdminMemo(app)}
                                     onChange={(e) => handleMemoChange(app.id, e.target.value)}
                                     className="w-full resize-none rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                    placeholder="지원자에게만 보이는 내부 메모를 남겨 주세요."
+                                    placeholder="운영자에게만 보이는 내부 메모를 남겨 주세요."
                                   />
                                   <button
                                     type="button"

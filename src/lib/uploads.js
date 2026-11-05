@@ -153,25 +153,7 @@ export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload =
   };
 };
 
-export const sendApplicationEmails = async ({
-  applicantName,
-  applicantEmail,
-  exhibitionTitle,
-  selectedDate,
-  selectedProgram,
-  partnerType,
-  phone,
-  brandName,
-  stageName,
-  myPageUrl = "",
-  applicationDetailUrl = "",
-  sendApplicantEmail = true,
-  sendAdminEmail = true,
-  applicantEmailSubject = "",
-  applicantEmailBody = "",
-  adminEmailSubject = "",
-  adminEmailBody = "",
-}) => {
+export const sendApplicationEmails = async ({ applicationId }) => {
   const token = await auth.currentUser?.getIdToken();
   const response = await fetch("/.netlify/functions/send-application-emails", {
     method: "POST",
@@ -179,24 +161,7 @@ export const sendApplicationEmails = async ({
       "Content-Type": "application/json",
       Authorization: `Bearer ${token || ""}`,
     },
-    body: JSON.stringify({
-      applicantName,
-      applicantEmail,
-      exhibitionTitle,
-      selectedDate,
-      selectedProgram,
-      partnerType,
-      phone,
-      brandName,
-      stageName,
-      applicationDetailUrl: applicationDetailUrl || myPageUrl,
-      sendApplicantEmail,
-      sendAdminEmail,
-      applicantEmailSubject,
-      applicantEmailBody,
-      adminEmailSubject,
-      adminEmailBody,
-    }),
+    body: JSON.stringify({ applicationId }),
   });
 
   const text = await response.text();

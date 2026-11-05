@@ -1,5 +1,5 @@
-import { adminDb, verifyAdminRequest, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
-import { applicationsPath } from "./_lib/salonShared.mjs";
+import { verifyAdminRequest } from "./_lib/firebaseAdmin.mjs";
+import { claimApplicantNotification, loadApplicantNotification } from "./_lib/applicationNotifications.mjs";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -326,6 +326,121 @@ const sendMail = async ({ apiKey, from, to, subject, html }) => {
   return result;
 };
 
+const deliver = async ({ apiKey, from, adminTo, message }) => {
+  const {
+    applicantName,
+    applicantEmail,
+    exhibitionTitle,
+    selectedDate,
+    selectedProgram,
+    partnerType,
+    phone,
+    brandName,
+    stageName,
+    applicationDetailUrl = "",
+    submittedAt = new Date().toISOString(),
+    applicationId = "",
+    sendApplicantEmail = true,
+    sendAdminEmail = true,
+    applicantEmailSubject = "",
+    applicantEmailBody = "",
+    adminEmailSubject = "",
+    adminEmailBody = "",
+  } = message;
+
+  if (sendApplicantEmail) {
+    await sendMail({
+      apiKey,
+      from,
+      to: [applicantEmail],
+      subject:
+        applicantEmailSubject ||
+        `[UNFRAME] 신청이 정상적으로 접수되었습니다`,
+      html: buildApplicantHtml({
+        applicantName,
+        exhibitionTitle,
+        selectedDate,
+        selectedProgram,
+        partnerType,
+        applicationDetailUrl,
+        submittedAt,
+        applicationId,
+        messageBody: applicantEmailBody,
+      }),
+    });
+  }
+
+  if (sendAdminEmail) {
+    await sendMail({
+      apiKey,
+      from,
+      to: adminTo.split(",").map((v) => v.trim()).filter(Boolean),
+      subject:
+        adminEmailSubject ||
+        `[UNFRAME] 새 신청 접수 - ${exhibitionTitle || applicantName || "Untitled"}`,
+      html: buildAdminHtml({
+        applicantName,
+        applicantEmail,
+        exhibitionTitle,
+        selectedDate,
+        selectedProgram,
+        partnerType,
+        phone,
+        brandName,
+        stageName,
+        submittedAt,
+        applicationId,
+        messageBody: adminEmailBody,
+      }),
+    });
+  }
+};
+
+const handleApplicantReceipt = async (event, payload, mail) => {
+  const notice = await loadApplicantNotification(event, payload.applicationId);
+  const { identity, ref, context, settings, render, details } = notice;
+  // A typed address is unverified, so the applicant copy only goes to the signed-in account.
+  const sendApplicantEmail =
+    settings.applicantEmailEnabled && identity.email_verified === true && Boolean(identity.email);
+  const sendAdminEmail = settings.adminEmailEnabled;
+
+  if (!sendApplicantEmail && !sendAdminEmail) return json(200, { ok: true, skipped: true });
+
+  const claimed = await claimApplicantNotification({ ref, uid: identity.uid, field: "receivedEmailClaimedAt" });
+  if (!claimed) return json(200, { ok: true, duplicate: true });
+
+  try {
+    await deliver({
+      ...mail,
+      message: {
+        applicantName: context.name,
+        applicantEmail: identity.email || context.email,
+        exhibitionTitle: details.title,
+        selectedDate: details.dateLabel,
+        selectedProgram: details.program,
+        partnerType: "open-call",
+        phone: context.phone,
+        brandName: "",
+        stageName: details.stageName,
+        applicationDetailUrl: details.detailUrl,
+        submittedAt: details.submittedAtIso,
+        applicationId: context.applicationId,
+        sendApplicantEmail,
+        sendAdminEmail,
+        applicantEmailSubject: render(settings.applicantEmailSubject),
+        applicantEmailBody: render(settings.applicantEmailBody),
+        adminEmailSubject: render(settings.adminEmailSubject),
+        adminEmailBody: render(settings.adminEmailBody),
+      },
+    });
+  } catch (error) {
+    await ref.update({ receivedEmailError: String(error?.message || "메일 발송 실패").slice(0, 500) });
+    throw error;
+  }
+
+  return json(200, { ok: true });
+};
+
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
     return json(405, { error: "Method not allowed" });
@@ -333,99 +448,25 @@ export async function handler(event) {
 
   try {
     const payload = JSON.parse(event.body || "{}");
-    const adminCaller = payload.adminTest === true || payload.sendApplicantEmail === false;
-    const identity = adminCaller
-      ? await verifyAdminRequest(event)
-      : await verifyUserRequest(event);
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.MAIL_FROM;
-    const adminTo = process.env.MAIL_TO_ADMIN;
+    if (payload.adminTest === true) await verifyAdminRequest(event);
 
-    if (!apiKey || !from || !adminTo) {
+    const mail = {
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.MAIL_FROM,
+      adminTo: process.env.MAIL_TO_ADMIN,
+    };
+
+    if (!mail.apiKey || !mail.from || !mail.adminTo) {
       return json(500, { error: "Missing mail environment variables" });
     }
 
-    const {
-      applicantName,
-      applicantEmail,
-      exhibitionTitle,
-      selectedDate,
-      selectedProgram,
-      partnerType,
-      phone,
-      brandName,
-      stageName,
-      applicationDetailUrl = "",
-      submittedAt = new Date().toISOString(),
-      applicationId = "",
-      sendApplicantEmail = true,
-      sendAdminEmail = true,
-      applicantEmailSubject = "",
-      applicantEmailBody = "",
-      adminEmailSubject = "",
-      adminEmailBody = "",
-    } = payload;
+    if (payload.adminTest !== true) return await handleApplicantReceipt(event, payload, mail);
 
-    if (!applicationId && !adminCaller) return json(400, { error: "신청 정보가 없습니다." });
-    if (applicationId) {
-      const applicationSnap = await adminDb.collection(applicationsPath).doc(applicationId).get();
-      if (!applicationSnap.exists && !adminCaller) return json(404, { error: "신청서를 찾을 수 없습니다." });
-      const application = applicationSnap.exists ? applicationSnap.data() : null;
-      if (application?.trackType === "salon") return json(403, { error: "SALON 알림은 전용 절차로 처리됩니다." });
-      if (!adminCaller && application?.userId !== identity.uid) return json(403, { error: "본인 신청에 대해서만 발송할 수 있습니다." });
-      if (!adminCaller && String(applicantEmail || "").toLowerCase() !== String(application?.applicantEmail || application?.email || "").toLowerCase()) return json(403, { error: "신청서의 이메일 정보가 일치하지 않습니다." });
-    }
-
-    if (!applicantEmail) {
+    if (!payload.applicantEmail) {
       return json(400, { error: "Applicant email is required" });
     }
 
-    if (sendApplicantEmail) {
-      await sendMail({
-        apiKey,
-        from,
-        to: [applicantEmail],
-        subject:
-          applicantEmailSubject ||
-          `[UNFRAME] 신청이 정상적으로 접수되었습니다`,
-        html: buildApplicantHtml({
-          applicantName,
-          exhibitionTitle,
-          selectedDate,
-          selectedProgram,
-          partnerType,
-          applicationDetailUrl,
-          submittedAt,
-          applicationId,
-          messageBody: applicantEmailBody,
-        }),
-      });
-    }
-
-    if (sendAdminEmail) {
-      await sendMail({
-        apiKey,
-        from,
-        to: adminTo.split(",").map((v) => v.trim()).filter(Boolean),
-        subject:
-          adminEmailSubject ||
-          `[UNFRAME] 새 신청 접수 - ${exhibitionTitle || applicantName || "Untitled"}`,
-        html: buildAdminHtml({
-          applicantName,
-          applicantEmail,
-          exhibitionTitle,
-          selectedDate,
-          selectedProgram,
-          partnerType,
-          phone,
-          brandName,
-          stageName,
-          submittedAt,
-          applicationId,
-          messageBody: adminEmailBody,
-        }),
-      });
-    }
+    await deliver({ ...mail, message: payload });
 
     return json(200, { ok: true });
   } catch (error) {

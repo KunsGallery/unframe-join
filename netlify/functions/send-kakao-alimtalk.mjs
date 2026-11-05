@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import { adminDb, verifyAdminRequest, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
-import { applicationsPath } from "./_lib/salonShared.mjs";
+import { verifyAdminRequest } from "./_lib/firebaseAdmin.mjs";
+import { claimApplicantNotification, loadApplicantNotification } from "./_lib/applicationNotifications.mjs";
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -210,6 +210,38 @@ const sendKakaoMessage = async ({ apiKey, apiSecret, payload }) => {
   return result;
 };
 
+const handleApplicantReceipt = async (body, event, credentials) => {
+  const notice = await loadApplicantNotification(event, body.applicationId);
+  const { identity, ref, context, settings, render, details } = notice;
+
+  if (!settings.kakaoEnabled) return json(200, { ok: true, skipped: true });
+  if (!context.phone) return json(400, { error: "Recipient phone is required" });
+
+  const claimed = await claimApplicantNotification({ ref, uid: identity.uid, field: "receivedKakaoClaimedAt" });
+  if (!claimed) return json(200, { ok: true, duplicate: true });
+
+  try {
+    const result = await sendKakaoMessage({
+      ...credentials,
+      payload: buildKakaoPayload({
+        type: "application_received",
+        to: context.phone,
+        applicantName: context.name,
+        exhibitionTitle: details.title,
+        selectedDate: details.dateLabel,
+        selectedProgram: details.program,
+        applicationId: context.applicationId,
+        applicationDetailUrl: details.detailUrl,
+        kakaoMessage: render(settings.kakaoMessage),
+      }),
+    });
+    return json(200, { ok: true, result });
+  } catch (error) {
+    await ref.update({ receivedKakaoError: String(error?.message || "알림톡 발송 실패").slice(0, 500) });
+    throw error;
+  }
+};
+
 export async function handler(event) {
   if (event.httpMethod !== "POST") {
     return json(405, { error: "Method not allowed" });
@@ -218,13 +250,15 @@ export async function handler(event) {
   try {
     const body = JSON.parse(event.body || "{}");
     const adminCaller = body.type !== "application_received" || body.adminTest === true;
-    const identity = adminCaller ? await verifyAdminRequest(event) : await verifyUserRequest(event);
+    if (adminCaller) await verifyAdminRequest(event);
     const apiKey = process.env.SOLAPI_API_KEY;
     const apiSecret = process.env.SOLAPI_API_SECRET;
 
     if (!apiKey || !apiSecret) {
       return json(500, { error: "Missing SOLAPI env vars" });
     }
+
+    if (!adminCaller) return await handleApplicantReceipt(body, event, { apiKey, apiSecret });
 
     const {
       type,
@@ -238,18 +272,6 @@ export async function handler(event) {
       applicationDetailUrl = "",
       kakaoMessage = "",
     } = body;
-
-    if (!applicationId && !adminCaller) return json(400, { error: "신청 정보가 없습니다." });
-    if (applicationId) {
-      const applicationSnap = await adminDb.collection(applicationsPath).doc(applicationId).get();
-      if (!applicationSnap.exists && !adminCaller) return json(404, { error: "신청서를 찾을 수 없습니다." });
-      const application = applicationSnap.exists ? applicationSnap.data() : null;
-      if (!adminCaller && application?.trackType === "salon") return json(403, { error: "SALON 알림은 전용 절차로 처리됩니다." });
-      if (!adminCaller) {
-        if (application.userId !== identity.uid) return json(403, { error: "본인 신청에 대해서만 발송할 수 있습니다." });
-        if (String(application.phone || "").replace(/\D/g, "") !== String(to || "").replace(/\D/g, "")) return json(403, { error: "신청서의 연락처 정보가 일치하지 않습니다." });
-      }
-    }
 
     if (
       !type ||
