@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import {
   signInWithPopup,
   signInAnonymously,
@@ -13,51 +13,25 @@ import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ParticleBackground from "./components/ui/ParticleBackground";
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
-import LandingPage from "./views/LandingPage";
-import PartnerSelectStep from "./views/PartnerSelectStep";
-import CalendarStep from "./views/CalendarStep";
-import ProposalFormStep from "./views/ProposalFormStep";
-import AdminDashboard from "./views/AdminDashboard";
-import MyPage from "./views/MyPage";
-import SuccessView from "./views/SuccessView";
-import JoinHome from "./views/join/JoinHome";
-import OpenCallLanding from "./views/open-call/OpenCallLanding";
-import OpenCallApplicationForm from "./views/open-call/OpenCallApplicationForm";
-import SalonLanding from "./views/salon/SalonLanding";
-import SalonDetail from "./views/salon/SalonDetail";
-import SalonApplicationForm from "./views/salon/SalonApplicationForm";
-import SalonApplicationComplete from "./views/salon/SalonApplicationComplete";
-import SalonPassPage from "./views/salon/SalonPassPage";
-import SalonCheckInScanner from "./views/admin/SalonCheckInScanner";
-import RentalInfoPage from "./views/RentalInfoPage";
-import RentalInquiryForm from "./views/RentalInquiryForm";
-import CollaborationInfoPage from "./views/CollaborationInfoPage";
 import { createFallbackOpenCall, pickActiveOpenCall } from "./constants/openCall";
+import { lazyPage } from "./lib/lazyPage";
+import ErrorBoundary from "./components/ui/ErrorBoundary";
 
-const EMPTY_FORM_DATA = {
-  name: "",
-  realName: "",
-  stageName: "",
-  englishName: "",
-  birthDate: "",
-  phone: "",
-  addressMain: "",
-  addressDetail: "",
-  profilePhotoUrl: "",
-  snsLink: "",
-  portfolioUrl: "",
-  exhibitionTitle: "",
-  artistNote: "",
-  workListUrl: "",
-  highResPhotosUrl: "",
-  experimentText: "",
-  brandName: "",
-  brandRole: "",
-  projectPurpose: "",
-  targetAudience: "",
-  budgetRange: "",
-  privacyAgreed: false,
-};
+const AdminDashboard = lazyPage(() => import("./views/AdminDashboard"));
+const MyPage = lazyPage(() => import("./views/MyPage"));
+const SuccessView = lazyPage(() => import("./views/SuccessView"));
+const JoinHome = lazyPage(() => import("./views/join/JoinHome"));
+const OpenCallLanding = lazyPage(() => import("./views/open-call/OpenCallLanding"));
+const OpenCallApplicationForm = lazyPage(() => import("./views/open-call/OpenCallApplicationForm"));
+const SalonLanding = lazyPage(() => import("./views/salon/SalonLanding"));
+const SalonDetail = lazyPage(() => import("./views/salon/SalonDetail"));
+const SalonApplicationForm = lazyPage(() => import("./views/salon/SalonApplicationForm"));
+const SalonApplicationComplete = lazyPage(() => import("./views/salon/SalonApplicationComplete"));
+const SalonPassPage = lazyPage(() => import("./views/salon/SalonPassPage"));
+const SalonCheckInScanner = lazyPage(() => import("./views/admin/SalonCheckInScanner"));
+const RentalInfoPage = lazyPage(() => import("./views/RentalInfoPage"));
+const RentalInquiryForm = lazyPage(() => import("./views/RentalInquiryForm"));
+const CollaborationInfoPage = lazyPage(() => import("./views/CollaborationInfoPage"));
 
 const EMPTY_PROFILE_DATA = {
   realName: "",
@@ -183,18 +157,13 @@ const App = () => {
   const [salonCompleteContext, setSalonCompleteContext] = useState(null);
   const [selectedOpenCall, setSelectedOpenCall] = useState(null);
   const [openCalls, setOpenCalls] = useState([]);
-  const [currentStep, setCurrentStep] = useState(1);
   const [reservations, setReservations] = useState({});
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitSuccess, setIsSubmitSuccess] = useState(false);
   const [successTemplateContext, setSuccessTemplateContext] = useState(null);
 
-  const [partnerType, setPartnerType] = useState("");
-  const [selectedProgram, setSelectedProgram] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
 
-  const [formData, setFormData] = useState(EMPTY_FORM_DATA);
   const [savedProfileData, setSavedProfileData] = useState(EMPTY_PROFILE_DATA);
 
   const myApplications = useMemo(() => {
@@ -349,22 +318,6 @@ const App = () => {
   useEffect(() => {
     if (!user) return;
 
-    const resRef = collection(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      "reservations"
-    );
-    const unsubscribeRes = onSnapshot(resRef, (snap) => {
-      const resMap = {};
-      snap.forEach((d) => {
-        resMap[d.id] = d.data();
-      });
-      setReservations(resMap);
-    });
-
     const appRef = collection(
       db,
       "artifacts",
@@ -389,16 +342,21 @@ const App = () => {
       }
     );
 
-    return () => {
-      unsubscribeRes();
-      unsubscribeApp();
-    };
+    return () => unsubscribeApp();
   }, [user, isAdmin, viewMode]);
 
-  const handleStepTransition = (step) => {
-    setCurrentStep(step);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  useEffect(() => {
+    if (!isAdmin || viewMode !== "admin") return undefined;
+
+    const resRef = collection(db, "artifacts", appId, "public", "data", "reservations");
+    return onSnapshot(resRef, (snap) => {
+      const resMap = {};
+      snap.forEach((d) => {
+        resMap[d.id] = d.data();
+      });
+      setReservations(resMap);
+    });
+  }, [isAdmin, viewMode]);
 
   const handleSelectRentalTrack = () => {
     setSelectedTrack("rental");
@@ -407,11 +365,7 @@ const App = () => {
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
-    setSelectedDate(null);
-    setSelectedProgram(null);
-    setPartnerType("");
-    setFormData(EMPTY_FORM_DATA);
-    handleStepTransition(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSelectOpenCallTrack = () => {
@@ -421,11 +375,6 @@ const App = () => {
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
-    setSelectedDate(null);
-    setSelectedProgram(null);
-    setPartnerType("");
-    setCurrentStep(1);
-    setFormData(EMPTY_FORM_DATA);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -440,11 +389,6 @@ const App = () => {
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
-    setSelectedDate(null);
-    setSelectedProgram(null);
-    setPartnerType("");
-    setCurrentStep(1);
-    setFormData(EMPTY_FORM_DATA);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -459,11 +403,7 @@ const App = () => {
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
-    setSelectedDate(null);
-    setSelectedProgram(null);
-    setPartnerType("");
-    setFormData(EMPTY_FORM_DATA);
-    handleStepTransition(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleReturnToOpenCallLanding = () => {
@@ -490,7 +430,6 @@ const App = () => {
   };
 
   const resetAll = () => {
-    setCurrentStep(1);
     setSelectedTrack(null);
     setSalonMode("landing");
     setSalonSlug("");
@@ -501,10 +440,6 @@ const App = () => {
     setSelectedOpenCall(null);
     setIsSubmitSuccess(false);
     setSuccessTemplateContext(null);
-    setSelectedDate(null);
-    setSelectedProgram(null);
-    setPartnerType("");
-    setFormData(EMPTY_FORM_DATA);
     setFocusedApplicationId("");
     setViewMode("user");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -532,13 +467,8 @@ const App = () => {
             setOpenCallMode("landing");
             setRequestedOpenCallId("");
             setSelectedOpenCall(null);
-            setCurrentStep(1);
             setIsSubmitSuccess(false);
             setSuccessTemplateContext(null);
-            setSelectedDate(null);
-            setSelectedProgram(null);
-            setPartnerType("");
-            setFormData(EMPTY_FORM_DATA);
           }
 
           window.scrollTo({ top: 0, behavior: "smooth" });
@@ -549,6 +479,8 @@ const App = () => {
       />
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 pt-28 md:pt-32 pb-24 md:pb-32 relative z-10 text-left">
+        <ErrorBoundary>
+        <Suspense fallback={<LoadingOverlay />}>
         {selectedTrack === "salon" && salonMode === "pass" ? (
           <SalonPassPage token={salonToken} />
         ) : selectedTrack === "salon" && salonMode === "admin-check-in" ? (
@@ -708,87 +640,11 @@ const App = () => {
                   }}
                 />
               )
-            ) : (
-              <>
-                <div className="mb-4 md:mb-6 flex justify-start">
-                  <button
-                    type="button"
-                    onClick={handleReturnToJoinHome}
-                    className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500 shadow-sm backdrop-blur-sm transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                  >
-                    ← 신청 유형 다시 선택
-                  </button>
-                </div>
-
-                {selectedTrack === "rental" && currentStep === 1 && (
-                  <LandingPage
-                    onSelectProgram={(program) => {
-                      setSelectedProgram(program);
-                      handleStepTransition(2);
-
-                      setTimeout(() => {
-                        const target = document.getElementById("partner-type-section");
-                        if (target) {
-                          target.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          });
-                        }
-                      }, 120);
-                    }}
-                  />
-                )}
-
-                {selectedTrack === "rental" && currentStep === 2 && (
-                  <PartnerSelectStep
-                    onSelect={(type) => {
-                      setPartnerType(type);
-                      handleStepTransition(3);
-                    }}
-                    onBack={() => handleStepTransition(1)}
-                  />
-                )}
-
-                {selectedTrack === "rental" && currentStep === 3 && (
-                  <CalendarStep
-                    reservations={reservations}
-                    onSelect={(date) => {
-                      if (!user || user.isAnonymous) return handleLogin();
-                      setSelectedDate(date);
-                    }}
-                    onConfirm={() => handleStepTransition(4)}
-                    selectedDate={selectedDate}
-                    onBack={() => handleStepTransition(2)}
-                  />
-                )}
-
-                {selectedTrack === "rental" && currentStep === 4 && (
-                  <ProposalFormStep
-                    selectedDate={selectedDate}
-                    partnerType={partnerType}
-                    selectedProgram={selectedProgram}
-                    formData={formData}
-                    setFormData={setFormData}
-                    onBack={() => handleStepTransition(3)}
-                    onSubmitSuccess={() => {
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                      setSuccessTemplateContext(null);
-                      setIsSubmitSuccess(true);
-                    }}
-                    db={db}
-                    appId={appId}
-                    user={user}
-                    handleLogin={handleLogin}
-                    setSelectedDate={setSelectedDate}
-                    setSelectedProgram={setSelectedProgram}
-                    setPartnerType={setPartnerType}
-                    initialProfileData={savedProfileData}
-                  />
-                )}
-              </>
-            )}
+            ) : null}
           </div>
         )}
+        </Suspense>
+        </ErrorBoundary>
       </main>
 
       <Footer />
