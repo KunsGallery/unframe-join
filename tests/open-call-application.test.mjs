@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   MISSING_FIELD,
-  addUploadedImages,
   applySavedProfile,
   buildSubmission,
+  completeWorkUpload,
   createEmptyApplication,
   createEmptyWork,
+  formatKRW,
+  formatPriceInput,
+  reserveWorkRows,
+  stripUploadState,
   validateApplication,
 } from "../src/views/open-call/openCallApplication.js";
 
@@ -63,13 +67,6 @@ test("저장된 프로필은 빈 칸만 채운다", () => {
   assert.equal(result.email, "login@example.com");
 });
 
-test("여러 장 올리면 빈 줄부터 채우고 6점에서 멈춘다", () => {
-  const urls = Array.from({ length: 8 }, (_, index) => `u${index}`);
-  const works = addUploadedImages(createEmptyApplication().works, urls);
-  assert.equal(works.length, 6);
-  assert.deepEqual(works.map((item) => item.imageUrl), urls.slice(0, 6));
-});
-
 test("빈칸은 문장 없이 표시만 하고, 형식 오류에만 안내 문장을 쓴다", () => {
   const empty = validateApplication(createEmptyApplication());
   for (const key of ["name", "birthYear", "portfolioUrl", "work-0-title", "work-0-imageUrl", "work-1-height"]) {
@@ -78,4 +75,68 @@ test("빈칸은 문장 없이 표시만 하고, 형식 오류에만 안내 문�
   const wrong = validateApplication(filled({ birthYear: "90", works: [work("a"), { ...work("b"), width: "90cm" }] }));
   assert.notEqual(wrong.birthYear, MISSING_FIELD);
   assert.notEqual(wrong["work-1-width"], MISSING_FIELD);
+});
+
+test("작품가격을 한국식 금액으로 표시한다", () => {
+  const table = [
+    ["5000", "5,000원"],
+    ["320000", "32만원"],
+    ["325000", "32만 5,000원"],
+    ["1200000", "120만원"],
+    ["15000000", "1,500만원"],
+    ["100000000", "1억원"],
+    ["125000000", "1억 2,500만원"],
+    ["120005000", "1억 2,000만 5,000원"],
+    ["100005000", "1억 5,000원"],
+  ];
+  for (const [input, expected] of table) assert.equal(formatKRW(input), expected, input);
+});
+
+test("금액 표시는 쉼표·원·공백을 무시하고, 숫자가 없으면 비운다", () => {
+  assert.equal(formatKRW("1,200,000원"), "120만원");
+  assert.equal(formatKRW(" 32 0000 "), "32만원");
+  for (const empty of ["", "0", "000", "가격 문의", undefined, null]) assert.equal(formatKRW(empty), "", String(empty));
+});
+
+test("아주 큰 금액도 오류 없이 표시한다", () => {
+  assert.equal(formatKRW("10000000000"), "100억원");
+  assert.match(formatKRW("123456789012345678901234"), /억/);
+});
+
+test("가격 입력칸은 숫자에만 천 단위 쉼표를 넣고 다른 글은 그대로 둔다", () => {
+  assert.equal(formatPriceInput("1200000"), "1,200,000");
+  assert.equal(formatPriceInput("1,200,0005"), "12,000,005");
+  assert.equal(formatPriceInput(""), "");
+  assert.equal(formatPriceInput("1,200,000원"), "1,200,000원");
+  assert.equal(formatPriceInput("가격 문의"), "가격 문의");
+});
+
+test("여러 장을 고르면 선택한 순서대로 빈 줄을 맡고 6점에서 멈춘다", () => {
+  const ids = Array.from({ length: 8 }, (_, index) => `u${index}`);
+  const { works, reservedIds } = reserveWorkRows(createEmptyApplication().works, ids);
+  assert.equal(works.length, 6);
+  assert.deepEqual(works.map((item) => item.uploadId), ids.slice(0, 6));
+  assert.deepEqual(reservedIds, ids.slice(0, 6));
+});
+
+test("이미 이미지가 있거나 올리는 중인 줄은 건너뛴다", () => {
+  const start = [{ ...createEmptyWork(), imageUrl: "x" }, { ...createEmptyWork(), uploadId: "busy" }, createEmptyWork()];
+  const { works, reservedIds } = reserveWorkRows(start, ["n1", "n2"]);
+  assert.equal(works[2].uploadId, "n1");
+  assert.equal(works[3].uploadId, "n2");
+  assert.deepEqual(reservedIds, ["n1", "n2"]);
+});
+
+test("업로드가 끝나면 맡아 둔 줄에 이미지가 들어간다", () => {
+  const { works } = reserveWorkRows(createEmptyApplication().works, ["a", "b"]);
+  const done = completeWorkUpload(works, "b", "https://f/b.jpg");
+  assert.equal(done[1].imageUrl, "https://f/b.jpg");
+  assert.equal(done[0].imageUrl, "");
+});
+
+test("올리는 동안의 상태는 제출과 임시 저장에 포함되지 않는다", () => {
+  const data = filled({ works: [{ ...work("a"), uploadId: "x" }, { ...work("b"), uploadId: "y" }] });
+  assert.equal("uploadId" in buildSubmission(data).works[0], false);
+  assert.equal("uploadId" in stripUploadState(data).works[0], false);
+  assert.equal(stripUploadState(data).works[0].title, "제목");
 });

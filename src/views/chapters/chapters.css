@@ -390,34 +390,6 @@ a.ch-swatch:hover { padding-bottom: 24px; }
 .ch-credits a { text-decoration: underline; text-underline-offset: 2px; }
 
 /* Open call: afterimage stage */
-.ch-after {
-  position: relative;
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  min-height: 34svh;
-  touch-action: pan-y;
-  user-select: none;
-}
-.ch-after__word,
-.ch-after__ghost {
-  font-size: clamp(120px, 27vw, 430px);
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 0.92;
-  white-space: nowrap;
-}
-.ch-after__word { position: relative; z-index: 2; color: var(--white); }
-.ch-after__ghost {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  z-index: 1;
-  color: var(--lime);
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-.ch-after__ghost--still { transform: translate(2.2%, -46%); opacity: 0.9; }
 .ch-prose { white-space: pre-line; max-width: 62ch; font-size: clamp(18px, 1.5vw, 21px); }
 
 @media (max-width: 900px) {
@@ -454,7 +426,6 @@ a.ch-swatch:hover { padding-bottom: 24px; }
   .ch-plate { grid-template-columns: minmax(0, 1fr); }
   .ch-plate__room { padding: 10px 14px; }
   .ch-plate__row .ch-btn { width: 100%; }
-  .ch-after__word, .ch-after__ghost { font-size: 34vw; }
 }
 
 @media (prefers-reduced-motion: reduce) {

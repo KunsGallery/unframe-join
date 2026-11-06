@@ -30,11 +30,45 @@
 .oc-panel__action { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; }
 .oc-panel__action p { flex: 1 1 240px; max-width: 44ch; }
 
-.oc .ch-after { min-height: 0; }
-.oc .ch-after__word,
-.oc .ch-after__ghost { font-size: var(--oc-word-wide); }
-.oc .ch-after__word { color: var(--oc-on); }
-.oc .ch-after__ghost { color: color-mix(in srgb, var(--oc-on) 30%, transparent); }
+.oc-hero-word { flex: 1 1 auto; align-self: stretch; justify-content: center; }
+
+.oc-rot { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.oc-rot__window {
+  position: relative;
+  display: block;
+  height: 1.08em;
+  overflow: hidden;
+  font-size: var(--oc-word-wide, clamp(96px, 20vw, 300px));
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  white-space: nowrap;
+}
+.oc-rot__word { position: absolute; inset: 0 auto auto 0; }
+.oc-rot__word.is-in { animation: oc-rot-in 0.7s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+.oc-rot__word.is-out { animation: oc-rot-out 0.7s cubic-bezier(0.2, 0.7, 0.1, 1) both; }
+.oc-rot__count { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.oc-rot__suffix { font-size: 0.6em; }
+
+@keyframes oc-rot-in {
+  from { transform: translateY(100%); opacity: 0; filter: blur(6px); }
+  to { transform: none; opacity: 1; filter: none; }
+}
+@keyframes oc-rot-out {
+  from { transform: none; opacity: 1; filter: none; }
+  to { transform: translateY(-100%); opacity: 0; filter: blur(6px); }
+}
+
+.oc-spot {
+  position: relative;
+  color: color-mix(in srgb, var(--oc-on) 22%, transparent);
+  touch-action: pan-y;
+}
+.oc-spot__light { position: absolute; inset: 0; color: var(--oc-on); }
+.oc-spot.is-tracking .oc-spot__light {
+  -webkit-mask-image: radial-gradient(circle 150px at var(--x) var(--y), #000 30%, transparent 100%);
+  mask-image: radial-gradient(circle 150px at var(--x) var(--y), #000 30%, transparent 100%);
+}
 
 .oc-btn {
   display: inline-flex;
@@ -116,6 +150,10 @@
   .oc-hero.has-poster { grid-template-columns: minmax(0, 1fr); }
   .oc-panel { min-height: 62svh; }
   .oc-poster img { max-height: none; }
-  .oc .ch-after__word,
-  .oc .ch-after__ghost { font-size: var(--oc-word-narrow); }
+  .oc-rot__window { font-size: var(--oc-word-narrow, 24vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oc-rot__word.is-in { animation: none; }
+  .oc-rot__word.is-out { display: none; }
 }

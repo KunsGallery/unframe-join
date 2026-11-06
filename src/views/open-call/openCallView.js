@@ -75,6 +75,12 @@ export const getOpenCallTheme = (color) => {
 export const getThemeWordWeight = (word) =>
   Math.max(2, [...String(word ?? "")].reduce((sum, char) => sum + (char === " " ? 0.4 : char.charCodeAt(0) < 128 ? 0.62 : 1), 0));
 
+export const parseThemeKeywords = (value) =>
+  String(value ?? "").split(",").map((word) => word.trim()).filter(Boolean);
+
+// Keywords appear one at a time, so only the longest one has to fit.
+export const getKeywordsWeight = (keywords) => Math.max(2, ...keywords.map(getThemeWordWeight));
+
 // Calls written before requirement rows existed keep their emoji-headed intro blocks.
 export const getOpenCallRequirements = (openCall) => {
   const rows = (Array.isArray(openCall?.requirementItems) ? openCall.requirementItems : [])

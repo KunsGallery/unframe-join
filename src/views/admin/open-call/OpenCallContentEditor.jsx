@@ -78,7 +78,7 @@ const FaceGroup = ({ draft, onChange, onPosterUpload, posterUploading, posterErr
             </div>
             <p className="mt-3 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-bold" style={{ background: theme.accent, color: theme.on }}>이렇게 보입니다 · {theme.accent}</p>
           </div>
-          <Field label="주제어" hint="공개 페이지에 크게 표시됩니다. 비우면 OPEN으로 표시됩니다."><input className={INPUT} placeholder="예: 잔상" value={draft.themeKeyword || ""} onChange={(event) => onChange("themeKeyword", event.target.value)} /></Field>
+          <Field label="주제어" hint="공개 페이지에 크게 표시됩니다. 쉼표로 나누면 한 단어씩 번갈아 나옵니다. 비우면 OPEN으로 표시됩니다."><input className={INPUT} placeholder="예: 연말, 선물, 파티" value={draft.themeKeyword || ""} onChange={(event) => onChange("themeKeyword", event.target.value)} /></Field>
         </div>
       </div>
     </Group>

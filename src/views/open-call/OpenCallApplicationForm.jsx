@@ -3,6 +3,8 @@ import { ArrowLeft, Check, FileText, Loader2, Plus, Upload, X } from "lucide-rea
 import { auth } from "../../lib/firebase";
 import { callSalonFunction } from "../../lib/salonApi";
 import {
+  DOCUMENT_MAX_SIZE,
+  IMAGE_MAX_SIZE,
   sendApplicationEmails,
   uploadDocumentToR2,
   uploadImageToR2,
@@ -23,15 +25,21 @@ import {
 } from "../../constants/openCall";
 import {
   MISSING_FIELD,
-  addUploadedImages,
   applySavedProfile,
   buildSubmission,
+  completeWorkUpload,
   createEmptyApplication,
   createEmptyWork,
+  formatKRW,
+  formatPriceInput,
+  reserveWorkRows,
+  stripUploadState,
   validateApplication,
 } from "./openCallApplication";
 
 const INPUT = "min-h-11 w-full rounded-sm border border-zinc-400 bg-white px-3 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]";
+const DONE_PAUSE_MS = 600;
+const toMegabytes = (bytes) => `${bytes / (1024 * 1024)}MB`;
 const SECTION = "border-t-2 border-zinc-950 pt-4";
 const SECTION_TITLE = "mb-4 text-lg font-bold text-zinc-950";
 
@@ -48,7 +56,7 @@ const readDraft = (openCallId) => {
 
 const writeDraft = (openCallId, data) => {
   try {
-    window.localStorage.setItem(draftKey(openCallId), JSON.stringify(data));
+    window.localStorage.setItem(draftKey(openCallId), JSON.stringify(stripUploadState(data)));
   } catch {
     // The form still works when browser storage is blocked; only resuming is lost.
   }
@@ -67,16 +75,76 @@ const MISSING_STYLE = "[&_input]:border-amber-500 [&_input]:bg-amber-50 [&_texta
 const FieldError = ({ message }) =>
   message && message !== MISSING_FIELD ? <p className="mt-1 text-sm text-amber-900">{message}</p> : null;
 
-const Field = ({ label, optional, error, className = "", children }) => (
+const Field = ({ label, optional, error, aside, className = "", children }) => (
   <label data-missing={error === MISSING_FIELD || undefined} className={`block min-w-0 ${className} ${error === MISSING_FIELD ? MISSING_STYLE : ""}`}>
-    <span className="mb-1 block text-sm font-semibold text-zinc-900">
-      {label}
-      {optional ? <span className="ml-1 font-normal text-zinc-500">선택</span> : null}
+    <span className="mb-1 flex items-baseline justify-between gap-2 text-sm font-semibold text-zinc-900">
+      <span className="shrink-0">
+        {label}
+        {optional ? <span className="ml-1 font-normal text-zinc-500">선택</span> : null}
+      </span>
+      {aside ? <span className="min-w-0 truncate text-xs font-normal tabular-nums text-zinc-500" title={aside}>{aside}</span> : null}
     </span>
     {children}
     <FieldError message={error} />
   </label>
 );
+
+const UploadStatus = ({ upload, onRetry, className = "" }) => {
+  if (!upload) return null;
+
+  if (upload.status === "error") {
+    return (
+      <div role="alert" className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-sm ${className}`}>
+        <p className="min-w-0 font-medium text-red-700">{upload.message}</p>
+        <button type="button" onClick={onRetry} className="min-h-10 rounded-sm border border-zinc-400 bg-white px-3 font-semibold text-zinc-900 hover:bg-zinc-100">다시 올리기</button>
+      </div>
+    );
+  }
+
+  if (upload.status === "done") {
+    return (
+      <p className={`flex min-w-0 items-center gap-1.5 text-sm text-zinc-700 ${className}`}>
+        <Check size={16} className="shrink-0 text-emerald-700" aria-hidden="true" />
+        <span className="shrink-0 font-medium">올라감</span>
+        <span className="truncate text-zinc-500">{upload.name}</span>
+      </p>
+    );
+  }
+
+  return (
+    <div className={`min-w-0 text-sm ${className}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="truncate text-zinc-700">{upload.name}</span>
+        <span className="shrink-0 font-medium tabular-nums text-zinc-900">{upload.progress}%</span>
+      </div>
+      <div role="progressbar" aria-label={`${upload.name} 올리는 중`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={upload.progress} className="mt-1 h-1 overflow-hidden rounded-full bg-zinc-200">
+        <div className="h-full rounded-full bg-[#004aad] transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${upload.progress}%` }} />
+      </div>
+    </div>
+  );
+};
+
+const SUBMIT_STAGES = { sending: "지원서를 보내는 중", done: "접수 완료" };
+
+const SubmitOverlay = ({ title, stage }) => {
+  const rootRef = useRef(null);
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
+
+  return (
+    <div ref={rootRef} tabIndex={-1} role="status" aria-live="polite" className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#fdfbf7]/90 px-6 text-center outline-none">
+      <p className="text-sm text-zinc-700">{title}</p>
+      <div className="mt-5 flex h-8 items-center justify-center">
+        {stage === "done"
+          ? <Check size={28} className="text-emerald-700" aria-hidden="true" />
+          : <Loader2 size={28} className="animate-spin text-[#004aad] motion-reduce:animate-none" aria-hidden="true" />}
+      </div>
+      <p className="mt-3 text-xl font-bold text-zinc-950">{SUBMIT_STAGES[stage]}</p>
+      <p className="mt-2 text-sm text-zinc-700">창을 닫지 말고 잠시만 기다려 주세요.</p>
+    </div>
+  );
+};
 
 const CustomField = ({ field, value, error, onChange }) => {
   if (field.type === "checkbox") {
@@ -136,10 +204,32 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
   const [salesAgreed, setSalesAgreed] = useState(false);
   const [errors, setErrors] = useState({});
   const [uploadError, setUploadError] = useState("");
-  const [uploadingCount, setUploadingCount] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploads, setUploads] = useState({});
+  const [batchIds, setBatchIds] = useState([]);
+  const [submitStage, setSubmitStage] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [notice, setNotice] = useState("");
   const summaryRef = useRef(null);
+  const controllersRef = useRef({});
+
+  const isSubmitting = Boolean(submitStage);
+  const uploadList = Object.values(uploads);
+  const uploadingCount = uploadList.filter((upload) => upload.status === "uploading").length;
+  const batch = batchIds.map((id) => uploads[id]).filter(Boolean);
+  const batchDone = batch.filter((upload) => upload.status === "done").length;
+  const isBusy = uploadingCount > 0 || isSubmitting;
+
+  useEffect(() => {
+    if (!isBusy) return undefined;
+    const warn = (event) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [isBusy]);
+
+  useEffect(() => {
+    const controllers = controllersRef.current;
+    return () => Object.values(controllers).forEach((controller) => controller.abort());
+  }, []);
 
   useEffect(() => {
     if (!previewMode) writeDraft(currentOpenCall.id, form);
@@ -163,46 +253,80 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
     }));
   };
   const removeWork = (index) => {
+    const { uploadId } = form.works[index];
+    if (uploadId) {
+      controllersRef.current[uploadId]?.abort();
+      setUploads((current) => {
+        const { [uploadId]: _removed, ...rest } = current;
+        return rest;
+      });
+      setBatchIds((current) => current.filter((id) => id !== uploadId));
+    }
     setErrors({});
     setForm((current) => ({ ...current, works: current.works.filter((_, position) => position !== index) }));
   };
 
-  const uploadImages = async (files, replaceIndex = null) => {
+  const patchUpload = (id, patch) =>
+    setUploads((current) => (current[id] ? { ...current, [id]: { ...current[id], ...patch } } : current));
+
+  const runUpload = async ({ id, kind, file }) => {
+    controllersRef.current[id]?.abort();
+    const controller = new AbortController();
+    controllersRef.current[id] = controller;
+    setUploads((current) => ({ ...current, [id]: { id, kind, file, name: file.name, progress: 0, status: "uploading", message: "" } }));
+
+    const options = { file, signal: controller.signal, onProgress: (progress) => patchUpload(id, { progress }) };
+    try {
+      const { url } = kind === "portfolio"
+        ? await uploadDocumentToR2({ ...options, folder: "open-call/portfolio" })
+        : await uploadImageToR2({ ...options, folder: "open-call/works" });
+
+      if (kind === "portfolio") {
+        setField("portfolioUrl", url);
+      } else {
+        setForm((current) => ({ ...current, works: completeWorkUpload(current.works, id, url) }));
+        setErrors((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.endsWith("-imageUrl"))));
+      }
+      patchUpload(id, { status: "done", progress: 100 });
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      console.error(error);
+      patchUpload(id, { status: "error", message: error.message || "파일을 올리지 못했습니다. 인터넷 연결을 확인하고 다시 올려 주세요." });
+    } finally {
+      if (controllersRef.current[id] === controller) delete controllersRef.current[id];
+    }
+  };
+
+  const uploadImages = (files, replaceIndex = null) => {
     if (previewMode) {
       setNotice("미리보기에서는 파일을 올릴 수 없습니다.");
       return;
     }
 
-    setUploadError("");
-    const slots = replaceIndex === null ? OPEN_CALL_MAX_WORKS - form.works.filter((work) => work.imageUrl).length : 1;
-    const picked = files.slice(0, slots);
-    if (files.length > slots) setUploadError(`작품은 ${OPEN_CALL_MAX_WORKS}점까지 올릴 수 있어 ${slots}장만 올립니다.`);
+    const invalid = files.map((file) => [file, validateImageFile(file)]).filter(([, message]) => message);
+    const valid = files.filter((file) => !validateImageFile(file));
+    const messages = invalid.map(([file, message]) => `${file.name}: ${message}`);
+    const picks = valid.map((file) => ({ id: crypto.randomUUID(), file }));
 
-    const invalid = picked.map(validateImageFile).find(Boolean);
-    if (invalid) {
-      setUploadError(invalid);
-      return;
+    let reserved = picks;
+    if (replaceIndex === null) {
+      const { works, reservedIds } = reserveWorkRows(form.works, picks.map((pick) => pick.id));
+      reserved = picks.filter((pick) => reservedIds.includes(pick.id));
+      if (reserved.length < picks.length) messages.push(`작품은 ${OPEN_CALL_MAX_WORKS}점까지 올릴 수 있어 ${reserved.length}장만 올립니다.`);
+      setForm((current) => ({ ...current, works }));
+    } else if (picks[0]) {
+      setWork(replaceIndex, "uploadId", picks[0].id);
     }
 
-    setUploadingCount((count) => count + picked.length);
-    const results = await Promise.allSettled(
-      picked.map((file) => uploadImageToR2({ file, folder: "open-call/works" }))
-    );
-    setUploadingCount((count) => count - picked.length);
-
-    const urls = results.filter((result) => result.status === "fulfilled").map((result) => result.value.url);
-    const failed = results.find((result) => result.status === "rejected");
-    if (failed) setUploadError(failed.reason?.message || "이미지를 올리지 못했습니다. 다시 시도해 주세요.");
-
-    if (replaceIndex !== null && urls[0]) {
-      setWork(replaceIndex, "imageUrl", urls[0]);
-    } else if (urls.length > 0) {
-      setErrors((current) => ({ ...current, works: undefined }));
-      setForm((current) => ({ ...current, works: addUploadedImages(current.works, urls) }));
-    }
+    setUploadError(messages.join(" "));
+    setBatchIds((current) => {
+      const stillRunning = current.filter((id) => uploads[id]?.status === "uploading");
+      return [...stillRunning, ...reserved.map((pick) => pick.id)];
+    });
+    reserved.forEach(({ id, file }) => runUpload({ id, kind: "work", file }));
   };
 
-  const uploadPortfolio = async (file) => {
+  const uploadPortfolio = (file) => {
     if (previewMode) {
       setNotice("미리보기에서는 파일을 올릴 수 없습니다.");
       return;
@@ -213,16 +337,8 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
       setErrors((current) => ({ ...current, portfolioUrl: invalid }));
       return;
     }
-
-    setUploadingCount((count) => count + 1);
-    try {
-      const result = await uploadDocumentToR2({ file, folder: "open-call/portfolio" });
-      setField("portfolioUrl", result.url);
-    } catch (error) {
-      setErrors((current) => ({ ...current, portfolioUrl: error.message || "파일을 올리지 못했습니다." }));
-    } finally {
-      setUploadingCount((count) => count - 1);
-    }
+    setErrors((current) => ({ ...current, portfolioUrl: undefined }));
+    runUpload({ id: "portfolio", kind: "portfolio", file });
   };
 
   const handleSubmit = async (event) => {
@@ -246,10 +362,11 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
       setNotice("미리보기에서는 제출되지 않습니다.");
       return;
     }
-    if (uploadingCount > 0 || isSubmitting) return;
+    if (isBusy) return;
 
-    setIsSubmitting(true);
+    setSubmitStage("sending");
     setNotice("");
+    setSubmitError("");
     try {
       const { applicationId } = await callSalonFunction("submit-application", {
         ...buildSubmission(form, customFields, customValues),
@@ -271,6 +388,8 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
         }).catch((error) => console.error("open-call kakao failed:", error));
       }
 
+      setSubmitStage("done");
+      await new Promise((resolve) => setTimeout(resolve, DONE_PAUSE_MS));
       onSubmitSuccess?.({
         name: form.name.trim(),
         email: form.email.trim(),
@@ -282,9 +401,8 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
       });
     } catch (error) {
       console.error(error);
-      setNotice(error.message || "제출하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setIsSubmitting(false);
+      setSubmitStage("");
+      setSubmitError(error.message || "제출하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
 
@@ -295,6 +413,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
 
   return (
     <section className="mx-auto w-full max-w-4xl break-keep px-4 py-6 text-zinc-950 md:px-6">
+      {isSubmitting ? <SubmitOverlay title={currentOpenCall.title} stage={submitStage} /> : null}
       {onBack ? (
         <button type="button" onClick={onBack} className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-zinc-700 hover:text-zinc-950">
           <ArrowLeft size={16} />공고로 돌아가기
@@ -317,7 +436,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-7">
+      <form onSubmit={handleSubmit} noValidate inert={isSubmitting} className="space-y-7">
         <section className={SECTION}>
           <h2 className={SECTION_TITLE}>지원자 정보</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -337,6 +456,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
                 <input type="file" accept=".pdf,.zip,.doc,.docx" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadPortfolio(file); }} />
               </label>
               <FieldError message={errors.portfolioUrl} />
+              <UploadStatus upload={uploads.portfolio} onRetry={() => runUpload(uploads.portfolio)} className="mt-1.5" />
             </div>
             <Field label="짧은 작가소개" optional error={errors.artistStatement} className="sm:col-span-2 lg:col-span-3">
               <textarea rows={2} maxLength={OPEN_CALL_BIO_MAX_LENGTH} className={`${INPUT} py-2 leading-relaxed`} placeholder={`${OPEN_CALL_BIO_MAX_LENGTH}자 이내`} {...field("artistStatement")} />
@@ -360,28 +480,28 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-zinc-950">출품작</h2>
-              <p className="text-sm text-zinc-700">고화질 이미지로 {OPEN_CALL_MIN_WORKS}점 이상 {OPEN_CALL_MAX_WORKS}점까지 올려 주세요.</p>
+              <p className="text-sm text-zinc-700">고화질 이미지로 {OPEN_CALL_MIN_WORKS}점 이상 {OPEN_CALL_MAX_WORKS}점까지 올려 주세요. 이미지는 1장당 {toMegabytes(IMAGE_MAX_SIZE)}, 포트폴리오는 {toMegabytes(DOCUMENT_MAX_SIZE)}까지 올릴 수 있습니다.</p>
             </div>
             <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sm bg-zinc-950 px-4 text-sm font-semibold text-white focus-within:ring-2 focus-within:ring-[#004aad] focus-within:ring-offset-2">
               <Upload size={16} />이미지 여러 장 올리기
               <input type="file" accept="image/*" multiple className="sr-only" onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ""; if (files.length) uploadImages(files); }} />
             </label>
           </div>
-          {uploadingCount > 0 ? <p role="status" className="mb-3 flex items-center gap-2 text-sm text-zinc-700"><Loader2 size={16} className="animate-spin" />파일을 올리는 중입니다.</p> : null}
-          <FieldError message={uploadError || errors.works} />
+          {uploadingCount > 0 && batch.length > 1 ? <p role="status" className="mb-3 text-sm font-medium tabular-nums text-zinc-900">{batchDone} / {batch.length}장 올림</p> : null}
+          <FieldError message={uploadError} />
 
           <ul className="space-y-3">
             {form.works.map((work, index) => (
-              <li key={index} className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-zinc-300 pb-3 sm:grid-cols-[88px_minmax(0,1fr)]">
-                <div>
-                  <label data-missing={errors[`work-${index}-imageUrl`] === MISSING_FIELD || undefined} className={`relative flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed text-zinc-500 focus-within:ring-1 focus-within:ring-[#004aad] ${errors[`work-${index}-imageUrl`] === MISSING_FIELD ? "border-amber-500 bg-amber-50" : "border-zinc-400 bg-white"}`}>
+              <li key={index} className="grid grid-cols-1 gap-3 border-b border-zinc-300 pb-3 sm:grid-cols-[88px_minmax(0,1fr)]">
+                <div className="flex items-start gap-3 sm:block">
+                  <label data-missing={errors[`work-${index}-imageUrl`] === MISSING_FIELD || undefined} className={`relative flex aspect-square w-[88px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed text-zinc-500 focus-within:ring-1 focus-within:ring-[#004aad] ${errors[`work-${index}-imageUrl`] === MISSING_FIELD ? "border-amber-500 bg-amber-50" : "border-zinc-400 bg-white"}`}>
                     {work.imageUrl ? <img src={work.imageUrl} alt={`작품 ${index + 1} 미리보기`} className="h-full w-full object-contain" /> : <Upload size={18} aria-hidden="true" />}
                     <span className="sr-only">작품 {index + 1} 이미지 {work.imageUrl ? "교체" : "올리기"}</span>
                     <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadImages([file], index); }} />
                   </label>
                   <FieldError message={errors[`work-${index}-imageUrl`]} />
                   {form.works.length > OPEN_CALL_MIN_WORKS ? (
-                    <button type="button" onClick={() => removeWork(index)} className="mt-1 inline-flex min-h-10 w-full items-center justify-center gap-1 rounded-sm text-sm font-medium text-zinc-700 hover:bg-zinc-200">
+                    <button type="button" onClick={() => removeWork(index)} className="inline-flex min-h-10 items-center justify-center gap-1 rounded-sm px-2 text-sm font-medium text-zinc-700 hover:bg-zinc-200 sm:mt-1 sm:w-full">
                       <X size={16} aria-hidden="true" />삭제<span className="sr-only"> 작품 {index + 1}</span>
                     </button>
                   ) : null}
@@ -392,7 +512,8 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
                   <Field label="세로 (cm)" error={errors[`work-${index}-height`]}><input inputMode="decimal" className={INPUT} placeholder="60" value={work.height || ""} onChange={(event) => setWork(index, "height", event.target.value)} /></Field>
                   <Field label="가로 (cm)" error={errors[`work-${index}-width`]}><input inputMode="decimal" className={INPUT} placeholder="90" value={work.width || ""} onChange={(event) => setWork(index, "width", event.target.value)} /></Field>
                   <Field label="제작연도" error={errors[`work-${index}-year`]}><input inputMode="numeric" className={INPUT} placeholder="2026" value={work.year || ""} onChange={(event) => setWork(index, "year", event.target.value)} /></Field>
-                  <Field label="작품가격" error={errors[`work-${index}-price`]}><input className={INPUT} placeholder="1,200,000원" value={work.price || ""} onChange={(event) => setWork(index, "price", event.target.value)} /></Field>
+                  <Field label="작품가격" aside={formatKRW(work.price)} error={errors[`work-${index}-price`]}><input inputMode="numeric" className={INPUT} placeholder="1,200,000원" value={work.price || ""} onChange={(event) => setWork(index, "price", formatPriceInput(event.target.value))} /></Field>
+                  <UploadStatus upload={uploads[work.uploadId]} onRetry={() => runUpload(uploads[work.uploadId])} className="col-span-2 sm:col-span-4" />
                 </div>
               </li>
             ))}
@@ -426,13 +547,15 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
               <p role="status" className="mb-3 text-sm text-zinc-800">표시된 칸 {errorCount}곳을 확인해 주세요.</p>
             ) : null}
             {notice ? <p role="status" className="mb-3 text-sm font-medium text-zinc-900">{notice}</p> : null}
+            {submitError ? <p role="alert" className="mb-3 text-sm font-medium text-red-700">{submitError}</p> : null}
             {bothAgreed ? (
               <button type="submit" disabled={isSubmitting || uploadingCount > 0 || needsLogin || (!previewMode && !canSubmitOpenCall)} className="min-h-14 w-full rounded-sm bg-[#004aad] text-base font-bold text-white hover:bg-[#003c8d] disabled:opacity-50">
-                {isSubmitting ? "제출하는 중…" : uploadingCount > 0 ? "파일을 올리는 중…" : "지원서 제출하기"}
+                지원서 제출하기
               </button>
             ) : (
               <p className="rounded-sm bg-zinc-100 px-4 py-4 text-center text-sm text-zinc-700">위 두 항목에 모두 동의하면 제출 버튼이 나타납니다.</p>
             )}
+            {uploadingCount > 0 ? <p role="status" className="mt-2 text-center text-sm text-zinc-700">파일을 올리는 중입니다</p> : null}
           </div>
         </section>
       </form>

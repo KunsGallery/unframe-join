@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildOpenCallView, getContrastRatio, getOpenCallRequirements, getOpenCallTheme, splitIntroText } from "../src/views/open-call/openCallView.js";
+import { buildOpenCallView, getContrastRatio, getKeywordsWeight, getOpenCallRequirements, getOpenCallTheme, getThemeWordWeight, parseThemeKeywords, splitIntroText } from "../src/views/open-call/openCallView.js";
 
 test("이모지 머리글 앞의 문단은 소개문, 머리글 블록은 요강이 된다", () => {
   const result = splitIntroText("첫 문단\n둘째 줄\n\n둘째 문단\n\n👤 대상\n성인 작가\n\n🖼️ 지원 대상 작품\n완성작\n최종 전시 가능");
@@ -64,4 +64,16 @@ test("공개 화면 값에 포스터와 색이 담긴다", () => {
   assert.equal(view.theme.accent, "#C2410C");
   assert.equal(view.lead, "소개");
   assert.equal(view.requirements[0].title, "대상");
+});
+
+test("키워드는 쉼표로 나누고 빈 값과 공백을 정리한다", () => {
+  assert.deepEqual(parseThemeKeywords("연말, 선물,,  소품 ,크리스마스, 파티, "), ["연말", "선물", "소품", "크리스마스", "파티"]);
+  assert.deepEqual(parseThemeKeywords("잔상"), ["잔상"]);
+  assert.deepEqual(parseThemeKeywords(" , "), []);
+  assert.deepEqual(parseThemeKeywords(undefined), []);
+});
+
+test("글자 크기는 전체 길이가 아니라 가장 긴 키워드로 정한다", () => {
+  assert.equal(getKeywordsWeight(["연말", "크리스마스", "파티"]), getThemeWordWeight("크리스마스"));
+  assert.ok(getKeywordsWeight(["연말", "크리스마스"]) < getThemeWordWeight("연말, 크리스마스"));
 });

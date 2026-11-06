@@ -70,7 +70,7 @@ export const buildSubmission = (data, customFields = [], customValues = {}) => (
   otherLink: data.otherLink.trim(),
   artistStatement: data.artistStatement.trim(),
   portfolioUrl: data.portfolioUrl.trim(),
-  works: data.works.filter((work) => !isBlankWork(work)),
+  works: data.works.filter((work) => !isBlankWork(work)).map(omitUploadId),
   customFieldAnswers: Object.fromEntries(customFields.map((field) => [field.id, { value: customValues[field.id] ?? (field.type === "checkbox" ? false : "") }])),
 });
 
@@ -85,13 +85,49 @@ export const applySavedProfile = (data, profile = {}, email = "") => ({
   email: data.email || email || "",
 });
 
-// New uploads fill empty rows first, then add rows up to the limit.
-export const addUploadedImages = (works, urls) => {
-  const next = works.map((work) => ({ ...work }));
-  urls.forEach((url) => {
-    const empty = next.find((work) => !work.imageUrl);
-    if (empty) empty.imageUrl = url;
-    else if (next.length < OPEN_CALL_MAX_WORKS) next.push({ ...createEmptyWork(), imageUrl: url });
-  });
-  return next;
+export const formatKRW = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits || BigInt(digits) === 0n) return "";
+
+  const amount = BigInt(digits);
+  const eok = amount / 100000000n;
+  const man = (amount % 100000000n) / 10000n;
+  const rest = amount % 10000n;
+  const parts = [
+    eok > 0n ? `${eok.toLocaleString("en-US")}억` : "",
+    man > 0n ? `${man.toLocaleString("en-US")}만` : "",
+    rest > 0n ? rest.toLocaleString("en-US") : "",
+  ].filter(Boolean);
+  return `${parts.join(" ")}원`;
 };
+
+// Prices stay free text on the server, so only plain numbers get grouped as they are typed.
+export const formatPriceInput = (value) => {
+  const text = String(value ?? "");
+  const digits = text.replace(/,/g, "");
+  return /^\d+$/.test(digits) ? BigInt(digits).toLocaleString("en-US") : text;
+};
+
+const omitUploadId = (work) => {
+  const { uploadId: _uploadId, ...rest } = work;
+  return rest;
+};
+
+export const stripUploadState = (data) => ({ ...data, works: data.works.map(omitUploadId) });
+
+// Rows are claimed when files are picked, so they stay in the order the applicant chose them.
+export const reserveWorkRows = (works, ids) => {
+  const next = works.map((work) => ({ ...work }));
+  const reservedIds = [];
+  ids.forEach((id) => {
+    const empty = next.find((work) => !work.imageUrl && !work.uploadId);
+    if (empty) empty.uploadId = id;
+    else if (next.length < OPEN_CALL_MAX_WORKS) next.push({ ...createEmptyWork(), uploadId: id });
+    else return;
+    reservedIds.push(id);
+  });
+  return { works: next, reservedIds };
+};
+
+export const completeWorkUpload = (works, id, url) =>
+  works.map((work) => (work.uploadId === id ? { ...work, imageUrl: url } : work));

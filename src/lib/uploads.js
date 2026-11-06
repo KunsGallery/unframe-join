@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import { putWithProgress } from "./uploadProgress";
 
 export const IMAGE_MAX_SIZE = 32 * 1024 * 1024;
 export const DOCUMENT_MAX_SIZE = 25 * 1024 * 1024;
@@ -64,21 +65,7 @@ const getSignedUpload = async ({ fileName, contentType, fileSize, folder, isAdmi
 
   return result;
 };
-const uploadFileToSignedUrl = async ({ file, signedUrl }) => {
-  const response = await fetch(signedUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type,
-    },
-    body: file,
-  });
-
-  if (!response.ok) {
-    throw new Error("R2 업로드에 실패했습니다.");
-  }
-};
-
-export const uploadDocumentToR2 = async ({ file, folder }) => {
+export const uploadDocumentToR2 = async ({ file, folder, onProgress, signal }) => {
   const error = validateDocumentFile(file);
   if (error) throw new Error(error);
 
@@ -89,10 +76,7 @@ export const uploadDocumentToR2 = async ({ file, folder }) => {
     folder,
   });
 
-  await uploadFileToSignedUrl({
-    file,
-    signedUrl: signed.signedUrl,
-  });
+  await putWithProgress({ file, url: signed.signedUrl, onProgress, signal });
 
   return {
     key: signed.key,
@@ -100,7 +84,7 @@ export const uploadDocumentToR2 = async ({ file, folder }) => {
   };
 };
 
-export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload = false }) => {
+export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload = false, onProgress, signal }) => {
   const error = validateImageFile(file);
   if (error) throw new Error(error);
 
@@ -112,10 +96,7 @@ export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload =
     isAdminUpload,
   });
 
-  await uploadFileToSignedUrl({
-    file,
-    signedUrl: signed.signedUrl,
-  });
+  await putWithProgress({ file, url: signed.signedUrl, onProgress, signal });
 
   return {
     key: signed.key,

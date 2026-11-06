@@ -1,66 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ChapterPage, FaqTiles, MarkFooter } from "../chapters/Chapters";
-import { getThemeWordWeight } from "./openCallView";
+import KeywordEffect from "./KeywordEffect";
+import { getKeywordsWeight, parseThemeKeywords } from "./openCallView";
 import "./openCallPage.css";
-
-const MAX_GHOSTS = 12;
-const MIN_TRAVEL_PX = 28;
-
-// The theme word leaves a fading trace wherever the pointer or finger passes.
-export const Afterimage = ({ word }) => {
-  const stageRef = useRef(null);
-  const lastRef = useRef(null);
-  const activeRef = useRef(0);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-
-    const spawn = (event) => {
-      const last = lastRef.current;
-      if (last && Math.hypot(event.clientX - last.x, event.clientY - last.y) < MIN_TRAVEL_PX) return;
-      if (activeRef.current >= MAX_GHOSTS) return;
-      lastRef.current = { x: event.clientX, y: event.clientY };
-
-      const box = stage.getBoundingClientRect();
-      const offsetX = (event.clientX - box.left - box.width / 2) * 0.1;
-      const offsetY = (event.clientY - box.top - box.height / 2) * 0.16;
-      const ghost = document.createElement("span");
-      ghost.className = "ch-after__ghost";
-      ghost.setAttribute("aria-hidden", "true");
-      ghost.textContent = word;
-      stage.appendChild(ghost);
-      activeRef.current += 1;
-
-      const animation = ghost.animate(
-        [
-          { opacity: 0.95, transform: `translate(${offsetX}px, calc(-50% + ${offsetY}px))` },
-          { opacity: 0, transform: `translate(${offsetX * 1.6}px, calc(-50% + ${offsetY * 1.6}px))` },
-        ],
-        { duration: 1500, easing: "cubic-bezier(0.2, 0.7, 0.2, 1)", fill: "forwards" }
-      );
-      animation.onfinish = () => {
-        ghost.remove();
-        activeRef.current -= 1;
-      };
-    };
-
-    stage.addEventListener("pointermove", spawn);
-    stage.addEventListener("pointerdown", spawn);
-    return () => {
-      stage.removeEventListener("pointermove", spawn);
-      stage.removeEventListener("pointerdown", spawn);
-    };
-  }, [word]);
-
-  return (
-    <div ref={stageRef} className="ch-after" aria-hidden="true">
-      <span className="ch-after__ghost ch-after__ghost--still">{word}</span>
-      <span className="ch-after__word">{word}</span>
-    </div>
-  );
-};
 
 const OpenCallChapters = ({
   openCall,
@@ -80,9 +23,13 @@ const OpenCallChapters = ({
   faqDescription,
   onApply,
   onBack,
+  heroEffect = "rotate",
+  closingEffect = "spotlight",
 }) => {
-  const word = String(openCall.themeKeyword || "").trim() || "OPEN";
-  const weight = getThemeWordWeight(word);
+  const parsedKeywords = parseThemeKeywords(openCall.themeKeyword);
+  const keywords = parsedKeywords.length > 0 ? parsedKeywords : ["OPEN"];
+  const word = keywords.join(", ");
+  const weight = getKeywordsWeight(keywords);
   const applyButton = (
     <button type="button" className="oc-btn" disabled={!canApply} onClick={onApply}>
       {canApply ? applyLabel : disabledLabel}
@@ -93,8 +40,8 @@ const OpenCallChapters = ({
     "--oc-accent": theme.accent,
     "--oc-on": theme.on,
     "--oc-tint": theme.tint,
-    "--oc-word-wide": `min(${(posterUrl ? 46 : 84) / weight}vw, ${posterUrl ? 13 : 22}vw)`,
-    "--oc-word-narrow": `min(${82 / weight}vw, 34vw)`,
+    "--oc-word-wide": `clamp(56px, min(${(posterUrl ? 46 : 84) / weight}vw, ${posterUrl ? 11 : 14}vw), 160px)`,
+    "--oc-word-narrow": `min(${82 / weight}vw, 24vw)`,
   };
 
   return (
@@ -107,7 +54,7 @@ const OpenCallChapters = ({
               <h1 className="ch-sub" style={{ marginTop: 16 }}>{openCall.heroTitle || openCall.title}</h1>
               {openCall.subtitle ? <p style={{ marginTop: 6 }}>{openCall.subtitle}</p> : null}
             </div>
-            <Afterimage word={word} />
+            <KeywordEffect keywords={keywords} effect={heroEffect} className="oc-hero-word" />
             <div className="oc-panel__action">
               {applyButton}
               {statusHelpText ? <p>{statusHelpText}</p> : null}
@@ -186,7 +133,7 @@ const OpenCallChapters = ({
 
         <section className="oc-close">
           <div>
-            <h2 className="ch-title rv">{word}, 함께하실래요?</h2>
+            <KeywordEffect keywords={keywords} effect={closingEffect} as="h2" suffix="함께하실래요?" className="ch-title rv" />
             {statusHelpText ? <p className="rv" style={{ "--i": 1, marginTop: 12 }}>{statusHelpText}</p> : null}
           </div>
           <div className="rv" style={{ "--i": 2 }}>{applyButton}</div>
