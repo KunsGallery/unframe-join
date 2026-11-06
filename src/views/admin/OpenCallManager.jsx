@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowDown,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import {
   collection,
+  deleteDoc,
   deleteField,
   doc,
   onSnapshot,
@@ -33,8 +34,6 @@ import {
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
   buildFallbackDescriptionSections,
-  getOpenCallDisplayStatus,
-  getOpenCallDescriptionSections,
   normalizeOpenCallCompletionSettings,
   pickActiveOpenCall,
   normalizeOpenCallDescriptionSections,
@@ -44,25 +43,24 @@ import {
   normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
 import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
+import OpenCallContentEditor from "./open-call/OpenCallContentEditor";
+import OpenCallCreateDialog from "./open-call/OpenCallCreateDialog";
+import OpenCallPagePreview from "./open-call/OpenCallPagePreview";
+import {
+  buildBlankOpenCall,
+  buildDuplicateOpenCall,
+  createOpenCallId,
+  moveListItem,
+  toStoredOpenCallDate,
+} from "./open-call/openCallEditorModel";
 
-const STATUS_OPTIONS = ["draft", "open", "closed", "archived"];
+const QUIET_BUTTON = "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-50";
 const OPEN_CALL_MANAGER_TABS = [
-  {
-    id: "landing",
-    label: "공고/랜딩 설정",
-    description: "공고 소개, 노출 상태, FAQ와 외부 랜딩 흐름을 관리합니다.",
-  },
-  {
-    id: "form",
-    label: "입력폼 관리",
-    description: "실제 신청 폼 미리보기와 입력 항목 구성을 함께 관리합니다.",
-  },
-  {
-    id: "applications",
-    label: "접수 데이터",
-    description: "공고별 지원서 목록, 메모, 심사 상태를 관리합니다.",
-  },
+  { id: "landing", label: "공고 내용" },
+  { id: "form", label: "신청 양식" },
+  { id: "applications", label: "지원서" },
 ];
+
 const OPEN_CALL_REVIEW_STATUS_OPTIONS = [
   "review",
   "shortlisted",
@@ -89,31 +87,12 @@ const OPEN_CALL_REVIEW_STATUS_META = {
   },
 };
 
-const STATUS_META = {
-  draft: {
-    label: "draft",
-    className: "bg-zinc-100 text-zinc-600 border-zinc-200",
-  },
-  open: {
-    label: "open",
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  },
-  closed: {
-    label: "closed",
-    className: "bg-amber-50 text-amber-700 border-amber-200",
-  },
-  archived: {
-    label: "archived",
-    className: "bg-red-50 text-red-600 border-red-200",
-  },
-};
-
 const createDescriptionSectionId = () =>
   `section_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 const createEmptyDescriptionSection = (order = 1) => ({
   id: createDescriptionSectionId(),
-  title: "새 섹션",
+  title: "",
   body: "",
   order,
   isVisible: true,
@@ -161,15 +140,6 @@ const normalizeDescriptionSectionPayload = (sections) =>
     order: Number.isFinite(Number(section.order)) ? Number(section.order) : index + 1,
     isVisible: section.isVisible !== false,
   }));
-
-const scrollToOpenCallSection = (id) => {
-  if (typeof document === "undefined") return;
-  const target = document.getElementById(id);
-  for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
-    if (parent.tagName === "DETAILS") parent.open = true;
-  }
-  target?.scrollIntoView({ behavior: "smooth", block: "start" });
-};
 
 const toDatetimeLocalValue = (value) => {
   if (!value) return "";
@@ -264,30 +234,11 @@ const normalizeOpenCallPublicationState = (call = {}) => {
   return next;
 };
 
-const PUBLICATION_STATE_OPTIONS = [
-  "private",
-  "public",
-  "featured",
-  "archived",
-];
-
 const PUBLICATION_STATE_META = {
-  private: {
-    label: "비공개",
-    tone: "border-zinc-200 bg-zinc-50 text-zinc-600",
-  },
-  public: {
-    label: "공개 · 대표 아님",
-    tone: "border-sky-200 bg-sky-50 text-sky-700",
-  },
-  featured: {
-    label: "/opencall 대표 공고",
-    tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  },
-  archived: {
-    label: "마감/보관",
-    tone: "border-amber-200 bg-amber-50 text-amber-700",
-  },
+  private: { label: "비공개" },
+  public: { label: "공개" },
+  featured: { label: "공개 중" },
+  archived: { label: "마감" },
 };
 
 const getPublicationState = (call) => {
@@ -297,9 +248,6 @@ const getPublicationState = (call) => {
   if (call.status === "closed" || call.status === "archived") return "archived";
   return "public";
 };
-
-const getPublicationStateLabel = (call) =>
-  PUBLICATION_STATE_META[getPublicationState(call)]?.label || "비공개";
 
 const buildPublicationStatePatch = (call, state) => {
   const currentStatus = call?.status || "draft";
@@ -346,56 +294,6 @@ const buildPublicationStatePatch = (call, state) => {
   return call;
 };
 
-const getOpenCallVisibilityDiagnostics = ({
-  editingCall,
-  activeOpenCall,
-  visibleSections,
-  applyButtonText,
-}) => {
-  const displayStatus = getOpenCallDisplayStatus(editingCall || activeOpenCall || null);
-
-  return [
-    {
-      key: "exists",
-      label: "공고 문서 있음",
-      ok: Boolean(editingCall?.id),
-    },
-    {
-      key: "visible",
-      label: "공개 상태",
-      ok: editingCall?.isVisible !== false,
-      fixLabel: "공개로 전환",
-    },
-    {
-      key: "featured",
-      label: "대표 공고 설정",
-      ok: editingCall?.isFeatured === true,
-      fixLabel: "대표 공고로 설정",
-    },
-    {
-      key: "applyable",
-      label: "접수 가능 상태 open/upcoming",
-      ok: displayStatus.key === "open" || displayStatus.key === "upcoming",
-    },
-    {
-      key: "active",
-      label: "/opencall active 공고와 일치",
-      ok: Boolean(editingCall?.id) && activeOpenCall?.id === editingCall.id,
-      fixLabel: "현재 대표 공고 편집하기",
-    },
-    {
-      key: "sections",
-      label: "상세 설명 카드 있음",
-      ok: visibleSections.length > 0,
-    },
-    {
-      key: "cta",
-      label: "신청 버튼 문구 있음",
-      ok: Boolean(applyButtonText?.trim()),
-    },
-  ];
-};
-
 const formatDateTime = (value) => {
   if (!value) return "-";
 
@@ -414,14 +312,6 @@ const formatDateTime = (value) => {
   } catch {
     return "-";
   }
-};
-
-const getSaveButtonLabel = (call) => {
-  const publicationState = getPublicationState(call);
-  const isReflectableFeatured =
-    publicationState === "featured" && call?.isVisible !== false;
-
-  return isReflectableFeatured ? "저장하고 /opencall에 반영" : "저장하기";
 };
 
 const createEmptyFaq = (order = 1) => ({
@@ -577,6 +467,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const [selectedOpenCallId, setSelectedOpenCallId] = useState("");
   const [previewOpenCallId, setPreviewOpenCallId] = useState("");
   const [formPreviewVersion, setFormPreviewVersion] = useState(0);
+  const [editorStep, setEditorStep] = useState("basics");
+  const [createDialog, setCreateDialog] = useState(null);
+  const [previewPage, setPreviewPage] = useState(false);
+  const [savedSnapshots, setSavedSnapshots] = useState({});
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
@@ -666,6 +560,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
           next[call.id] = {
             title: call.title || "",
             subtitle: call.subtitle || "",
+            themeKeyword: call.themeKeyword || "",
+            eligibilityText: call.eligibilityText || "",
+            benefitText: call.benefitText || "",
+            magazineText: call.magazineText || "",
             status: call.status || "draft",
             introText: call.introText || "",
             badgeText: call.badgeText || "OPEN",
@@ -700,6 +598,35 @@ const OpenCallManager = ({ db, appId, applications }) => {
       return next;
     });
   }, [sortedCalls]);
+
+  // The first version of a draft is its saved baseline, which is what "unsaved" compares against.
+  useEffect(() => {
+    setSavedSnapshots((prev) => {
+      const missing = Object.keys(drafts).filter((id) => prev[id] === undefined);
+      if (missing.length === 0) return prev;
+      return { ...prev, ...Object.fromEntries(missing.map((id) => [id, JSON.stringify(drafts[id])])) };
+    });
+  }, [drafts]);
+
+  const hasUnsavedDrafts = Object.keys(savedSnapshots).some(
+    (id) => drafts[id] && savedSnapshots[id] !== JSON.stringify(drafts[id])
+  );
+
+  useEffect(() => {
+    if (!hasUnsavedDrafts) return undefined;
+    const warn = (event) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedDrafts]);
+
+  useEffect(() => {
+    if (!managerNotice) return undefined;
+    const timer = setTimeout(() => setManagerNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [managerNotice]);
+
+  const closePreviewPage = useCallback(() => setPreviewPage(false), []);
+  const closeCreateDialog = useCallback(() => setCreateDialog(null), []);
 
   const updateDraft = (callId, key, value) => {
     setSaveFeedbacks((prev) => ({
@@ -888,11 +815,22 @@ const OpenCallManager = ({ db, appId, applications }) => {
         ...prev,
         [callId]: {
           ...current,
-          descriptionSections:
-            sections.length > 0 ? sections : [createEmptyDescriptionSection(1)],
+          descriptionSections: sections,
         },
       };
     });
+  };
+
+  const moveDescriptionSection = (callId, index, direction) => {
+    updateDraft(
+      callId,
+      "descriptionSections",
+      moveListItem(normalizeDescriptionSectionDrafts(drafts[callId]?.descriptionSections), index, direction)
+    );
+  };
+
+  const moveFaqItem = (callId, index, direction) => {
+    updateDraft(callId, "faqs", moveListItem(normalizeFaqDrafts(drafts[callId]?.faqs), index, direction));
   };
 
   const updateLandingLabel = (callId, key, value) => {
@@ -975,29 +913,37 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
   };
 
-  const handleSeedDefault = async () => {
-    const fallback = createFallbackOpenCall();
-    const existing = sortedCalls.find((call) => call.id === fallback.id);
-    if (existing) {
-      const ok = window.confirm(
-        "기본 잔상 공고가 이미 있습니다. 현재 값으로 덮어쓰시겠습니까?"
-      );
-      if (!ok) return;
-    }
+  const openCallDoc = (id) => doc(db, "artifacts", appId, "public", "data", "openCalls", id);
+
+  const handleCreateOpenCall = async ({ title, sourceId }) => {
+    const id = createOpenCallId();
+    const source = sourceId ? sortedCalls.find((call) => call.id === sourceId) : null;
+    const data = source
+      ? buildDuplicateOpenCall({ ...source, ...(drafts[source.id] || {}), notificationSettings: source.notificationSettings }, { id, title })
+      : buildBlankOpenCall({ id, title });
 
     try {
-      await setDoc(
-        doc(db, "artifacts", appId, "public", "data", "openCalls", fallback.id),
-        {
-          ...fallback,
-          createdAt: existing?.createdAt || serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await setDoc(openCallDoc(id), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.error(error);
+      throw new Error(formatFirestorePermissionMessage(error));
+    }
 
-      setSelectedOpenCallId(fallback.id);
-      setManagerNotice("기본 잔상 공고가 생성되었습니다.");
+    setPreviewOpenCallId(id);
+    setActiveOpenCallTab("landing");
+    setEditorStep("basics");
+    setCreateDialog(null);
+    setManagerNotice(`'${title}' 공고를 비공개로 만들었습니다. 내용을 채운 뒤 공개 설정에서 공개하세요.`);
+  };
+
+  const handleDeleteOpenCall = async (call, applicantCount) => {
+    if (applicantCount > 0) return;
+    if (!window.confirm(`'${drafts[call.id]?.title || call.title}' 공고를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+
+    try {
+      await deleteDoc(openCallDoc(call.id));
+      setEditorStep("basics");
+      setManagerNotice("공고를 삭제했습니다.");
     } catch (error) {
       console.error(error);
       setManagerNotice(formatFirestorePermissionMessage(error));
@@ -1054,7 +1000,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
       trackType: "open-call",
       updatedAt: serverTimestamp(),
       createdAt: call.createdAt || serverTimestamp(),
+      applicationStartAt: toStoredOpenCallDate(draft.applicationStartAt),
+      applicationEndAt: toStoredOpenCallDate(draft.applicationEndAt),
+      announcementAt: toStoredOpenCallDate(draft.announcementAt),
     });
+    payload.descriptionSections = payload.descriptionSections.filter(
+      (section) => section.title.trim() || section.body.trim()
+    );
     const activeCandidate = pickActiveOpenCall(
       sortedCalls.map((item) => (item.id === call.id ? { ...item, ...payload } : item))
     );
@@ -1072,36 +1024,36 @@ const OpenCallManager = ({ db, appId, applications }) => {
         payload,
         { merge: true }
       );
+      const otherFeatured = payload.isFeatured
+        ? sortedCalls.filter((item) => item.id !== call.id && item.isFeatured)
+        : [];
+      await Promise.all(
+        otherFeatured.map((item) => updateDoc(openCallDoc(item.id), { isFeatured: false, updatedAt: serverTimestamp() }))
+      );
+
+      const flags = { isVisible: payload.isVisible, isFeatured: payload.isFeatured, status: payload.status };
       setDrafts((prev) => ({
         ...prev,
-        [call.id]: {
-          ...(prev[call.id] || {}),
-          isVisible: payload.isVisible,
-          isFeatured: payload.isFeatured,
-          status: payload.status,
-        },
+        [call.id]: { ...(prev[call.id] || {}), ...flags },
+        ...Object.fromEntries(
+          otherFeatured.map((item) => [item.id, { ...(prev[item.id] || {}), isFeatured: false }])
+        ),
       }));
-      const hasActiveOpenCall = Boolean(activeCandidate?.id);
-      const isHiddenFeatured =
-        payload.isFeatured === true && payload.isVisible === false;
-      const isActiveCall = activeCandidate?.id === call.id;
-      const savedDisplayStatus = getOpenCallDisplayStatus(payload);
-      const isVisiblePublic = payload.isVisible !== false && payload.isFeatured !== true;
-
+      setSavedSnapshots((prev) => ({
+        ...prev,
+        [call.id]: JSON.stringify({ ...draft, ...flags }),
+        ...Object.fromEntries(
+          otherFeatured.map((item) => [item.id, JSON.stringify({ ...(drafts[item.id] || {}), isFeatured: false })])
+        ),
+      }));
       setTimedSaveFeedback(call.id, {
         state: "saved",
         message:
-          !hasActiveOpenCall
-            ? "저장되었습니다. 하지만 현재 /opencall에 노출 가능한 공고가 없습니다. 이 공고를 공개 대표 공고로 설정해야 외부 페이지에 반영됩니다."
-            : payload.isVisible === false
-            ? "저장되었습니다. 이 공고는 비공개 상태라 외부 페이지에는 표시되지 않습니다."
-            : payload.isFeatured === true && isHiddenFeatured
-            ? "저장되었습니다. 이 공고는 대표 공고지만 비공개 상태라 /opencall에는 반영되지 않습니다."
-            : payload.isFeatured === true && isActiveCall && savedDisplayStatus.canApply
-            ? "저장되었습니다. 현재 /opencall 대표 공고이므로 외부 페이지에 반영됩니다."
-            : isVisiblePublic
-            ? "저장되었습니다. 이 공고는 공개 상태지만 /opencall 대표 공고가 아니므로 외부 메인 오픈콜 페이지에는 표시되지 않습니다."
-            : "저장되었습니다. 하지만 현재 수정 중인 공고는 /opencall 노출 공고가 아니므로 외부 페이지에는 반영되지 않습니다.",
+          payload.isVisible === false
+            ? "저장했습니다. 비공개라 외부에는 보이지 않습니다."
+            : activeCandidate?.id === call.id
+            ? "저장했습니다. /opencall에 반영됩니다."
+            : "저장했습니다. /opencall에는 다른 공고가 표시됩니다.",
       });
     } catch (error) {
       console.error(error);
@@ -1122,82 +1074,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
     }
 
     return "저장 중 오류가 발생했습니다.";
-  };
-
-  const getSaveFeedbackClassName = (state) => {
-    if (state === "error") return "text-red-600";
-    if (state === "saved") return "text-emerald-600";
-    return "text-zinc-500";
-  };
-
-  const SaveSettingsButton = ({ call, className = "" }) => {
-    const feedback = saveFeedbacks[call.id];
-    const draft = drafts[call.id] || {};
-    const saveLabel = getSaveButtonLabel({ ...call, ...draft });
-
-    return (
-      <button
-        type="button"
-        onClick={() => handleSave(call)}
-        disabled={feedback?.state === "saving"}
-        className={`inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
-      >
-        <Save size={14} />
-        {feedback?.state === "saving" ? "저장 중..." : saveLabel}
-      </button>
-    );
-  };
-
-  const SaveStatusRow = ({ call, sticky = false, className = "" }) => {
-    const feedback = saveFeedbacks[call.id];
-    const isActiveCall = call.id === activeOpenCallId;
-    const hasActiveOpenCall = Boolean(activeOpenCallId);
-    const showMismatchWarning = !isActiveCall;
-    const warningMessage = hasActiveOpenCall
-      ? "주의: 현재 수정 중인 공고는 /opencall 대표 공고가 아닙니다.\n저장해도 외부 페이지에는 바로 보이지 않을 수 있습니다."
-      : "주의: 현재 /opencall에 노출 중인 공고가 없습니다.\n대표 공고가 비공개이거나, 노출 가능한 open/upcoming 공고가 없습니다.";
-    const warningButtonLabel = hasActiveOpenCall
-      ? "이 공고를 /opencall 대표 공고로 설정"
-      : "현재 편집 중인 공고를 공개 대표 공고로 설정";
-
-    return (
-      <div
-        className={`${
-          sticky
-            ? "sticky bottom-4 z-20 mt-8 rounded-[24px] border border-zinc-950/10 bg-white/90 p-3 shadow-xl backdrop-blur"
-            : "mt-6 border-t border-zinc-950/10 pt-4"
-        } ${className}`}
-      >
-        {showMismatchWarning ? (
-          <div className="mb-3 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-xs font-bold text-amber-700 break-keep whitespace-pre-wrap">
-                {warningMessage}
-              </p>
-              <button
-                type="button"
-                onClick={() => handleSetFeaturedOpenCall(call)}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800"
-              >
-                <Star size={14} />
-                {warningButtonLabel}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <p
-            className={`text-xs font-bold break-keep whitespace-pre-wrap ${getSaveFeedbackClassName(
-              feedback?.state
-            )}`}
-          >
-            {feedback?.message || "공개 상태를 확인한 뒤 저장해 주세요."}
-          </p>
-          <SaveSettingsButton call={call} className="w-full md:w-auto" />
-        </div>
-      </div>
-    );
   };
 
   const updateApplicationDoc = async (appIdToUpdate, data) => {
@@ -1382,70 +1258,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
     URL.revokeObjectURL(url);
   };
 
-  const handleSetFeaturedOpenCall = async (call) => {
-    const currentStatus = call?.status;
-
-    try {
-      await updateDoc(
-        doc(db, "artifacts", appId, "public", "data", "openCalls", call.id),
-        {
-          isVisible: true,
-          isFeatured: true,
-          status: normalizeFeaturedOpenCallStatus(currentStatus),
-          updatedAt: serverTimestamp(),
-        }
-      );
-    } catch (error) {
-      console.error(error);
-      setManagerNotice(formatFirestorePermissionMessage(error));
-      return;
-    }
-
-    try {
-      await Promise.all(
-        sortedCalls
-          .filter((item) => item.id !== call.id && item.isFeatured)
-          .map((item) =>
-            updateDoc(
-              doc(db, "artifacts", appId, "public", "data", "openCalls", item.id),
-              {
-                isFeatured: false,
-                updatedAt: serverTimestamp(),
-              }
-            )
-        )
-      );
-      setDrafts((prev) => {
-        const next = { ...prev };
-
-        next[call.id] = {
-          ...(next[call.id] || {}),
-          isVisible: true,
-          isFeatured: true,
-          status: normalizeFeaturedOpenCallStatus(currentStatus),
-        };
-
-        sortedCalls
-          .filter((item) => item.id !== call.id && item.isFeatured)
-          .forEach((item) => {
-            next[item.id] = {
-              ...(next[item.id] || {}),
-              isFeatured: false,
-            };
-          });
-
-        return next;
-      });
-      setPreviewOpenCallId(call.id);
-      setManagerNotice(
-        "이 공고가 /opencall 대표 공고로 설정되었습니다. 이제 이 편집 내용이 외부 /opencall 페이지에 반영됩니다."
-      );
-    } catch (error) {
-      console.error(error);
-      setManagerNotice(formatFirestorePermissionMessage(error));
-    }
-  };
-
   const selectedApplications = selectedOpenCallId
     ? getApplicantItems(applications, selectedOpenCallId)
     : [];
@@ -1465,8 +1277,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
         : sortedCalls[0] || null),
     [activeOpenCallId, previewOpenCallId, sortedCalls]
   );
-  const previewMatchesLanding =
-    previewedOpenCall && activeOpenCall ? previewedOpenCall.id === activeOpenCall.id : false;
   const previewedDraft = previewedOpenCall ? drafts[previewedOpenCall.id] || {} : null;
   const previewedRawOpenCall = useMemo(
     () => openCalls.find((call) => call.id === previewOpenCallId) || null,
@@ -1479,69 +1289,21 @@ const OpenCallManager = ({ db, appId, applications }) => {
         : null,
     [previewedDraft, previewedOpenCall, previewedRawOpenCall]
   );
-  const activeOpenCallView = useMemo(
-    () => (activeOpenCall ? createFallbackOpenCall(activeOpenCall) : null),
-    [activeOpenCall]
-  );
-  const previewHeroAccentText =
-    String(previewedOpenCallForStatus?.heroAccent || "").trim() || "-";
-  const activeHeroAccentText =
-    String(activeOpenCallView?.heroAccent || activeOpenCall?.heroAccent || "").trim() || "-";
-  const previewDescriptionSectionCount = getOpenCallDescriptionSections(
-    previewedOpenCallForStatus
-  ).length;
-  const activeDescriptionSectionCount = getOpenCallDescriptionSections(activeOpenCall).length;
-  const hasActiveOpenCall = Boolean(activeOpenCallId);
-  const previewedFeaturedHidden =
-    previewedOpenCallForStatus?.isFeatured === true &&
-    previewedOpenCallForStatus?.isVisible === false;
   const editingOpenCall = previewedOpenCallForStatus || previewedOpenCall || null;
-  const previewApplyButtonText = String(
-    editingOpenCall?.applyButtonText || OPEN_CALL_FALLBACK.applyButtonText
-  ).trim() || OPEN_CALL_FALLBACK.applyButtonText;
-  const previewDescriptionSections = getOpenCallDescriptionSections(editingOpenCall);
-  const editingPublicationState = getPublicationState(editingOpenCall);
-  const activePublicationState = getPublicationState(activeOpenCall);
-  const activeDisplayStatus = activeOpenCallView
-    ? getOpenCallDisplayStatus(activeOpenCallView)
-    : { key: "none", label: "노출 없음", canApply: false };
-  const publicationDiagnostics = useMemo(
-    () =>
-      getOpenCallVisibilityDiagnostics({
-        editingCall: editingOpenCall,
-        activeOpenCall,
-        visibleSections: previewDescriptionSections,
-        applyButtonText: previewApplyButtonText,
-      }),
-    [activeOpenCall, editingOpenCall, previewApplyButtonText, previewDescriptionSections]
-  );
-  const diagnosticsPassCount = publicationDiagnostics.filter((check) => check.ok).length;
-  const diagnosticsAllPass = diagnosticsPassCount === publicationDiagnostics.length;
-  const externalReflectable =
-    Boolean(activeOpenCall?.id) &&
-    activePublicationState === "featured" &&
-    activeOpenCall?.isVisible !== false &&
-    (activeDisplayStatus.key === "open" || activeDisplayStatus.key === "upcoming");
   const previewedOpenCallView = useMemo(
     () => (editingOpenCall ? createFallbackOpenCall(editingOpenCall) : null),
     [editingOpenCall]
   );
-  const previewFormLink = useMemo(
-    () => getOpenCallApplyPath(previewedOpenCallView?.id || ""),
-    [previewedOpenCallView?.id]
-  );
-  const activeManagerTab =
-    OPEN_CALL_MANAGER_TABS.find((tab) => tab.id === activeOpenCallTab) || OPEN_CALL_MANAGER_TABS[0];
   const handleFormSettingsChange = (nextSettings) => {
     if (!previewedOpenCall?.id) return;
     updateFormSettings(previewedOpenCall.id, () => nextSettings);
   };
 
   useEffect(() => {
-    if (activeOpenCallTab === "applications" && !selectedOpenCallId && previewedOpenCall?.id) {
-      setSelectedOpenCallId(previewedOpenCall.id);
+    if (activeOpenCallTab === "applications" && previewOpenCallId) {
+      setSelectedOpenCallId(previewOpenCallId);
     }
-  }, [activeOpenCallTab, previewedOpenCall?.id, selectedOpenCallId]);
+  }, [activeOpenCallTab, previewOpenCallId]);
 
   const handleOpenFormWindow = (openCallId) => {
     if (typeof window === "undefined") return;
@@ -1568,1387 +1330,161 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
   return (
     <section className="mb-10 min-w-0">
-      <div className="sticky top-20 z-40 mb-5 flex flex-wrap items-center gap-3 border-b border-zinc-200 bg-white px-4 py-3">
-        <label className="flex min-w-0 flex-1 flex-wrap items-center gap-3 text-sm font-bold">편집할 공고<select value={previewOpenCallId} onChange={event => { setPreviewOpenCallId(event.target.value); setSelectedOpenCallId(event.target.value); }} className="min-h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold">{sortedCalls.map(call => <option key={call.id} value={call.id}>{call.title || "제목 없음"}</option>)}</select></label>
-        {previewedOpenCall && <button type="button" onClick={() => handleSave(previewedOpenCall)} disabled={saveFeedbacks[previewedOpenCall.id]?.state === "saving"} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-bold text-white disabled:opacity-50"><Save size={16} />{saveFeedbacks[previewedOpenCall.id]?.state === "saving" ? "저장 중…" : "공고 저장"}</button>}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-2xl font-bold text-zinc-950">오픈콜</h3>
+          <p className="mt-1 text-sm text-zinc-600 break-keep">
+            {activeOpenCall ? <>지금 /opencall에 표시 중: <span className="font-semibold text-zinc-900">{activeOpenCall.title || "제목 없음"}</span></> : "지금 /opencall에 표시되는 공고가 없습니다."}
+          </p>
+        </div>
+        <button type="button" onClick={() => setCreateDialog({ sourceId: "" })} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800">
+          <Plus size={16} />새 오픈콜 만들기
+        </button>
       </div>
-      {activeOpenCallTab === "landing" ? (
-        <details className="mb-5 border-b border-zinc-200">
-          <summary className="cursor-pointer py-3 text-sm font-bold text-zinc-700">공개 상태 · 노출 진단 {diagnosticsAllPass ? "(정상)" : "(확인 필요)"}</summary>
-      <div className="mb-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-                현재 /opencall 외부 노출 상태
-              </p>
-              <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep">
-                {hasActiveOpenCall
-                  ? activeOpenCallView?.title || "현재 /opencall에 노출 중인 공고"
-                  : "현재 /opencall에 노출 중인 공고가 없습니다"}
-              </h3>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                {externalReflectable
-                  ? "외부 페이지에 바로 반영될 수 있는 상태입니다."
-                  : hasActiveOpenCall
-                  ? "외부 페이지는 보이지만, 저장/발행 조건을 다시 확인하면 더 안전합니다."
-                  : "대표 공고가 비공개이거나, 노출 가능한 공고가 없습니다."}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => window.open("/opencall", "_blank", "noopener,noreferrer")}
-                className="inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90"
-              >
-                외부 페이지 열기
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!activeOpenCallId) return;
-                  setPreviewOpenCallId(activeOpenCallId);
-                }}
-                disabled={!activeOpenCallId}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                현재 대표 공고 편집하기
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetPublicationState(activeOpenCallView || editingOpenCall, "private")}
-                disabled={!activeOpenCallView && !editingOpenCall}
-                className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-300 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                비공개로 전환
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                공고명
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {activeOpenCallView?.title || "-"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                현재 상태
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {hasActiveOpenCall ? (externalReflectable ? "외부 공개 중" : "노출 준비 중") : "노출 없음"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                대표 공고 여부
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {activeOpenCallView?.isFeatured ? "YES" : "NO"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                공개 여부
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {activeOpenCallView?.isVisible === false ? "비공개" : activeOpenCallView ? "공개" : "-"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                접수 상태
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {activeDisplayStatus.label}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                마지막 저장/수정 시각
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {formatDateTime(activeOpenCallView?.updatedAt || activeOpenCallView?.createdAt)}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                외부 페이지 반영 가능 여부
-              </p>
-              <p
-                className={`mt-2 text-sm font-black break-keep ${
-                  externalReflectable ? "text-emerald-600" : "text-amber-600"
-                }`}
-              >
-                {externalReflectable ? "반영 가능" : "반영 불가"}
-              </p>
-            </div>
-          </div>
-
-          <details className="mt-4 rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-            <summary className="cursor-pointer list-none text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-              개발/진단 정보 보기
-            </summary>
-            <div className="mt-3 space-y-1 text-sm font-medium text-zinc-600 break-keep">
-              <p>현재 편집 공고 ID: {previewedOpenCall?.id || "-"}</p>
-              <p>/opencall 노출 공고 ID: {activeOpenCall?.id || "-"}</p>
-              <p>일치 여부: {previewMatchesLanding ? "YES" : "NO"}</p>
-            </div>
-          </details>
-        </div>
-
-        <div className="rounded-[32px] border border-zinc-100 bg-white p-5 shadow-sm md:p-6">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-                발행 상태
-              </p>
-              <h3 className="mt-2 text-xl font-black tracking-tight text-zinc-900">
-                운영자가 이해하기 쉬운 상태로 바꾸기
-              </h3>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                공개/비공개/대표 공고/마감 상태를 한 번에 고르고, 실제 저장은 아래 버튼으로
-                반영합니다.
-              </p>
-            </div>
-            <span
-              className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] ${
-                PUBLICATION_STATE_META[editingPublicationState]?.tone ||
-                "border-zinc-200 bg-zinc-50 text-zinc-600"
-              }`}
-            >
-              {getPublicationStateLabel(editingOpenCall)}
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {PUBLICATION_STATE_OPTIONS.map((state) => {
-              const meta = PUBLICATION_STATE_META[state];
-              const isActive = editingPublicationState === state;
-              return (
-                <button
-                  key={state}
-                  type="button"
-                  onClick={() => handleSetPublicationState(editingOpenCall, state)}
-                  className={`rounded-[22px] border px-4 py-4 text-left transition-all ${
-                    isActive
-                      ? `${meta.tone} shadow-sm`
-                      : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-[#004aad]/20 hover:bg-white"
-                  }`}
-                >
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em]">
-                    {meta.label}
-                  </p>
-                  <p className="mt-2 text-sm font-medium leading-relaxed break-keep">
-                    {state === "private"
-                      ? "외부 페이지에 표시하지 않습니다."
-                      : state === "public"
-                      ? "공개하지만 대표 공고로는 지정하지 않습니다."
-                      : state === "featured"
-                      ? "외부 /opencall 대표 공고로 공개합니다."
-                      : "마감 상태로 보관합니다."}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`mb-8 rounded-[32px] border p-5 md:p-6 ${
-          diagnosticsAllPass
-            ? "border-emerald-200 bg-emerald-50/60"
-            : "border-amber-200 bg-amber-50/60"
-        }`}
-      >
-        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-              외부 노출 진단
-            </p>
-            <h3 className="mt-2 text-xl font-black tracking-tight text-zinc-900">
-              /opencall 반영 전 확인해야 할 항목
-            </h3>
-            <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-              {diagnosticsPassCount}/{publicationDiagnostics.length} 항목이 통과했습니다. 체크가
-              남아 있으면 외부 페이지 반영 조건을 다시 확인해 주세요.
-            </p>
-          </div>
-          <span
-            className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] ${
-              diagnosticsAllPass
-                ? "border-emerald-200 bg-white text-emerald-700"
-                : "border-amber-200 bg-white text-amber-700"
-            }`}
-          >
-            {diagnosticsAllPass ? "진단 통과" : "확인 필요"}
-          </span>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {publicationDiagnostics.map((check) => (
-            <div
-              key={check.key}
-              className={`rounded-[24px] border px-4 py-4 ${
-                check.ok
-                  ? "border-emerald-200 bg-white"
-                  : "border-amber-200 bg-white"
-              }`}
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                {check.label}
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                {check.ok ? (
-                  <BadgeCheck size={14} className="text-emerald-600" />
-                ) : (
-                  <AlertTriangle size={14} className="text-amber-600" />
-                )}
-                <p
-                  className={`text-sm font-black break-keep ${
-                    check.ok ? "text-emerald-700" : "text-amber-700"
-                  }`}
-                >
-                  {check.ok ? "통과" : "확인 필요"}
-                </p>
-              </div>
-              {!check.ok && check.fixLabel ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    check.key === "active"
-                      ? setPreviewOpenCallId(activeOpenCallId)
-                      : handleSetPublicationState(
-                          editingOpenCall || previewedOpenCall || activeOpenCall || null,
-                          check.key === "visible"
-                            ? "public"
-                            : check.key === "featured"
-                            ? "featured"
-                            : "public"
-                        )
-                  }
-                  className="mt-3 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-300 hover:text-amber-800"
-                >
-                  {check.fixLabel}
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-        </details>
-      ) : null}
-
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad]/5 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-            <Megaphone size={12} />
-            Open Call Manager
-          </div>
-          <h3 className="text-2xl font-black tracking-tight text-zinc-900">
-            오픈콜 관리
-          </h3>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-            {activeManagerTab.description}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              if (!activeOpenCallId) return;
-              setPreviewOpenCallId(activeOpenCallId);
-            }}
-            disabled={!activeOpenCallId || previewOpenCallId === activeOpenCallId}
-            className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Megaphone size={14} />
-            현재 /opencall 대표 공고 편집하기
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSeedDefault}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#004aad] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-[#004aad]/15 transition-opacity hover:opacity-90"
-          >
-            <Plus size={14} />
-            기본 잔상 공고 생성
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-5 flex flex-wrap gap-2">
-        {OPEN_CALL_MANAGER_TABS.map((tab) => {
-          const isActive = activeOpenCallTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveOpenCallTab(tab.id)}
-              className={`inline-flex items-center rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${
-                isActive
-                  ? "bg-[#004aad] text-white shadow-lg shadow-[#004aad]/15"
-                  : "border border-zinc-200 bg-white text-zinc-600 hover:border-[#004aad]/20 hover:text-[#004aad]"
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeOpenCallTab === "form" && previewedOpenCallView ? (
-        <details className="mb-6 space-y-5 border-b border-zinc-200">
-          <summary className="cursor-pointer py-3 text-sm font-bold text-zinc-700">신청폼 실시간 미리보기</summary>
-          <div className="sticky top-4 z-30 rounded-[32px] border border-[#004aad]/12 bg-white/90 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-6">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-                  입력폼 관리
-                </p>
-                <h4 className="mt-2 text-2xl font-black tracking-tight text-zinc-900 break-keep md:text-3xl">
-                  {previewedOpenCallView.title || OPEN_CALL_FALLBACK.title}
-                </h4>
-                <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-zinc-600 break-keep">
-                  실제 지원자가 보게 될 입력폼을 넓게 확인하면서 항목을 바로 수정합니다. 이
-                  미리보기에서는 제출과 업로드가 저장되지 않습니다.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2 xl:justify-end">
-                <button
-                  type="button"
-                  onClick={() => handleOpenFormWindow(previewedOpenCallView.id)}
-                  className="inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90"
-                >
-                  실제 입력폼 열기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCopyFormLink(previewedOpenCallView.id)}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                >
-                  링크 복사
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRefreshFormPreview}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-700 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                >
-                  미리보기 새로고침
-                </button>
-                <button
-                  type="button"
-                  onClick={() => previewedOpenCall && handleSave(previewedOpenCall)}
-                  disabled={!previewedOpenCall}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad] px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-[0_12px_28px_rgba(0,74,173,0.22)] transition-colors hover:bg-[#003c8d] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Save size={14} />
-                  폼 설정 저장
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  현재 선택된 오픈콜
-                </p>
-                <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-                  {previewedOpenCallView.id || "-"}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  공개 상태
-                </p>
-                <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                  {getPublicationStateLabel(previewedOpenCallView)}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  접수 기간
-                </p>
-                <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                  {formatDateTime(previewedOpenCallView.applicationStartAt)} ~{" "}
-                  {formatDateTime(previewedOpenCallView.applicationEndAt)}
-                </p>
-              </div>
-              <div className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                  폼 링크
-                </p>
-                <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-                  {previewFormLink}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full overflow-hidden rounded-[32px] border border-white bg-white/90 p-0 shadow-sm">
-            <OpenCallApplicationForm
-              key={`${previewedOpenCallView.id || "preview"}-${formPreviewVersion}`}
-              openCall={previewedOpenCallView}
-              db={db}
-              appId={appId}
-              initialProfileData={null}
-              formSettings={previewedOpenCallView.formSettings}
-              onFormSettingsChange={handleFormSettingsChange}
-              previewMode
-              adminMode
-              bypassPeriodCheck
-              editablePreview
-              wideLayout
-            />
-          </div>
-        </details>
-      ) : null}
-
-      {activeOpenCallTab === "applications" ? (
-        <div className="mb-6 rounded-[28px] border border-zinc-100 bg-zinc-50/70 px-5 py-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-            접수 데이터 안내
-          </p>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-600 break-keep">
-            아래 공고 카드에서 지원서 보기를 눌러 공고별 신청 데이터를 확인합니다. 처음 진입하면 현재 미리보기 공고의 지원서를 자동으로 선택합니다.
-          </p>
-        </div>
-      ) : null}
-
-      <details className="mb-5 border-b border-zinc-200"><summary className="cursor-pointer py-3 text-sm font-semibold text-zinc-600">고급 진단 정보</summary>
-      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            현재 편집 중인 공고 ID
-          </p>
-          <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-            {previewedOpenCall?.id || "-"}
-          </p>
-        </div>
-
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            현재 /opencall 노출 공고
-          </p>
-          <p className="mt-2 font-mono text-[12px] font-bold text-zinc-800 break-all">
-            {activeOpenCall?.id || "-"}
-          </p>
-        </div>
-
-        <div
-          className={`rounded-[22px] border px-4 py-3 ${
-            previewMatchesLanding
-              ? "border-white bg-white"
-              : "border-amber-200 bg-amber-50"
-          }`}
-        >
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            일치 여부
-          </p>
-          <p
-            className={`mt-2 text-sm font-black ${
-              previewMatchesLanding ? "text-emerald-600" : "text-amber-600"
-            }`}
-          >
-            {previewMatchesLanding ? "YES" : "NO"}
-          </p>
-        </div>
-
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            편집 중 heroAccent
-          </p>
-          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
-            {previewHeroAccentText}
-          </p>
-        </div>
-
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            노출 중 heroAccent
-          </p>
-          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
-            {activeHeroAccentText}
-          </p>
-        </div>
-
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            편집 중 descriptionSections
-          </p>
-          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
-            {previewDescriptionSectionCount}
-          </p>
-        </div>
-
-        <div className="rounded-[22px] border border-white bg-white px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-            노출 중 descriptionSections
-          </p>
-          <p className="mt-2 text-sm font-bold text-zinc-800 break-keep">
-            {activeDescriptionSectionCount}
-          </p>
-        </div>
-      </div>
-
-      </details>
-      {!hasActiveOpenCall ? (
-        <div className="mb-5 rounded-[22px] border border-red-200 bg-red-50 px-4 py-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-600" />
-              <p className="text-sm font-bold text-red-600 break-keep whitespace-pre-wrap">
-                현재 /opencall에 노출 중인 공고가 없습니다.
-                {"\n"}대표 공고가 비공개이거나, 노출 가능한 open/upcoming 공고가 없습니다.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!previewedOpenCall) return;
-                handleSetFeaturedOpenCall(previewedOpenCall);
-              }}
-              disabled={!previewedOpenCall}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-red-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-600 transition-colors hover:border-red-400 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Star size={14} />
-              현재 편집 중인 공고를 공개 대표 공고로 설정
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {previewedFeaturedHidden ? (
-        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
-              <p className="text-sm font-bold text-amber-700 break-keep whitespace-pre-wrap">
-                현재 편집 중인 공고는 대표 공고지만 비공개 상태입니다.
-                {"\n"}이 상태에서는 /opencall에 노출되지 않습니다.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!previewedOpenCall) return;
-                handleSetFeaturedOpenCall(previewedOpenCall);
-              }}
-              disabled={!previewedOpenCall}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Star size={14} />
-              현재 편집 중인 공고를 공개 대표 공고로 설정
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {hasActiveOpenCall && !previewMatchesLanding ? (
-        <div className="mb-5 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-start gap-3">
-              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-700" />
-              <p className="text-sm font-bold text-amber-700 break-keep whitespace-pre-wrap">
-                현재 수정 중인 공고는 /opencall에 노출 중인 대표 공고가 아닙니다.
-                {"\n"}이 상태로 저장해도 외부 /opencall 페이지에는 반영되지 않을 수 있습니다.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!activeOpenCallId) return;
-                setPreviewOpenCallId(activeOpenCallId);
-              }}
-              disabled={!activeOpenCallId}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-amber-700 transition-colors hover:border-amber-400 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Megaphone size={14} />
-              /opencall 대표 공고로 전환
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {managerNotice ? (
-        <div className="mb-5 rounded-2xl border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-3 text-sm font-bold text-[#004aad] break-keep">
-          {managerNotice}
-        </div>
+        <p role="status" className="mb-5 rounded-lg bg-zinc-100 px-4 py-3 text-sm font-medium text-zinc-800 break-keep">{managerNotice}</p>
       ) : null}
 
       {loading ? (
-        <div className="rounded-[28px] border border-dashed border-zinc-200 bg-zinc-50 px-6 py-14 text-center">
-          <Loader2 className="mx-auto animate-spin text-[#004aad]" size={24} />
-          <p className="mt-3 text-sm font-bold text-zinc-400">
-            오픈콜 공고를 불러오는 중입니다...
-          </p>
+        <div className="rounded-lg border border-zinc-200 px-6 py-14 text-center">
+          <Loader2 className="mx-auto animate-spin text-zinc-500" size={24} />
+          <p className="mt-3 text-sm text-zinc-600">공고를 불러오는 중입니다.</p>
         </div>
       ) : sortedCalls.length === 0 ? (
-        <div className="rounded-[28px] border border-dashed border-zinc-200 bg-zinc-50 px-6 py-14 text-center">
-          <p className="text-lg font-black text-zinc-900">등록된 오픈콜 공고가 없습니다</p>
-          <p className="mt-2 text-sm font-bold text-zinc-400">
-            기본 잔상 공고 생성 버튼으로 첫 공고를 만들어 보세요.
-          </p>
+        <div className="rounded-lg border border-zinc-200 px-6 py-14 text-center">
+          <p className="text-base font-bold text-zinc-950">아직 오픈콜 공고가 없습니다</p>
+          <p className="mt-1 text-sm text-zinc-600">위의 새 오픈콜 만들기로 첫 공고를 시작하세요.</p>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="grid items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <nav aria-label="공고 목록" className="max-h-72 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1.5 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)]">
+            {sortedCalls.map((call) => {
+              const listed = { ...call, ...(drafts[call.id] || {}) };
+              const end = formatDateTime(listed.applicationEndAt);
+              return (
+                <button
+                  key={call.id}
+                  type="button"
+                  aria-current={call.id === previewOpenCallId ? "true" : undefined}
+                  onClick={() => setPreviewOpenCallId(call.id)}
+                  className={`block w-full rounded-md px-3 py-2.5 text-left ${call.id === previewOpenCallId ? "bg-zinc-200" : "hover:bg-zinc-100"}`}
+                >
+                  <span className="block truncate text-sm font-semibold text-zinc-950">{listed.title || "제목 없음"}</span>
+                  <span className="mt-0.5 block text-xs text-zinc-600">
+                    {PUBLICATION_STATE_META[getPublicationState(listed)].label} · 지원 {getApplicantItems(applications, call.id).length}{end === "-" ? "" : ` · ~${end}`}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="min-w-0">
           {sortedCalls.filter(call => call.id === previewOpenCallId).map((call) => {
-            const rawCall = openCalls.find((item) => item.id === call.id) || call;
             const draft = drafts[call.id] || {};
             const applicantCount = getApplicantItems(applications, call.id).length;
-            const isSelected = selectedOpenCallId === call.id;
-            const isPreviewed = previewOpenCallId === call.id;
-            const statusMeta = STATUS_META[draft.status || call.status || "draft"];
             const formSettings = getOpenCallDraftFormSettings(draft, call);
             const customFields = normalizeCustomFieldDrafts(formSettings.customFields);
-            const faqItems = normalizeFaqDrafts(draft.faqs);
-            const previewHeroAccent = String(draft.heroAccent || call.heroAccent || "").trim();
-            const previewHeroTitle = draft.heroTitle || call.heroTitle || OPEN_CALL_FALLBACK.heroTitle;
-            const previewBadgeText = draft.badgeText || call.badgeText || OPEN_CALL_FALLBACK.badgeText;
-            const previewSubtitle = draft.subtitle || call.subtitle || OPEN_CALL_FALLBACK.subtitle;
-            const previewIntroText = draft.introText || call.introText || OPEN_CALL_FALLBACK.introText;
-            const previewMediumText = draft.mediumText || call.mediumText || OPEN_CALL_FALLBACK.mediumText;
-            const previewApplyButtonText =
-              draft.applyButtonText || call.applyButtonText || OPEN_CALL_FALLBACK.applyButtonText;
-            const previewStatusNoticeText =
-              draft.statusNoticeText || call.statusNoticeText || OPEN_CALL_FALLBACK.statusNoticeText;
-            const previewLandingLabels = normalizeOpenCallLandingLabels(
-              draft.landingLabels || call.landingLabels || OPEN_CALL_FALLBACK.landingLabels
-            );
-            const previewOpenCall = { ...call, ...draft };
-            const publicationState = getPublicationState(previewOpenCall);
-            const visibilityButtonLabel =
-              publicationState === "private" ? "공개로 전환" : "비공개로 전환";
-            const featuredButtonLabel =
-              publicationState === "featured" ? "대표 공고 해제" : "대표 공고로 설정";
-            const saveButtonLabel = getSaveButtonLabel(previewOpenCall);
-            const firestoreDescriptionSections = Array.isArray(rawCall.descriptionSections)
-              ? rawCall.descriptionSections
-              : [];
-            const formDescriptionSections = normalizeDescriptionSectionDrafts(
-              draft.descriptionSections
-            );
-            const previewDescriptionSections = getOpenCallDescriptionSections(previewOpenCall);
-            const heroEditId = `open-call-${call.id}-hero`;
-            const descriptionEditId = `open-call-${call.id}-description`;
-            const ctaEditId = `open-call-${call.id}-cta`;
-            const faqEditId = `open-call-${call.id}-faq`;
-            const formEditId = `open-call-${call.id}-form`;
+            const publicationState = getPublicationState({ ...call, ...draft });
+            const feedback = saveFeedbacks[call.id];
+            const isDirty = savedSnapshots[call.id] !== undefined && savedSnapshots[call.id] !== JSON.stringify(draft);
             const completionEditId = `open-call-${call.id}-completion`;
+            const formEditId = `open-call-${call.id}-form`;
             const privacyEditId = `open-call-${call.id}-privacy`;
 
             return (
-              <div
-                key={call.id}
-                className={`overflow-hidden rounded-[32px] border bg-zinc-50/70 ${
-                  isPreviewed ? "border-[#004aad]/25 ring-1 ring-[#004aad]/10" : "border-zinc-100"
-                }`}
-              >
-                <div className="p-5 md:p-6">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
-                            statusMeta?.className || "bg-zinc-100 text-zinc-600 border-zinc-200"
-                          }`}
-                        >
-                          {statusMeta?.label || call.status || "draft"}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-zinc-500">
-                          {draft.isVisible ?? call.isVisible ? "visible" : "hidden"}
-                        </span>
-                        {draft.isFeatured ?? call.isFeatured ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#6e8d00]">
-                            대표 공고
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <h4 className="text-2xl font-black tracking-tight text-zinc-900 break-keep">
-                        {draft.title || call.title || OPEN_CALL_FALLBACK.title}
-                      </h4>
-                      <p className="mt-2 text-sm font-bold text-zinc-500 break-keep">
-                        {draft.subtitle || call.subtitle || OPEN_CALL_FALLBACK.subtitle}
-                      </p>
-                      <p className="mt-3 font-mono text-[11px] text-zinc-400 break-all">
-                        openCallId: {call.id}
+              <div key={call.id} className="min-w-0">
+                <div className="z-30 -mx-1 mb-4 border-b md:sticky md:top-20 border-zinc-200 bg-white px-1 pb-3 pt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="truncate text-lg font-bold text-zinc-950">{draft.title || "제목 없음"}</h4>
+                      <p className={`text-sm ${feedback?.state === "error" ? "font-medium text-red-700" : "text-zinc-600"}`} role="status">
+                        {feedback?.message || (isDirty ? "저장하지 않은 변경 사항이 있습니다" : PUBLICATION_STATE_META[publicationState].label)}
                       </p>
                     </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreviewOpenCallId(call.id);
-                          if (activeOpenCallTab === "applications") {
-                            setActiveOpenCallTab("landing");
-                          }
-                        }}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                      >
-                        <Megaphone size={14} />
-                        {activeOpenCallTab === "form" ? "이 공고 폼 미리보기" : "프리뷰 보기"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedOpenCallId(isSelected ? "" : call.id);
-                          setActiveOpenCallTab("applications");
-                        }}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                      >
-                        <Users size={14} />
-                        지원서 보기 ({applicantCount})
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSetFeaturedOpenCall(call)}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                      >
-                        {(draft.isFeatured ?? call.isFeatured) ? (
-                          <Star size={14} className="text-[#AAD004]" />
-                        ) : (
-                          <StarOff size={14} />
-                        )}
-                        이 공고를 /opencall 대표 공고로 설정
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setPreviewPage(true)} className={QUIET_BUTTON}><Eye size={16} />미리보기</button>
+                      <button type="button" onClick={() => handleSave(call)} disabled={feedback?.state === "saving" || !isDirty} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-500">
+                        <Save size={16} />{feedback?.state === "saving" ? "저장 중…" : "저장"}
                       </button>
                     </div>
                   </div>
-
-                  <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">공고 페이지 미리보기</summary>
-                  <div className="bg-white p-4 md:p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                          오픈콜 페이지 프리뷰 편집
-                        </p>
-                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-400 break-keep">
-                          실제 /opencall에 보이는 흐름을 기준으로 바로 수정할 수 있습니다.
-                          각 버튼은 아래 편집 섹션으로 이동합니다.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(heroEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          상단 제목 [수정]
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(descriptionEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          상세 설명 카드 [수정]
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(ctaEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          CTA 문구 [수정]
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(faqEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          Q&amp;A [수정]
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(formEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          신청 입력양식 [수정]
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => scrollToOpenCallSection(privacyEditId)}
-                          className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                        >
-                          개인정보 동의 [수정]
-                        </button>
-                      </div>
-                    </div>
-
-                      <div className="mt-4 rounded-[32px] border border-zinc-100 bg-[#fbfaf6] p-5 md:p-6">
-                        <div className="flex items-center gap-3 text-[#004AAD]">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6">
-                          <Megaphone size={18} />
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-[0.35em] text-zinc-400">
-                          OPEN CALL
-                        </span>
-                      </div>
-
-                      <div className="mt-4 grid gap-2 rounded-[24px] border border-white bg-white/80 px-4 py-3 md:grid-cols-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
-                          편집 form descriptionSections: {formDescriptionSections.length}
-                        </p>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
-                          Firestore descriptionSections: {firestoreDescriptionSections.length}
-                        </p>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400 break-all">
-                          /opencall preview descriptionSections: {previewDescriptionSections.length}
-                        </p>
-                      </div>
-
-                      <div className="mt-5 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
-                          {previewBadgeText}
-                        </span>
-                        <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
-                          {statusMeta?.label || call.status || "draft"}
-                        </span>
-                        {draft.isFeatured ?? call.isFeatured ? (
-                          <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
-                            대표 공고
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                        <div>
-                          <div className="flex flex-wrap items-start gap-3">
-                            <h5 className="max-w-3xl text-[2.1rem] font-black tracking-tighter leading-[0.95] text-zinc-900 break-keep md:text-5xl">
-                              {previewHeroTitle}
-                            </h5>
-                            <button
-                              type="button"
-                              onClick={() => scrollToOpenCallSection(heroEditId)}
-                              className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                            >
-                              공모 제목 [수정]
-                            </button>
-                          </div>
-
-                          <p className="mt-4 whitespace-pre-line text-lg font-black text-[#004AAD] break-keep">
-                            {previewSubtitle}
-                          </p>
-                          <p className="mt-4 max-w-3xl whitespace-pre-line text-base font-medium leading-relaxed text-zinc-600 break-keep">
-                            {previewIntroText}
-                          </p>
-
-                          <div className="mt-5 flex flex-wrap gap-2">
-                            <span className="inline-flex items-center gap-2 rounded-full border border-[#004AAD]/15 bg-[#004AAD]/6 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004AAD]">
-                              <span
-                                aria-hidden="true"
-                                className="inline-block h-2 w-2 rounded-full bg-current"
-                              />
-                              {previewMediumText}
-                            </span>
-                            {previewHeroAccent ? (
-                              <span className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-[#AAD004]/10 px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]">
-                                <span aria-hidden="true" className="text-[11px] leading-none">
-                                  ✦
-                                </span>
-                                {previewHeroAccent}
-                              </span>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => updateDraft(call.id, "heroAccent", "")}
-                              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                            >
-                              보조 배지 숨기기
-                            </button>
-                          </div>
-
-                          <div className="mt-5 rounded-[24px] border border-white bg-white/85 px-4 py-4">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                              상태 안내 문구
-                            </p>
-                            <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-600 break-keep">
-                              {previewStatusNoticeText}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3">
-                          <div className="rounded-[24px] border border-white bg-white/85 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                                READY TO APPLY
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => scrollToOpenCallSection(ctaEditId)}
-                                className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                              >
-                                CTA [수정]
-                              </button>
-                            </div>
-                            <p className="mt-2 text-lg font-black tracking-tight text-zinc-900 break-keep">
-                              {previewLandingLabels.readyToApplyLabel}
-                            </p>
-                            <button
-                              type="button"
-                              className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-[#004AAD] px-5 py-4 text-[11px] font-black uppercase tracking-[0.18em] text-white"
-                            >
-                              {previewApplyButtonText}
-                            </button>
-                          </div>
-
-                          <div className="rounded-[24px] border border-white bg-white/85 p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004AAD]">
-                                  {previewLandingLabels.faqEyebrow}
-                                </p>
-                                <p className="mt-1 text-lg font-black tracking-tight text-zinc-900">
-                                  {previewLandingLabels.faqTitle}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => scrollToOpenCallSection(faqEditId)}
-                                className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                              >
-                                Q&amp;A [수정]
-                              </button>
-                            </div>
-                            <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-                              {previewLandingLabels.faqDescription}
-                            </p>
-                            <div className="mt-4 space-y-2">
-                              {faqItems.slice(0, 2).map((faq, index) => (
-                                <div
-                                  key={`${call.id}-preview-faq-${index}`}
-                                  className="rounded-[18px] border border-zinc-100 bg-zinc-50 px-4 py-3"
-                                >
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                                    FAQ {String(index + 1).padStart(2, "0")}
-                                  </p>
-                                  <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                                    {faq.question || "질문 없음"}
-                                  </p>
-                                  <p className="mt-2 text-xs font-medium leading-relaxed text-zinc-500 break-keep">
-                                    {faq.answer || "답변 없음"}
-                                  </p>
-                                </div>
-                              ))}
-                              {faqItems.length > 2 ? (
-                                <p className="text-[11px] font-semibold text-zinc-400">
-                                  외 {faqItems.length - 2}개 문항
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 grid gap-3 md:grid-cols-2">
-                        {previewDescriptionSections.map((section, index) => (
-                          <div
-                            key={`${call.id}-preview-section-${section.id || index}`}
-                            className="rounded-[24px] border border-white bg-white/90 p-4 shadow-sm"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                                상세 설명 카드 {String(index + 1).padStart(2, "0")}
-                              </p>
-                              {index === 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => scrollToOpenCallSection(descriptionEditId)}
-                                  className="rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500 transition-colors hover:border-[#004aad]/20 hover:text-[#004aad]"
-                                >
-                                  수정
-                                </button>
-                              ) : null}
-                            </div>
-                            <h6 className="mt-3 text-base font-black tracking-tight text-zinc-900 break-keep">
-                              {section.title}
-                            </h6>
-                            <p className="mt-2 whitespace-pre-line text-sm font-medium leading-relaxed text-zinc-600 break-keep">
-                              {section.body}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  </details>
-                  <details open className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">기본 정보 · 모집 기간 · 소개 문구</summary>
-                  <div
-                    id={heroEditId}
-                    className="mt-5 rounded-[28px] border border-zinc-100 bg-white p-4 md:p-5"
-                  >
-                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                          상단 공모 소개
-                        </p>
-                        <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-400 break-keep">
-                          Hero, 상태 안내, CTA 문구, FAQ 라벨을 한 곳에서 수정합니다. 상세 설명은 아래
-                          설명 카드에서만 관리합니다.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                    <div
-                      id={ctaEditId}
-                      className="rounded-[24px] border border-zinc-100 bg-white p-4"
-                    >
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        공모 제목
-                      </label>
-                      <input
-                        value={draft.title || ""}
-                        onChange={(e) => updateDraft(call.id, "title", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        공모 부제 / 파란색 제목
-                      </label>
-                      <input
-                        value={draft.subtitle || ""}
-                        onChange={(e) => updateDraft(call.id, "subtitle", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        상단 배지 문구
-                      </label>
-                      <input
-                        value={draft.badgeText || ""}
-                        onChange={(e) => updateDraft(call.id, "badgeText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        공모 대표 제목
-                      </label>
-                      <input
-                        value={draft.heroTitle || ""}
-                        onChange={(e) => updateDraft(call.id, "heroTitle", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        초록색 보조 배지 문구
-                      </label>
-                      <input
-                        value={draft.heroAccent || ""}
-                        onChange={(e) => updateDraft(call.id, "heroAccent", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        공모 소개문
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={draft.introText || ""}
-                        onChange={(e) => updateDraft(call.id, "introText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        매체/대상 안내 pill
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={draft.mediumText || ""}
-                        onChange={(e) => updateDraft(call.id, "mediumText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        상태 안내 문구
-                      </label>
-                      <textarea
-                        rows={4}
-                        value={draft.statusNoticeText || ""}
-                        onChange={(e) => updateDraft(call.id, "statusNoticeText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300 mb-2">
-                        지원 버튼 문구
-                      </label>
-                      <input
-                        value={draft.applyButtonText || ""}
-                        onChange={(e) => updateDraft(call.id, "applyButtonText", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                      />
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4 xl:col-span-2">
-                      <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                        랜딩 문구 설정
-                      </p>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            READY TO APPLY 라벨
-                          </span>
-                          <input
-                            value={draft.landingLabels?.readyToApplyLabel || ""}
-                            onChange={(e) =>
-                              updateLandingLabel(call.id, "readyToApplyLabel", e.target.value)
-                            }
-                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                          />
-                        </label>
-
-                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            Q&A 소제목
-                          </span>
-                          <input
-                            value={draft.landingLabels?.faqEyebrow || ""}
-                            onChange={(e) =>
-                              updateLandingLabel(call.id, "faqEyebrow", e.target.value)
-                            }
-                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                          />
-                        </label>
-
-                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            FAQ 제목
-                          </span>
-                          <input
-                            value={draft.landingLabels?.faqTitle || ""}
-                            onChange={(e) => updateLandingLabel(call.id, "faqTitle", e.target.value)}
-                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                          />
-                        </label>
-
-                        <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                          <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                            FAQ 설명
-                          </span>
-                          <textarea
-                            rows={3}
-                            value={draft.landingLabels?.faqDescription || ""}
-                            onChange={(e) =>
-                              updateLandingLabel(call.id, "faqDescription", e.target.value)
-                            }
-                            className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4">
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                          공고 상태
-                        </label>
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                          draft / open / closed / archived
-                        </span>
-                      </div>
-                      <select
-                        value={draft.status || "draft"}
-                        onChange={(e) => updateDraft(call.id, "status", e.target.value)}
-                        className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                  <div role="tablist" aria-label="공고 편집 영역" className="mt-3 flex gap-1 overflow-x-auto">
+                    {OPEN_CALL_MANAGER_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeOpenCallTab === tab.id}
+                        onClick={() => setActiveOpenCallTab(tab.id)}
+                        className={`min-h-10 shrink-0 border-b-2 px-3 text-sm font-semibold ${activeOpenCallTab === tab.id ? "border-zinc-950 text-zinc-950" : "border-transparent text-zinc-600 hover:text-zinc-950"}`}
                       >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        {tab.label}{tab.id === "applications" ? ` ${applicantCount}` : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                    <div className="rounded-[24px] border border-zinc-100 bg-white p-4 xl:col-span-2">
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                        <div className="flex-1">
-                          <div className="mb-3 flex items-center justify-between gap-3">
-                            <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                              노출 일정
-                            </label>
-                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                              datetime-local
-                            </span>
-                          </div>
-                          <div className="grid gap-3 md:grid-cols-3">
-                            <div>
-                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                applicationStartAt
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={draft.applicationStartAt || ""}
-                                onChange={(e) =>
-                                  updateDraft(call.id, "applicationStartAt", e.target.value)
-                                }
-                                className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                applicationEndAt
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={draft.applicationEndAt || ""}
-                                onChange={(e) =>
-                                  updateDraft(call.id, "applicationEndAt", e.target.value)
-                                }
-                                className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                announcementAt
-                              </label>
-                              <input
-                                type="datetime-local"
-                                value={draft.announcementAt || ""}
-                                onChange={(e) =>
-                                  updateDraft(call.id, "announcementAt", e.target.value)
-                                }
-                                className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                              />
-                            </div>
-                          </div>
-                        </div>
+                {activeOpenCallTab === "landing" ? (
+                  <OpenCallContentEditor
+                    draft={draft}
+                    step={editorStep}
+                    onStepChange={setEditorStep}
+                    onChange={(key, value) => updateDraft(call.id, key, value)}
+                    onLabel={(key, value) => updateLandingLabel(call.id, key, value)}
+                    sections={{
+                      list: normalizeDescriptionSectionDrafts(draft.descriptionSections),
+                      onChange: (index, key, value) => updateDescriptionSection(call.id, index, key, value),
+                      onAdd: () => addDescriptionSection(call.id),
+                      onRemove: (index) => removeDescriptionSection(call.id, index),
+                      onMove: (index, direction) => moveDescriptionSection(call.id, index, direction),
+                    }}
+                    faqs={{
+                      list: normalizeFaqDrafts(draft.faqs),
+                      onChange: (index, key, value) => updateFaqItem(call.id, index, key, value),
+                      onAdd: () => addFaqItem(call.id),
+                      onRemove: (index) => removeFaqItem(call.id, index),
+                      onMove: (index, direction) => moveFaqItem(call.id, index, direction),
+                    }}
+                    publicationState={publicationState}
+                    onPublicationChange={(state) => handleSetPublicationState({ ...call, ...draft }, state)}
+                    applicantCount={applicantCount}
+                    onDuplicate={() => setCreateDialog({ sourceId: call.id })}
+                    onDelete={() => handleDeleteOpenCall(call, applicantCount)}
+                  />
+                ) : null}
 
-                          <div className="flex flex-wrap items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSetPublicationState(
-                                  previewOpenCall,
-                                  publicationState === "private" ? "public" : "private"
-                                )
-                              }
-                              className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
-                                publicationState === "private"
-                                  ? "bg-[#004aad] text-white"
-                                  : "border border-zinc-200 bg-white text-zinc-500"
-                              }`}
-                            >
-                              {publicationState === "private" ? (
-                                <EyeOff size={14} />
-                              ) : (
-                                <Eye size={14} />
-                              )}
-                              {visibilityButtonLabel}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSetPublicationState(
-                                  previewOpenCall,
-                                  publicationState === "featured" ? "public" : "featured"
-                                )
-                              }
-                              className={`inline-flex items-center gap-2 rounded-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] ${
-                                publicationState === "featured"
-                                  ? "bg-[#AAD004] text-white"
-                                  : "border border-zinc-200 bg-white text-zinc-500"
-                              }`}
-                            >
-                              {publicationState === "featured" ? (
-                                <BadgeCheck size={14} />
-                              ) : (
-                                <StarOff size={14} />
-                              )}
-                              {featuredButtonLabel}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleSave(call)}
-                              disabled={saveFeedbacks[call.id]?.state === "saving"}
-                              className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:opacity-60"
-                            >
-                              <Save size={14} />
-                              {saveFeedbacks[call.id]?.state === "saving"
-                                ? "저장 중..."
-                                : saveButtonLabel}
-                            </button>
-                          </div>
-                        </div>
-
-                      <div className="mt-3 flex items-center justify-end">
-                        {saveFeedbacks[call.id]?.message ? (
-                          <p
-                            className={`text-xs font-bold break-keep ${
-                              saveFeedbacks[call.id]?.state === "saved"
-                                ? "text-emerald-600"
-                                : saveFeedbacks[call.id]?.state === "error"
-                                ? "text-red-500"
-                                : "text-zinc-400"
-                            }`}
-                          >
-                            {saveFeedbacks[call.id].message}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    </div></div></details>
-                    <details open={activeOpenCallTab === "form"} className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">신청 양식 · 기본 항목 · 추가 질문</summary>
-                    <div className="flex flex-col">
+                {activeOpenCallTab === "form" ? (
+                <div className="flex flex-col gap-5">
                     <div
                       id={completionEditId}
-                      className="order-2 mt-4 rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4"
+                      className="order-2 mt-4 rounded-lg border border-zinc-200 bg-white p-4"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                            추가 입력 항목
+                          <p className="text-base font-bold text-zinc-950">
+                            추가 질문
                           </p>
-                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
-                            기본 필드는 유지하고, 커스텀 질문은 이곳에서 추가하거나 삭제합니다.
-                            저장된 값은 applications 문서의 customFieldAnswers로 함께 보관됩니다.
+                          <p className="mt-1 text-sm text-zinc-600 break-keep">
+                            이번 공고에서만 따로 물어볼 내용을 추가합니다.
                           </p>
                         </div>
 
                         <button
                           type="button"
                           onClick={() => addCustomField(call.id)}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]"
+                          className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-white px-4 py-3 text-base font-bold text-zinc-950"
                         >
                           <Plus size={14} />
-                          입력 항목 추가
+                          질문 추가
                         </button>
                       </div>
 
                       <div className="mt-4 space-y-3">
                         {customFields.length === 0 ? (
-                          <div className="rounded-[24px] border border-dashed border-zinc-200 bg-white px-5 py-8 text-center">
+                          <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-5 py-8 text-center">
                             <p className="text-sm font-bold text-zinc-400">
-                              아직 추가 입력 항목이 없습니다.
+                              아직 추가 질문이 없습니다.
                             </p>
                             <p className="mt-1 text-xs font-medium text-zinc-400">
                               필요할 때만 질문을 추가해 주세요.
@@ -2958,19 +1494,17 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           customFields.map((field, index) => (
                             <div
                               key={field.id}
-                              className="rounded-[24px] border border-white bg-white p-4 shadow-sm"
+                              className="rounded-lg border border-zinc-200 bg-white p-4"
                             >
                               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center justify-between gap-3">
-                                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                                      field {index + 1}
-                                    </p>
+                                    <p className="text-sm font-semibold text-zinc-700">질문 {index + 1}</p>
                                     <div className="flex flex-wrap gap-2">
-                                      <button type="button" aria-label="위로 이동" disabled={index === 0} onClick={() => moveCustomField(call.id, index, -1)} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black text-zinc-500 disabled:opacity-30">
+                                      <button type="button" aria-label="위로 이동" disabled={index === 0} onClick={() => moveCustomField(call.id, index, -1)} className="inline-flex items-center gap-1 min-h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 disabled:opacity-30">
                                         <ArrowUp size={13} /> 위로
                                       </button>
-                                      <button type="button" aria-label="아래로 이동" disabled={index === customFields.length - 1} onClick={() => moveCustomField(call.id, index, 1)} className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-2 text-[10px] font-black text-zinc-500 disabled:opacity-30">
+                                      <button type="button" aria-label="아래로 이동" disabled={index === customFields.length - 1} onClick={() => moveCustomField(call.id, index, 1)} className="inline-flex items-center gap-1 min-h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm font-semibold text-zinc-700 disabled:opacity-30">
                                         <ArrowDown size={13} /> 아래로
                                       </button>
                                       <button
@@ -2978,7 +1512,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         onClick={() =>
                                           updateCustomField(call.id, index, "enabled", !field.enabled)
                                         }
-                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                        className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                           field.enabled
                                             ? "bg-[#004AAD] text-white"
                                             : "border border-zinc-200 bg-white text-zinc-500"
@@ -2991,9 +1525,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         onClick={() =>
                                           updateCustomField(call.id, index, "required", !field.required)
                                         }
-                                        className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                        className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                           field.required
-                                            ? "bg-[#AAD004] text-white"
+                                            ? "bg-zinc-900 text-white"
                                             : "border border-zinc-200 bg-white text-zinc-500"
                                         }`}
                                       >
@@ -3002,7 +1536,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       <button
                                         type="button"
                                         onClick={() => removeCustomField(call.id, index)}
-                                        className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-600"
+                                        className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-red-600"
                                       >
                                         <Trash2 size={14} />
                                         삭제
@@ -3011,29 +1545,29 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   </div>
 
                                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        질문 라벨
+                                    <label className="block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-sm font-semibold text-zinc-700">
+                                        질문
                                       </span>
                                       <input
                                         value={field.label || ""}
                                         onChange={(e) =>
                                           updateCustomField(call.id, index, "label", e.target.value)
                                         }
-                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                        className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                       />
                                     </label>
 
-                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        필드 타입
+                                    <label className="block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-sm font-semibold text-zinc-700">
+                                        답변 형식
                                       </span>
                                       <select
                                         value={field.type || "text"}
                                         onChange={(e) =>
                                           updateCustomField(call.id, index, "type", e.target.value)
                                         }
-                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                        className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                       >
                                         {OPEN_CALL_CUSTOM_FIELD_TYPES.map((type) => (
                                           <option key={type} value={type}>
@@ -3043,9 +1577,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       </select>
                                     </label>
 
-                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        도움말 / placeholder
+                                    <label className="block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-sm font-semibold text-zinc-700">
+                                        입력칸 안내 문구
                                       </span>
                                       <input
                                         value={field.placeholder || ""}
@@ -3057,28 +1591,14 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                             e.target.value
                                           )
                                         }
-                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                        className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                       />
                                     </label>
 
-                                    <label className="block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                                        노출 순서
-                                      </span>
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={field.order || index + 1}
-                                        onChange={(e) =>
-                                          updateCustomField(call.id, index, "order", e.target.value)
-                                        }
-                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                      />
-                                    </label>
                                   </div>
 
-                                  <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                    <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                  <label className="mt-3 block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                    <span className="block text-sm font-semibold text-zinc-700">
                                       질문 설명
                                     </span>
                                     <textarea
@@ -3092,13 +1612,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                           e.target.value
                                         )
                                       }
-                                      className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                                      className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
                                     />
                                   </label>
 
                                   {field.type === "select" ? (
-                                    <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                    <label className="mt-3 block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-sm font-semibold text-zinc-700">
                                         선택 옵션 (한 줄에 하나)
                                       </span>
                                       <textarea
@@ -3113,17 +1633,17 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                           )
                                         }
                                         placeholder={"회화\n사진\n설치\n영상"}
-                                        className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
+                                        className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
                                       />
                                     </label>
                                   ) : null}
 
                                   {["text", "textarea", "url", "email", "phone"].includes(field.type) ? (
-                                    <label className="mt-3 block rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                      <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                    <label className="mt-3 block rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+                                      <span className="block text-sm font-semibold text-zinc-700">
                                         최대 글자 수 (0은 제한 없음)
                                       </span>
-                                      <input type="number" min="0" value={field.maxLength || 0} onChange={(e) => updateCustomField(call.id, index, "maxLength", Math.max(0, Number(e.target.value) || 0))} className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20" />
+                                      <input type="number" min="0" value={field.maxLength || 0} onChange={(e) => updateCustomField(call.id, index, "maxLength", Math.max(0, Number(e.target.value) || 0))} className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-bold outline-none focus:border-[#004aad]/20" />
                                     </label>
                                   ) : null}
                                 </div>
@@ -3136,25 +1656,24 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                     <div
                       id={formEditId}
-                      className="order-1 rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-4"
+                      className="order-1 rounded-lg border border-zinc-200 bg-white p-4"
                     >
                       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                            고급 설정
+                          <p className="text-base font-bold text-zinc-950">
+                            기본 항목
                           </p>
-                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
-                            인라인 편집으로 대부분의 항목을 수정할 수 있고, 이 영역은 raw 설정을
-                            직접 다루고 싶을 때만 사용합니다.
+                          <p className="mt-1 text-sm text-zinc-600 break-keep">
+                            지원자에게 받을 기본 항목을 켜고 끕니다.
                           </p>
                         </div>
                       </div>
 
-                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
+                      <div className="mt-4 grid gap-4">
+                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                              <p className="text-sm font-semibold text-zinc-700">
                                 지원자 정보
                               </p>
                               <p className="mt-1 text-sm font-bold text-zinc-700 break-keep">
@@ -3174,9 +1693,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                               return (
                                 <label
                                   key={fieldKey}
-                                  className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3"
+                                  className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3"
                                 >
-                                  <span className="block text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                                  <span className="block text-sm font-semibold text-zinc-700">
                                     {label}
                                   </span>
                                   <div className="mt-2 flex items-center justify-between gap-3">
@@ -3190,7 +1709,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                           !field.enabled
                                         )
                                       }
-                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                         field.enabled
                                           ? "bg-[#004AAD] text-white"
                                           : "border border-zinc-200 bg-white text-zinc-500"
@@ -3209,9 +1728,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                           !field.required
                                         )
                                       }
-                                      className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                      className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                         field.required
-                                          ? "bg-[#AAD004] text-white"
+                                          ? "bg-zinc-900 text-white"
                                           : "border border-zinc-200 bg-white text-zinc-500"
                                       }`}
                                     >
@@ -3224,13 +1743,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           </div>
                         </div>
 
-                        <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm">
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
+                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+                          <p className="text-sm font-semibold text-zinc-700">
                             작품 / 소개 / 포트폴리오
                           </p>
 
                           <div className="mt-4 grid gap-3">
-                            <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                            <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
                               <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-bold text-zinc-800">대표 작품</p>
@@ -3248,7 +1767,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       !formSettings.sections.works.enabled
                                     )
                                   }
-                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                  className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                     formSettings.sections.works.enabled
                                       ? "bg-[#004AAD] text-white"
                                       : "border border-zinc-200 bg-white text-zinc-500"
@@ -3259,8 +1778,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                               </div>
 
                               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="rounded-[18px] border border-white bg-white px-3 py-3">
-                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                <label className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
+                                  <span className="block text-sm font-semibold text-zinc-700">
                                     필수 개수
                                   </span>
                                   <input
@@ -3276,12 +1795,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         e.target.value
                                       )
                                     }
-                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                   />
                                 </label>
 
-                                <label className="rounded-[18px] border border-white bg-white px-3 py-3">
-                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                                <label className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
+                                  <span className="block text-sm font-semibold text-zinc-700">
                                     최대 개수
                                   </span>
                                   <input
@@ -3297,13 +1816,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         e.target.value
                                       )
                                     }
-                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                   />
                                 </label>
                               </div>
                             </div>
 
-                            <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                            <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
                               <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-bold text-zinc-800">작업 소개</p>
@@ -3321,7 +1840,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       !formSettings.sections.statement.enabled
                                     )
                                   }
-                                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                  className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                     formSettings.sections.statement.enabled
                                       ? "bg-[#004AAD] text-white"
                                       : "border border-zinc-200 bg-white text-zinc-500"
@@ -3331,8 +1850,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                 </button>
                               </div>
 
-                              <label className="mt-4 block rounded-[18px] border border-white bg-white px-3 py-3">
-                                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
+                              <label className="mt-4 block rounded-lg border border-zinc-200 bg-white px-3 py-3">
+                                <span className="block text-sm font-semibold text-zinc-700">
                                   최대 글자 수
                                 </span>
                                 <input
@@ -3348,13 +1867,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       e.target.value
                                     )
                                   }
-                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+                                  className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
                                 />
                               </label>
                             </div>
 
                             <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
+                              <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-bold text-zinc-800">포트폴리오</p>
@@ -3372,7 +1891,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         !formSettings.sections.portfolio.enabled
                                       )
                                     }
-                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                       formSettings.sections.portfolio.enabled
                                         ? "bg-[#004AAD] text-white"
                                         : "border border-zinc-200 bg-white text-zinc-500"
@@ -3392,9 +1911,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       !formSettings.sections.portfolio.required
                                     )
                                   }
-                                  className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                  className={`mt-4 inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                     formSettings.sections.portfolio.required
-                                      ? "bg-[#AAD004] text-white"
+                                      ? "bg-zinc-900 text-white"
                                       : "border border-zinc-200 bg-white text-zinc-500"
                                   }`}
                                 >
@@ -3404,7 +1923,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                               <div
                                 id={privacyEditId}
-                                className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3"
+                                className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3"
                               >
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
@@ -3423,7 +1942,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         !formSettings.sections.privacy.enabled
                                       )
                                     }
-                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                    className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                       formSettings.sections.privacy.enabled
                                         ? "bg-[#004AAD] text-white"
                                         : "border border-zinc-200 bg-white text-zinc-500"
@@ -3443,9 +1962,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       !formSettings.sections.privacy.required
                                     )
                                   }
-                                  className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
+                                  className={`mt-4 inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
                                     formSettings.sections.privacy.required
-                                      ? "bg-[#AAD004] text-white"
+                                      ? "bg-zinc-900 text-white"
                                       : "border border-zinc-200 bg-white text-zinc-500"
                                   }`}
                                 >
@@ -3458,269 +1977,35 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <div className="rounded-[28px] border border-[#004aad]/10 bg-[#004aad]/5 p-5 xl:col-span-2">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-                        지원 완료 화면 / 알림 설정
-                      </p>
-                      <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-                        지원 접수 완료 후 보이는 문구와 메일 / 알림톡 / SMS 문구는 시스템 탭으로
-                        이동했습니다. 이 탭에서는 오픈콜 공고, 양식, 공개 상태 편집에만 집중할 수
-                        있습니다.
-                      </p>
-                      <p className="mt-3 rounded-[18px] border border-dashed border-[#004aad]/15 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-[#004aad] select-all break-keep">
-                        완료 화면과 접수 알림 문구는 시스템 탭의 “오픈콜 접수 완료 / 알림
-                        메시지” 섹션에서 관리합니다.
-                      </p>
+                    <p className="order-3 text-sm text-zinc-600 break-keep">접수 완료 화면과 메일·알림톡 문구는 시스템 탭의 메시지 설정에서 관리합니다.</p>
+                  <details className="order-4 rounded-lg border border-zinc-200 bg-white px-4">
+                    <summary className="cursor-pointer py-3 text-sm font-semibold text-zinc-800">실제 신청서 미리보기</summary>
+                    <div className="flex flex-wrap gap-2 pb-3">
+                      <button type="button" onClick={() => handleOpenFormWindow(call.id)} className={QUIET_BUTTON}>새 창에서 열기</button>
+                      <button type="button" onClick={() => handleCopyFormLink(call.id)} className={QUIET_BUTTON}>링크 복사</button>
+                      <button type="button" onClick={handleRefreshFormPreview} className={QUIET_BUTTON}>새로고침</button>
                     </div>
-
+                    <div className="mb-4 overflow-hidden rounded-lg border border-zinc-200">
+                      <OpenCallApplicationForm
+                        key={`${call.id}-${formPreviewVersion}`}
+                        openCall={previewedOpenCallView}
+                        db={db}
+                        appId={appId}
+                        initialProfileData={null}
+                        formSettings={previewedOpenCallView.formSettings}
+                        onFormSettingsChange={handleFormSettingsChange}
+                        previewMode
+                        adminMode
+                        bypassPeriodCheck
+                        editablePreview
+                        wideLayout
+                      />
                     </div>
-                    </details>
-                    <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">자주 묻는 질문 · Q&amp;A</summary>
-                    <div
-                      id={faqEditId}
-                      className="rounded-[28px] border border-[#AAD004]/15 bg-[#AAD004]/5 p-4 xl:col-span-2"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#6e8d00]">
-                            Q&amp;A 설정
-                          </p>
-                          <p className="mt-1 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
-                            오픈콜별로 자주 묻는 질문과 답변을 편집합니다. 질문과 답변이 모두
-                            비어 있는 항목은 저장되지 않습니다.
-                          </p>
-                        </div>
+                  </details>
+                </div>
+                ) : null}
 
-                        <button
-                          type="button"
-                          onClick={() => addFaqItem(call.id)}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#AAD004]/20 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#6e8d00]"
-                        >
-                          <Plus size={14} />
-                          Q&amp;A 추가
-                        </button>
-                      </div>
-
-                      <div className="mt-4 space-y-3">
-                        {faqItems.map((faq, index) => (
-                          <div
-                            key={`${call.id}-faq-${index}`}
-                            className="rounded-[24px] border border-white bg-white p-4 shadow-sm"
-                          >
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div className="flex-1">
-                              <div className="flex items-center justify-between gap-3">
-                                  <label className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    질문
-                                  </label>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateFaqItem(call.id, index, "isVisible", !faq.isVisible)
-                                    }
-                                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
-                                      faq.isVisible
-                                        ? "bg-[#004AAD] text-white"
-                                        : "border border-zinc-200 bg-white text-zinc-500"
-                                    }`}
-                                  >
-                                    {faq.isVisible ? "노출" : "숨김"}
-                                  </button>
-                                </div>
-                                <input
-                                  value={faq.question || ""}
-                                  onChange={(e) =>
-                                    updateFaqItem(call.id, index, "question", e.target.value)
-                                  }
-                                  className="mt-2 w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                  placeholder="질문을 입력해 주세요"
-                                />
-                              </div>
-
-                              <div className="grid gap-3 sm:grid-cols-[120px_auto] lg:min-w-[18rem] lg:max-w-[18rem]">
-                                <label className="rounded-[20px] border border-zinc-100 bg-zinc-50 px-4 py-3">
-                                  <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    순서
-                                  </span>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={faq.order ?? index + 1}
-                                    onChange={(e) =>
-                                      updateFaqItem(call.id, index, "order", e.target.value)
-                                    }
-                                    className="mt-2 w-full rounded-2xl border border-zinc-100 bg-white px-3 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                  />
-                                </label>
-
-                                <button
-                                  type="button"
-                                  onClick={() => removeFaqItem(call.id, index)}
-                                  className="inline-flex items-center justify-center gap-2 rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-red-600"
-                                >
-                                  <Trash2 size={14} />
-                                  삭제
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className="mt-4">
-                              <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                답변
-                              </label>
-                              <textarea
-                                rows={4}
-                                value={faq.answer || ""}
-                                onChange={(e) =>
-                                  updateFaqItem(call.id, index, "answer", e.target.value)
-                                }
-                                placeholder="답변을 입력해 주세요"
-                                className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    </details>
-                    <details className="mt-5 border-b border-zinc-200"><summary className="cursor-pointer py-4 text-base font-bold">상세 설명 · 소개 섹션</summary>
-                    <div
-                      id={descriptionEditId}
-                      className="rounded-[28px] border border-zinc-100 bg-white p-4 xl:col-span-2"
-                    >
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-300">
-                            상세 설명 카드
-                          </p>
-                          <p className="mt-1 text-xs font-bold text-zinc-400">
-                            섹션 추가와 삭제로 공고 설명을 구성합니다.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => addDescriptionSection(call.id)}
-                          className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]"
-                        >
-                          <Plus size={14} />
-                          섹션 추가
-                        </button>
-                      </div>
-
-                      <div className="space-y-3">
-                        {normalizeDescriptionSectionDrafts(draft.descriptionSections).map(
-                          (section, index) => {
-                            return (
-                              <div
-                                key={section.id || `${call.id}-section-${index}`}
-                                className="rounded-[24px] border border-zinc-100 bg-zinc-50 p-4"
-                              >
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <div className="flex-1">
-                                        <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                          섹션 제목
-                                        </label>
-                                        <input
-                                          value={section.title || ""}
-                                          onChange={(e) =>
-                                            updateDescriptionSection(
-                                              call.id,
-                                              index,
-                                              "title",
-                                              e.target.value
-                                            )
-                                          }
-                                          className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                        />
-                                      </div>
-
-                                      <div className="sm:w-28">
-                                        <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                          순서
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min="1"
-                                          value={section.order || index + 1}
-                                          onChange={(e) =>
-                                            updateDescriptionSection(
-                                              call.id,
-                                              index,
-                                              "order",
-                                              e.target.value
-                                            )
-                                          }
-                                          className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                        />
-                                      </div>
-                                    </div>
-
-                                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateDescriptionSection(
-                                            call.id,
-                                            index,
-                                            "isVisible",
-                                            section.isVisible === false
-                                          )
-                                        }
-                                        className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] ${
-                                          section.isVisible === false
-                                            ? "border border-zinc-200 bg-white text-zinc-500"
-                                            : "bg-[#004aad] text-white"
-                                        }`}
-                                      >
-                                        {section.isVisible === false
-                                          ? "숨김"
-                                          : "사용자 화면에 노출"}
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        onClick={() => removeDescriptionSection(call.id, index)}
-                                        className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500"
-                                      >
-                                        <Plus size={14} className="rotate-45" />
-                                        섹션 삭제
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3">
-                                  <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                    섹션 본문
-                                  </label>
-                                  <textarea
-                                    rows={4}
-                                    value={section.body || ""}
-                                    onChange={(e) =>
-                                      updateDescriptionSection(
-                                        call.id,
-                                        index,
-                                        "body",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-medium leading-relaxed outline-none transition-all focus:border-[#004aad]/20 focus:bg-white resize-none"
-                                  />
-                                </div>
-                              </div>
-                            );
-                          }
-                        )}
-                      </div>
-                    </div>
-
-                    </details>
-                <SaveStatusRow call={call} sticky />
-
-                {isSelected ? (
+                {activeOpenCallTab === "applications" && selectedOpenCallId === call.id ? (
                   <div className="border-t border-zinc-200 bg-white p-5 md:p-6">
                     <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="flex items-center gap-3">
@@ -3947,11 +2232,18 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     )}
                   </div>
                 ) : null}
-              </div></div>
+
+                {previewPage ? <OpenCallPagePreview call={{ ...call, ...draft }} onClose={closePreviewPage} /> : null}
+              </div>
             );
           })}
+          </div>
         </div>
       )}
+
+      {createDialog ? (
+        <OpenCallCreateDialog calls={sortedCalls} initialSourceId={createDialog.sourceId} onCreate={handleCreateOpenCall} onClose={closeCreateDialog} />
+      ) : null}
     </section>
   );
 };

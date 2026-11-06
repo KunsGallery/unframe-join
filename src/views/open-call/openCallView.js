@@ -90,7 +90,7 @@ export const buildOpenCallView = (source) => {
       .map(([label, value]) => [label, formatDate(value)])
       .filter(([, value]) => value),
     canApply: displayStatus.canApply && openCall.isVisible !== false,
-    applyLabel: openCall.applyButtonText?.trim() || OPEN_CALL_FALLBACK.applyButtonText,
+    applyLabel: openCall.applyButtonText?.trim() || "지원하기",
     disabledLabel: STATUS_DISABLED_BUTTON_TEXTS[displayStatus.key] || displayStatus.label,
     faqTitle: labels.faqTitle || OPEN_CALL_FALLBACK.landingLabels.faqTitle,
     faqDescription: labels.faqDescription ?? OPEN_CALL_FALLBACK.landingLabels.faqDescription,

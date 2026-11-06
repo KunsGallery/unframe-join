@@ -27,7 +27,6 @@ import {
   OPEN_CALL_FALLBACK,
   OPEN_CALL_ID,
   OPEN_CALL_CUSTOM_FIELD_TYPES,
-  OPEN_CALL_SUBTITLE,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
@@ -1395,7 +1394,7 @@ const OpenCallApplicationForm = ({
             {currentOpenCall.title || OPEN_CALL_TITLE}
           </h1>
           <p className="mt-3 whitespace-pre-line text-sm md:text-base font-medium leading-relaxed text-zinc-600 break-keep">
-            {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
+            {currentOpenCall.subtitle}
           </p>
           {previewMode ? (
             <div className="mt-4 rounded-2xl border-2 border-zinc-900 bg-white px-4 py-3 shadow-[2px_2px_0px_#000]">
@@ -2079,7 +2078,7 @@ const OpenCallApplicationForm = ({
 
         <div className="mt-7 flex flex-col gap-3 rounded-[24px] border-2 border-zinc-900 bg-white px-4 py-4 shadow-[3px_3px_0px_#000] md:flex-row md:items-center md:justify-between">
           <div className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">
-            {currentOpenCall.subtitle || OPEN_CALL_SUBTITLE}
+            {currentOpenCall.subtitle}
           </div>
 
           <button

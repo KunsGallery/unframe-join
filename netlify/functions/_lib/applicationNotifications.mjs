@@ -1,5 +1,4 @@
 import {
-  OPEN_CALL_SUBTITLE,
   OPEN_CALL_TITLE,
   normalizeOpenCallNotificationSettings,
   renderOpenCallTemplate,
@@ -63,7 +62,7 @@ export const loadApplicantNotification = async (event, applicationId) => {
     render: (template) => renderOpenCallTemplate(template, context),
     details: {
       title,
-      dateLabel: singleLine(openCall.subtitle || OPEN_CALL_SUBTITLE, 200),
+      dateLabel: singleLine(openCall.subtitle || title, 200),
       program: { name: title, price: 0 },
       stageName: singleLine(openCall.heroAccent, 100),
       submittedAtIso: submittedAt.toISOString(),
