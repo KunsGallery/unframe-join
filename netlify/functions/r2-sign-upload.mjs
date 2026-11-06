@@ -70,7 +70,7 @@ export async function handler(event) {
     }
 
     const allowedFolders = isAdminUpload
-      ? new Set(["documents", "open-call/portfolio", "open-call/works", "salon-answers", "salon-posters", "images", "join-home", "join-tracks", "join-popups"])
+      ? new Set(["documents", "open-call/portfolio", "open-call/works", "salon-answers", "salon-posters", "open-call/posters", "images", "join-home", "join-tracks", "join-popups"])
       : new Set(["documents", "open-call/portfolio", "open-call/works", "salon-answers"]);
     if (!allowedFolders.has(folder)) return json(400, { error: "허용되지 않은 업로드 위치입니다." });
     const allowedExtensions = Object.hasOwn(EXTENSIONS_BY_TYPE, contentType) ? EXTENSIONS_BY_TYPE[contentType] : null;

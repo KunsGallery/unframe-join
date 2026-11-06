@@ -173,16 +173,15 @@ test("오픈콜은 기존 접수 알림 흐름을 쓰므로 여기서 보내지 
     trackType: "open-call",
     openCallId: "call-1",
     name: "지원자",
+    englishName: "Ji Won",
     phone: "01011112222",
     email: "a@example.com",
     birthYear: "1990",
-    addressMain: "서울시",
-    medium: "회화",
-    snsLink: "@artist",
-    artistStatement: "작업 소개",
-    works: [{ imageUrl: "https://files.unframe.kr/open-call/works/2026/11/owner/a.jpg", title: "제목", material: "재료", size: "10x10", year: "2026" }],
+    snsLink: "https://instagram.com/artist",
+    works: ["a", "b"].map((name) => ({ imageUrl: `https://files.unframe.kr/open-call/works/2026/11/owner/${name}.jpg`, title: "제목", material: "재료", height: "60", width: "90", year: "2026", price: "100" })),
     portfolioUrl: "https://files.unframe.kr/open-call/portfolio/2026/11/owner/p.pdf",
-    privacyAgreed: true,
+    termsAgreed: true,
+    salesAgreed: true,
   });
 
   assert.equal(result.statusCode, 201);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { splitIntroText } from "../src/views/open-call/openCallView.js";
+import { buildOpenCallView, getContrastRatio, getOpenCallRequirements, getOpenCallTheme, splitIntroText } from "../src/views/open-call/openCallView.js";
 
 test("이모지 머리글 앞의 문단은 소개문, 머리글 블록은 요강이 된다", () => {
   const result = splitIntroText("첫 문단\n둘째 줄\n\n둘째 문단\n\n👤 대상\n성인 작가\n\n🖼️ 지원 대상 작품\n완성작\n최종 전시 가능");
@@ -27,4 +27,41 @@ test("본문 없는 이모지 줄은 머리글로 취급하지 않는다", () =>
 test("줄바꿈 형식이 달라도 처리하고 빈 값은 안전하다", () => {
   assert.equal(splitIntroText("소개\r\n\r\n📌 제출\r\n3점").details[0].title, "제출");
   assert.deepEqual(splitIntroText(undefined), { lead: "", details: [] });
+});
+
+test("포인트 색 하나로 읽기 좋은 글자색과 연한 바탕색을 정한다", () => {
+  const lime = getOpenCallTheme("#aad004");
+  assert.equal(lime.accent, "#AAD004");
+  assert.equal(lime.on, "#151413");
+
+  const cobalt = getOpenCallTheme("#004AAD");
+  assert.equal(cobalt.on, "#FFFFFF");
+
+  for (const color of ["#AAD004", "#004AAD", "#C2410C", "#FFEE00", "#808080", "#000000"]) {
+    const theme = getOpenCallTheme(color);
+    assert.ok(getContrastRatio(theme.accent, theme.on) >= 4.5, color);
+    assert.ok(getContrastRatio(theme.tint, "#151413") >= 4.5, `${color} 연한 바탕`);
+  }
+});
+
+test("잘못된 색 값은 기본 색으로 대신한다", () => {
+  assert.equal(getOpenCallTheme("red;background:url(x)").accent, "#004AAD");
+  assert.equal(getOpenCallTheme(undefined).accent, "#004AAD");
+});
+
+test("요강은 직접 쓴 칸을 먼저 쓰고, 없으면 예전 이모지 형식을 읽는다", () => {
+  assert.deepEqual(
+    getOpenCallRequirements({ requirementItems: [{ title: "대상", body: "성인" }, { title: " ", body: "" }], introText: "소개\n\n👤 옛날\n내용" }),
+    [{ title: "대상", body: "성인" }]
+  );
+  assert.deepEqual(getOpenCallRequirements({ requirementItems: [], introText: "소개\n\n👤 옛날\n내용" }), [{ title: "옛날", body: "내용" }]);
+  assert.deepEqual(getOpenCallRequirements({}), []);
+});
+
+test("공개 화면 값에 포스터와 색이 담긴다", () => {
+  const view = buildOpenCallView({ id: "a", title: "공고", posterUrl: " https://files/p.jpg ", accentColor: "#C2410C", introText: "소개\n\n👤 대상\n성인" });
+  assert.equal(view.posterUrl, "https://files/p.jpg");
+  assert.equal(view.theme.accent, "#C2410C");
+  assert.equal(view.lead, "소개");
+  assert.equal(view.requirements[0].title, "대상");
 });

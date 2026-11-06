@@ -2,6 +2,22 @@ export const OPEN_CALL_ID = "2026-unframe-open-call-01-afterimage";
 export const OPEN_CALL_TITLE = "2026 UNFRAME OPEN CALL 01. 잔상";
 export const OPEN_CALL_SUBTITLE = "UNFRAME OPEN CALL 01 : 잔상(殘像)";
 
+export const OPEN_CALL_MIN_WORKS = 2;
+export const OPEN_CALL_MAX_WORKS = 6;
+export const OPEN_CALL_BIO_MAX_LENGTH = 500;
+export const DEFAULT_OPEN_CALL_ACCENT = "#004AAD";
+export const DEFAULT_OPEN_CALL_SALES_CONSENT = "출품하는 모든 작품이 판매 가능한 작품임을 확인합니다.";
+export const DEFAULT_OPEN_CALL_TERMS = `이 오픈콜에 지원하면 아래 내용에 동의한 것으로 봅니다.
+
+제출 내용: 지원자는 제출한 정보와 작품 정보가 사실임을 확인합니다.
+
+개인정보 수집 및 이용
+수집 항목: 이름, 영문 이름, 활동명, 연락처, 이메일, 출생연도, 홈페이지·SNS, 기타 사이트, 작가 소개, 포트폴리오, 작품 이미지와 작품 정보
+수집 목적: 지원자 확인, 오픈콜 접수 관리, 심사 진행, 결과 안내, 전시 및 프로젝트 진행 관련 연락
+보유 및 이용 기간: 오픈콜 운영 종료 후 내부 기록 및 분쟁 대응을 위해 필요한 기간 동안 보관하며, 보관 목적이 달성된 후 지체 없이 파기합니다. 단, 관련 법령에 따라 보존이 필요한 경우 해당 기간 동안 보관할 수 있습니다.
+
+지원자는 동의하지 않을 권리가 있으나, 동의하지 않으면 오픈콜에 지원할 수 없습니다.`;
+
 export const OPEN_CALL_TEMPLATE_VARIABLES = [
   "{{name}}",
   "{{email}}",
@@ -520,6 +536,10 @@ export const OPEN_CALL_FALLBACK = {
   badgeText: "OPEN",
   themeKeyword: "잔상",
   themeHanja: "殘像",
+  posterUrl: "",
+  accentColor: "#AAD004",
+  termsText: DEFAULT_OPEN_CALL_TERMS,
+  salesConsentText: DEFAULT_OPEN_CALL_SALES_CONSENT,
   heroTitle: "2026 UNFRAME OPEN CALL 01.",
   heroAccent: "잔상",
   statusNoticeText: "현재 지원서를 접수하고 있습니다.",

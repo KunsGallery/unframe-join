@@ -60,20 +60,23 @@ const post = (handler, body, token = "owner") => handler({
 });
 const onlyApplication = () => Object.values(store[APPLICATIONS] || {})[0];
 
+const work = (name = "a", overrides = {}) => ({
+  imageUrl: `${BASE}/open-call/works/2026/11/owner/${name}.jpg`,
+  title: "제목", material: "재료", height: "60", width: "90.5", year: "2026", price: "1200000", ...overrides,
+});
 const openCallBody = (overrides = {}) => ({
   trackType: "open-call",
   openCallId: "call-1",
   name: "지원자",
+  englishName: "Ji Won",
   phone: "010-1111-2222",
   email: "artist@example.com",
   birthYear: "1990",
-  addressMain: "서울시",
-  medium: "회화",
-  snsLink: "@artist",
-  artistStatement: "작업 소개",
-  works: [{ imageUrl: `${BASE}/open-call/works/2026/11/owner/a.jpg`, title: "제목", material: "재료", size: "10x10", year: "2026" }],
+  snsLink: "https://instagram.com/artist",
+  works: [work("a"), work("b")],
   portfolioUrl: `${BASE}/open-call/portfolio/2026/11/owner/p.pdf`,
-  privacyAgreed: true,
+  termsAgreed: true,
+  salesAgreed: true,
   customFieldAnswers: {},
   ...overrides,
 });
@@ -124,7 +127,14 @@ test("오픈콜: 정상 지원은 서버가 초기 상태와 소유자를 정해
   assert.equal(saved.trackType, "open-call");
   assert.equal(saved.openCallTitle, "공고");
   assert.equal(saved.phone, "01011112222");
+  assert.equal(saved.englishName, "Ji Won");
+  assert.equal(saved.termsAgreed, true);
+  assert.equal(saved.salesAgreed, true);
   assert.equal(saved.privacyAgreed, true);
+  assert.ok(saved.agreedAt instanceof Date);
+  assert.equal(saved.works.length, 2);
+  assert.equal(saved.works[1].price, "1200000");
+  assert.equal(saved.works[1].size, "60 x 90.5 cm");
   assert.ok(saved.submittedAt instanceof Date);
   assert.equal("openCallAdminMemo" in saved, false);
   assert.equal("receivedEmailClaimedAt" in saved, false);
@@ -140,15 +150,30 @@ test("오픈콜: 비공개·초안·마감·없는 공고에는 지원할 수 �
 
 test("오픈콜: 필수 항목·동의·형식을 서버에서 검증한다", async () => {
   const cases = [
-    { privacyAgreed: false },
+    { termsAgreed: false },
+    { salesAgreed: false },
+    { termsAgreed: "true" },
     { name: " " },
+    { englishName: "" },
     { phone: "123" },
+    { email: "" },
     { email: "not-an-email" },
+    { birthYear: "" },
     { birthYear: "90" },
-    { addressMain: "" },
-    { artistStatement: "" },
+    { snsLink: "" },
     { portfolioUrl: "" },
     { works: [] },
+    { works: [work("a")] },
+    { works: [work("a"), work("b", { price: "" })] },
+    { works: [work("a"), work("b", { title: "" })] },
+    { works: [work("a"), work("b", { material: "" })] },
+    { works: [work("a"), work("b", { year: "" })] },
+    { works: [work("a"), work("b", { height: "" })] },
+    { works: [work("a"), work("b", { width: "" })] },
+    { works: [work("a"), work("b", { height: "큰 작품" })] },
+    { works: [work("a"), work("b", { width: "0" })] },
+    { works: [work("a"), work("b", { imageUrl: "" })] },
+    { works: Array.from({ length: 7 }, (_, index) => work(String(index))) },
     { customFieldAnswers: {} },
     { customFieldAnswers: { q1: { value: "12345678901" } } },
   ];
@@ -164,7 +189,7 @@ test("오픈콜: 파일 URL은 우리 저장소의 오픈콜 경로만 허용한
   for (const portfolioUrl of urls) {
     assert.equal((await post(submit, withQ1({ portfolioUrl }))).statusCode, 400, portfolioUrl);
   }
-  const works = [{ imageUrl: "https://evil.example/a.jpg", title: "t", material: "m", size: "s", year: "y" }];
+  const works = [work("a"), work("b", { imageUrl: "https://evil.example/a.jpg" })];
   assert.equal((await post(submit, withQ1({ works }))).statusCode, 400);
 });
 
@@ -180,9 +205,43 @@ test("오픈콜: 답변은 공고에 정의된 문항으로만 저장되고 라�
 test("긴 입력과 많은 작품은 잘라 저장하지 않고 거부하거나 상한을 둔다", async () => {
   assert.equal((await post(submit, withQ1({ name: "가".repeat(101) }))).statusCode, 400);
   assert.equal((await post(submit, rentalBody({ plan: "x".repeat(900000) }))).statusCode, 400);
-  const work = openCallBody().works[0];
-  await post(submit, withQ1({ works: [work, work, work, work, work] }));
-  assert.equal(onlyApplication().works.length, 3);
+  assert.equal((await post(submit, withQ1({ artistStatement: "가".repeat(501) }))).statusCode, 400);
+});
+
+test("오픈콜: 선택 항목은 비워도 되고 입력하면 저장된다", async () => {
+  assert.equal((await post(submit, withQ1())).statusCode, 201);
+  assert.equal(onlyApplication().stageName, "");
+  assert.equal(onlyApplication().otherLink, "");
+  assert.equal(onlyApplication().artistStatement, "");
+
+  store[APPLICATIONS] = {};
+  const filled = await post(submit, withQ1({ stageName: "활동명", otherLink: "https://blog.example", artistStatement: "짧은 소개" }));
+  assert.equal(filled.statusCode, 201);
+  assert.equal(onlyApplication().stageName, "활동명");
+  assert.equal(onlyApplication().otherLink, "https://blog.example");
+  assert.equal(onlyApplication().artistStatement, "짧은 소개");
+});
+
+test("오픈콜: 작품은 6점까지 받고 빈 줄은 저장하지 않는다", async () => {
+  const six = Array.from({ length: 6 }, (_, index) => work(String(index)));
+  assert.equal((await post(submit, withQ1({ works: six }))).statusCode, 201);
+  assert.equal(onlyApplication().works.length, 6);
+
+  store[APPLICATIONS] = {};
+  const blank = { imageUrl: "", title: "", material: "", height: "", width: "", year: "", price: "" };
+  assert.equal((await post(submit, withQ1({ works: [work("a"), blank, work("b"), blank] }))).statusCode, 201);
+  assert.equal(onlyApplication().works.length, 2);
+});
+
+test("오픈콜: 지원자가 동의한 약관 내용을 지원서에 함께 남긴다", async () => {
+  store[OPEN_CALLS]["call-1"].termsText = "이번 공고 약관";
+  await post(submit, withQ1());
+  assert.equal(onlyApplication().termsText, "이번 공고 약관");
+});
+
+test("오픈콜: 약관을 따로 쓰지 않은 공고는 기본 약관을 남긴다", async () => {
+  await post(submit, withQ1());
+  assert.match(onlyApplication().termsText, /개인정보/);
 });
 
 test("대관: 허용 필드만 저장하고 문의 유형을 서버가 정한다", async () => {
@@ -224,6 +283,13 @@ test("접수: 사용자당 시간당 5건을 넘으면 429", async () => {
 });
 
 const signBody = (overrides = {}) => ({ fileName: "work.png", contentType: "image/png", fileSize: 1000, folder: "open-call/works", ...overrides });
+
+test("업로드: 공고 포스터 폴더는 관리자만 쓸 수 있다", async () => {
+  const body = signBody({ folder: "open-call/posters", isAdminUpload: true });
+  assert.equal((await post(sign, body, "admin")).statusCode, 200);
+  assert.equal((await post(sign, body, "owner")).statusCode, 403);
+  assert.equal((await post(sign, signBody({ folder: "open-call/posters" }))).statusCode, 400);
+});
 
 test("업로드: 서명에 content-type이 포함된다", async () => {
   const result = await post(sign, signBody());

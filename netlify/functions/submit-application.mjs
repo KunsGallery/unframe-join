@@ -1,4 +1,9 @@
 import {
+  DEFAULT_OPEN_CALL_SALES_CONSENT,
+  DEFAULT_OPEN_CALL_TERMS,
+  OPEN_CALL_BIO_MAX_LENGTH,
+  OPEN_CALL_MAX_WORKS,
+  OPEN_CALL_MIN_WORKS,
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
   normalizeOpenCallFormSettings,
@@ -13,7 +18,6 @@ const HOUR_MS = 60 * 60 * 1000;
 const SHORT = 200;
 const MEDIUM = 1000;
 const LONG = 10000;
-const MAX_STORED_WORKS = 3;
 
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 
@@ -77,28 +81,32 @@ const readCustomAnswers = (submitted, fields) =>
       return answers;
     }, {});
 
-const readWorks = (submitted, section) => {
-  const enabled = section?.enabled !== false;
-  const maxCount = enabled ? Number(section?.maxCount || 0) : 0;
-  const requiredCount = enabled ? Number(section?.requiredCount || 0) : 0;
-  const list = Array.isArray(submitted) ? submitted : [];
+const isCentimetres = (value) => /^\d+(\.\d+)?$/.test(value) && Number(value) > 0;
 
-  // Review screens index works[0..2], so the stored shape stays three entries.
-  return Array.from({ length: MAX_STORED_WORKS }, (_, index) => {
-    const work = index < maxCount && list[index] && typeof list[index] === "object" ? list[index] : {};
-    const label = `대표 작품 ${index + 1}`;
-    const stored = {
-      imageUrl: readFileUrl(work.imageUrl, "open-call/works", `${label} 이미지`),
-      title: text(work.title, SHORT, `${label} 제목`),
-      material: text(work.material, SHORT, `${label} 재료`),
-      size: text(work.size, SHORT, `${label} 크기`),
-      year: text(work.year, 20, `${label} 제작연도`),
-    };
-    if (index < requiredCount && !Object.values(stored).every(Boolean)) {
-      throw fail(400, `${label} 정보를 모두 입력해 주세요.`);
-    }
-    return stored;
+const readWorks = (submitted) => {
+  const works = (Array.isArray(submitted) ? submitted : [])
+    .filter((work) => work && typeof work === "object")
+    .map((work, index) => {
+      const label = `작품 ${index + 1}`;
+      return {
+        imageUrl: readFileUrl(work.imageUrl, "open-call/works", `${label} 이미지`),
+        title: text(work.title, SHORT, `${label} 작품명`),
+        material: text(work.material, SHORT, `${label} 재료`),
+        height: text(work.height, 20, `${label} 세로`),
+        width: text(work.width, 20, `${label} 가로`),
+        year: text(work.year, 20, `${label} 제작연도`),
+        price: text(work.price, 40, `${label} 작품가격`),
+      };
+    })
+    .filter((work) => Object.values(work).some(Boolean));
+
+  if (works.length < OPEN_CALL_MIN_WORKS) throw fail(400, `작품을 ${OPEN_CALL_MIN_WORKS}점 이상 올려 주세요.`);
+  if (works.length > OPEN_CALL_MAX_WORKS) throw fail(400, `작품은 ${OPEN_CALL_MAX_WORKS}점까지 올릴 수 있습니다.`);
+  works.forEach((work, index) => {
+    if (!Object.values(work).every(Boolean)) throw fail(400, `작품 ${index + 1}의 이미지와 정보를 모두 입력해 주세요.`);
+    if (!isCentimetres(work.height) || !isCentimetres(work.width)) throw fail(400, `작품 ${index + 1}의 크기는 숫자로 입력해 주세요.`);
   });
+  return works.map(({ height, width, ...work }) => ({ ...work, size: `${height} x ${width} cm` }));
 };
 
 const buildOpenCall = async (body, identity) => {
@@ -112,53 +120,36 @@ const buildOpenCall = async (body, identity) => {
     throw fail(409, "현재 접수 가능한 오픈콜이 아닙니다.");
   }
 
-  const { fields, sections, customFields } = normalizeOpenCallFormSettings(openCall.formSettings);
-  const enabled = (setting) => setting?.enabled !== false;
-  const mustFill = (setting) => enabled(setting) && setting?.required !== false;
-  const optionalField = (key, setting, max, label) => {
-    if (!enabled(setting)) return "";
-    const value = text(body[key], max, label);
-    return mustFill(setting) ? required(value, label) : value;
-  };
-
-  const birthYear = optionalField("birthYear", fields.birthYear, 4, "출생연도");
-  if (birthYear && !/^\d{4}$/.test(birthYear)) throw fail(400, "출생연도는 4자리 숫자로 입력해 주세요.");
-
-  const statementLimit = Number(sections.statement?.maxLength || 0) || LONG;
-  const artistStatement = enabled(sections.statement)
-    ? required(text(body.artistStatement, statementLimit, "작업 소개"), "작업 소개")
-    : "";
-
-  let portfolioUrl = "";
-  if (enabled(sections.portfolio)) {
-    portfolioUrl = readFileUrl(body.portfolioUrl, "open-call/portfolio", "포트폴리오");
-    if (mustFill(sections.portfolio)) required(portfolioUrl, "포트폴리오");
-  }
-
-  const privacyAgreed = enabled(sections.privacy) && body.privacyAgreed === true;
-  if (mustFill(sections.privacy) && !privacyAgreed) throw fail(400, "개인정보 수집 및 이용에 동의해 주세요.");
+  const birthYear = required(text(body.birthYear, 4, "출생연도"), "출생연도");
+  if (!/^\d{4}$/.test(birthYear)) throw fail(400, "출생연도는 4자리 숫자로 입력해 주세요.");
+  if (body.termsAgreed !== true) throw fail(400, "오픈콜 약관에 동의해 주세요.");
+  if (body.salesAgreed !== true) throw fail(400, "출품작 판매 가능 여부에 동의해 주세요.");
 
   const email = required(readEmail(body.email), "이메일");
-  const searchAddress = fields.address?.mode === "search";
+  const { customFields } = normalizeOpenCallFormSettings(openCall.formSettings);
 
   return {
     trackType: "open-call",
     openCallId,
     openCallTitle: openCall.title,
     applicantEmail: email || identity.email || "",
+    birthYear,
     name: required(text(body.name, 100, "이름"), "이름"),
+    englishName: required(text(body.englishName, 100, "영어 이름"), "영어 이름"),
+    stageName: text(body.stageName, 100, "활동명"),
+    snsLink: required(text(body.snsLink, MEDIUM, "홈페이지 또는 SNS"), "홈페이지 또는 SNS"),
+    otherLink: text(body.otherLink, MEDIUM, "기타 사이트"),
     phone: readPhone(body.phone, { min: 10, max: 11 }),
     email,
-    birthYear,
-    addressMain: optionalField("addressMain", fields.address, 300, "주소"),
-    addressDetail: enabled(fields.address) && searchAddress ? text(body.addressDetail, 300, "상세 주소") : "",
-    postalCode: enabled(fields.address) && searchAddress ? text(body.postalCode, 20, "우편번호") : "",
-    medium: optionalField("medium", fields.medium, SHORT, "매체"),
-    snsLink: optionalField("snsLink", fields.snsLink, MEDIUM, "SNS / 웹사이트 링크"),
-    artistStatement,
-    works: readWorks(body.works, sections.works),
-    portfolioUrl,
-    privacyAgreed,
+    artistStatement: text(body.artistStatement, OPEN_CALL_BIO_MAX_LENGTH, "작가 소개"),
+    portfolioUrl: required(readFileUrl(body.portfolioUrl, "open-call/portfolio", "포트폴리오"), "포트폴리오"),
+    works: readWorks(body.works),
+    termsAgreed: true,
+    salesAgreed: true,
+    privacyAgreed: true,
+    agreedAt: new Date(),
+    termsText: String(openCall.termsText || "").trim() || DEFAULT_OPEN_CALL_TERMS,
+    salesConsentText: String(openCall.salesConsentText || "").trim() || DEFAULT_OPEN_CALL_SALES_CONSENT,
     customFieldAnswers: readCustomAnswers(body.customFieldAnswers, customFields),
   };
 };

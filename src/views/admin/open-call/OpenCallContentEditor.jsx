@@ -1,7 +1,7 @@
 import React from "react";
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Check, Copy, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
-import { splitIntroText } from "../../open-call/openCallView";
-import { getOpenCallChecklist, getOpenCallDateProblem } from "./openCallEditorModel";
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Check, Copy, Eye, EyeOff, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { getOpenCallTheme } from "../../open-call/openCallView";
+import { getOpenCallChecklist, getOpenCallDateProblem, moveListItem } from "./openCallEditorModel";
 
 const INPUT = "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]";
 const TEXTAREA = `${INPUT} py-2.5 leading-relaxed`;
@@ -41,7 +41,51 @@ const Group = ({ title, children }) => (
   </fieldset>
 );
 
-const BasicsStep = ({ draft, onChange }) => {
+const ACCENT_PRESETS = ["#004AAD", "#AAD004", "#C2410C", "#151413"];
+
+const FaceGroup = ({ draft, onChange, onPosterUpload, posterUploading, posterError }) => {
+  const theme = getOpenCallTheme(draft.accentColor);
+  return (
+    <Group title="공고의 얼굴">
+      <div className="grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
+        <div>
+          <span className="block text-sm font-semibold text-zinc-900">포스터</span>
+          <label className="mt-1.5 flex aspect-[3/4] cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-400 bg-zinc-50 text-center text-sm font-semibold text-zinc-700 focus-within:ring-1 focus-within:ring-[#004aad]">
+            {draft.posterUrl ? (
+              <img src={draft.posterUrl} alt="포스터 미리보기" className="h-full w-full object-contain" />
+            ) : posterUploading ? (
+              <Loader2 size={20} className="animate-spin" aria-label="올리는 중" />
+            ) : (
+              <span className="inline-flex items-center gap-1.5"><Upload size={16} />이미지 올리기</span>
+            )}
+            <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onPosterUpload(file); }} />
+          </label>
+          {draft.posterUrl ? <button type="button" className="mt-2 min-h-10 text-sm font-semibold text-zinc-700 underline underline-offset-2" onClick={() => onChange("posterUrl", "")}>포스터 빼기</button> : null}
+          {posterError ? <p role="alert" className="mt-1 text-sm font-medium text-red-700">{posterError}</p> : null}
+        </div>
+        <div className="space-y-5">
+          <div>
+            <span className="block text-sm font-semibold text-zinc-900">포인트 색</span>
+            <span className="mt-0.5 block text-sm text-zinc-600 break-keep">포스터에서 색을 하나 고르세요. 글자색과 연한 바탕색은 읽기 좋게 자동으로 맞춥니다.</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {ACCENT_PRESETS.map((color) => (
+                <button key={color} type="button" aria-label={`${color} 선택`} aria-pressed={theme.accent === color} onClick={() => onChange("accentColor", color)} style={{ background: color }} className={`h-11 w-11 rounded-lg border-2 ${theme.accent === color ? "border-zinc-950 ring-2 ring-white ring-inset" : "border-transparent"}`} />
+              ))}
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 px-3 text-sm font-semibold text-zinc-700">
+                <input type="color" className="h-6 w-6 cursor-pointer" value={theme.accent} onChange={(event) => onChange("accentColor", event.target.value.toUpperCase())} />
+                직접 고르기
+              </label>
+            </div>
+            <p className="mt-3 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-bold" style={{ background: theme.accent, color: theme.on }}>이렇게 보입니다 · {theme.accent}</p>
+          </div>
+          <Field label="주제어" hint="공개 페이지에 크게 표시됩니다. 비우면 OPEN으로 표시됩니다."><input className={INPUT} placeholder="예: 잔상" value={draft.themeKeyword || ""} onChange={(event) => onChange("themeKeyword", event.target.value)} /></Field>
+        </div>
+      </div>
+    </Group>
+  );
+};
+
+const BasicsStep = ({ draft, onChange, onPosterUpload, posterUploading, posterError }) => {
   const text = (key) => ({ value: draft[key] || "", onChange: (event) => onChange(key, event.target.value) });
   const dateProblem = getOpenCallDateProblem(draft);
 
@@ -49,12 +93,11 @@ const BasicsStep = ({ draft, onChange }) => {
     <div className="space-y-7">
       <Group>
         <Field label="공고명" required hint="목록, 신청서, 알림 메일에 쓰입니다."><input className={INPUT} placeholder="예: 2027 UNFRAME OPEN CALL 02" {...text("title")} /></Field>
-        <div className="grid gap-5 md:grid-cols-2">
-          <Field label="주제어" hint="공개 페이지에 크게 표시됩니다."><input className={INPUT} placeholder="예: 잔상" {...text("themeKeyword")} /></Field>
-          <Field label="부제" hint="제목 아래 한 줄로 표시됩니다."><input className={INPUT} {...text("subtitle")} /></Field>
-        </div>
+        <Field label="부제" hint="제목 아래 한 줄로 표시됩니다."><input className={INPUT} {...text("subtitle")} /></Field>
         <Field label="첫 화면 제목" hint="비우면 공고명을 그대로 씁니다."><input className={INPUT} {...text("heroTitle")} /></Field>
       </Group>
+
+      <FaceGroup draft={draft} onChange={onChange} onPosterUpload={onPosterUpload} posterUploading={posterUploading} posterError={posterError} />
 
       <Group title="접수 일정">
         <div className="grid gap-5 md:grid-cols-3">
@@ -79,19 +122,37 @@ const BasicsStep = ({ draft, onChange }) => {
 
 const ContentStep = ({ draft, onChange }) => {
   const text = (key) => ({ value: draft[key] || "", onChange: (event) => onChange(key, event.target.value) });
-  const intro = splitIntroText(draft.introText);
+  const items = Array.isArray(draft.requirementItems) ? draft.requirementItems : [];
+  const setItems = (next) => onChange("requirementItems", next);
+  const setItem = (index, key, value) => setItems(items.map((item, position) => (position === index ? { ...item, [key]: value } : item)));
 
   return (
     <div className="space-y-7">
       <Group>
-        <Field label="공고 소개" required hint="문단은 빈 줄로 나눕니다. 이모지로 시작하는 줄 아래에 내용을 적으면 모집 요강 칸으로 따로 표시됩니다.">
-          <textarea rows={14} className={TEXTAREA} placeholder={"이번 공모를 소개하는 글\n\n👤 대상\n성인 작가 누구나\n\n🖼️ 지원 작품\n완성작 3점 이내"} {...text("introText")} />
+        <Field label="공고 소개" required hint="이번 공모를 소개하는 글입니다. 문단은 빈 줄로 나눕니다.">
+          <textarea rows={8} className={TEXTAREA} {...text("introText")} />
         </Field>
-        <p className="text-sm text-zinc-600">
-          {intro.details.length > 0
-            ? `모집 요강 ${intro.details.length}칸으로 표시됩니다: ${intro.details.map((detail) => detail.title).join(", ")}`
-            : "아직 모집 요강 칸이 없습니다. 위 형식으로 적으면 자동으로 만들어집니다."}
-        </p>
+      </Group>
+
+      <Group title="모집 요강">
+        <p className="text-sm text-zinc-600 break-keep">지원 대상, 제출 자료처럼 칸으로 보여 줄 내용을 추가하세요. 칸이 없으면 이 영역은 나타나지 않습니다.</p>
+        {items.map((item, index) => (
+          <div key={index} className="rounded-lg border border-zinc-200 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-zinc-950">요강 {index + 1}</p>
+              <div className="flex gap-2">
+                <button type="button" className={ICON_BUTTON} aria-label="위로 이동" disabled={index === 0} onClick={() => setItems(moveListItem(items, index, -1))}><ArrowUp size={16} /></button>
+                <button type="button" className={ICON_BUTTON} aria-label="아래로 이동" disabled={index === items.length - 1} onClick={() => setItems(moveListItem(items, index, 1))}><ArrowDown size={16} /></button>
+                <button type="button" className={ICON_BUTTON} aria-label={`요강 ${index + 1} 삭제`} onClick={() => setItems(items.filter((_, position) => position !== index))}><Trash2 size={16} /></button>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <Field label="제목"><input className={INPUT} placeholder="예: 지원 대상" value={item.title || ""} onChange={(event) => setItem(index, "title", event.target.value)} /></Field>
+              <Field label="내용"><textarea rows={3} className={TEXTAREA} value={item.body || ""} onChange={(event) => setItem(index, "body", event.target.value)} /></Field>
+            </div>
+          </div>
+        ))}
+        <button type="button" className={QUIET_BUTTON} onClick={() => setItems([...items, { title: "", body: "" }])}><Plus size={16} />요강 칸 추가</button>
       </Group>
 
       <Group title="모집 안내">
@@ -160,7 +221,7 @@ const FaqStep = ({ list, labels, onChange, onAdd, onRemove, onMove, onLabel }) =
   </div>
 );
 
-const PublishStep = ({ draft, publicationState, onPublicationChange, onGoToStep, applicantCount, onDuplicate, onDelete }) => {
+const PublishStep = ({ draft, publicationState, onPublicationChange, onGoToStep, onGoToForm, applicantCount, onDuplicate, onDelete }) => {
   const checklist = getOpenCallChecklist(draft);
   const dateProblem = getOpenCallDateProblem(draft);
   const choices = ["private", "featured", ...(publicationState === "public" ? ["public"] : []), "archived"];
@@ -175,7 +236,7 @@ const PublishStep = ({ draft, publicationState, onPublicationChange, onGoToStep,
               {item.ok ? <Check size={16} className="shrink-0 text-emerald-700" /> : <AlertTriangle size={16} className="shrink-0 text-amber-700" />}
               <span className={item.ok ? "text-zinc-700" : "font-semibold text-zinc-950"}>{item.label}{item.ok ? "" : " 입력 필요"}</span>
               {item.ok ? null : (
-                <button type="button" className="font-semibold text-[#004aad] underline underline-offset-2" onClick={() => onGoToStep(item.key === "introText" ? "content" : "basics")}>입력하러 가기</button>
+                <button type="button" className="font-semibold text-[#004aad] underline underline-offset-2" onClick={() => item.key === "termsText" ? onGoToForm() : onGoToStep(item.key === "introText" ? "content" : "basics")}>입력하러 가기</button>
               )}
             </li>
           ))}
@@ -226,6 +287,10 @@ const OpenCallContentEditor = ({
   applicantCount,
   onDuplicate,
   onDelete,
+  onGoToForm,
+  onPosterUpload,
+  posterUploading,
+  posterError,
 }) => {
   const stepIndex = Math.max(0, OPEN_CALL_EDITOR_STEPS.findIndex((item) => item.id === step));
   const current = OPEN_CALL_EDITOR_STEPS[stepIndex];
@@ -251,12 +316,12 @@ const OpenCallContentEditor = ({
         ))}
       </nav>
 
-      {current.id === "basics" ? <BasicsStep draft={draft} onChange={onChange} /> : null}
+      {current.id === "basics" ? <BasicsStep draft={draft} onChange={onChange} onPosterUpload={onPosterUpload} posterUploading={posterUploading} posterError={posterError} /> : null}
       {current.id === "content" ? <ContentStep draft={draft} onChange={onChange} /> : null}
       {current.id === "stages" ? <StagesStep {...sections} /> : null}
       {current.id === "faq" ? <FaqStep {...faqs} labels={draft.landingLabels} onLabel={onLabel} /> : null}
       {current.id === "publish" ? (
-        <PublishStep draft={draft} publicationState={publicationState} onPublicationChange={onPublicationChange} onGoToStep={goTo} applicantCount={applicantCount} onDuplicate={onDuplicate} onDelete={onDelete} />
+        <PublishStep draft={draft} publicationState={publicationState} onPublicationChange={onPublicationChange} onGoToStep={goTo} onGoToForm={onGoToForm} applicantCount={applicantCount} onDuplicate={onDuplicate} onDelete={onDelete} />
       ) : null}
 
       {next ? (

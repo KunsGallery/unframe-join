@@ -150,7 +150,7 @@ const getApplicationMetaLine = (app) => {
   if (!app) return "-";
 
   if (isOpenCallApplication(app)) {
-    return [app.medium, app.birthYear].filter(Boolean).join(" · ") || "-";
+    return [app.stageName || app.medium, app.birthYear].filter(Boolean).join(" · ") || "-";
   }
 
   if (isSalonApplication(app)) {
@@ -319,7 +319,7 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
             {isOpenCall ? "Medium" : isSalon ? "Contact" : "Date"}
           </p>
           <p className="text-sm font-bold text-zinc-700 break-keep">
-            {isOpenCall ? app.medium || "-" : isSalon ? app.phone || "-" : app.selectedDate || "-"}
+            {isOpenCall ? app.stageName || app.medium || app.name || "-" : isSalon ? app.phone || "-" : app.selectedDate || "-"}
           </p>
         </div>
       </div>
@@ -474,14 +474,16 @@ const ApplicationDetailPanel = ({ app }) => {
                   {app.birthYear || "-"}
                 </p>
               </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                  Medium
-                </p>
-                <p className="text-sm font-bold text-zinc-700 break-keep">
-                  {app.medium || "-"}
-                </p>
-              </div>
+              {app.medium ? (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                    Medium
+                  </p>
+                  <p className="text-sm font-bold text-zinc-700 break-keep">
+                    {app.medium}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
                   제출일
@@ -567,7 +569,7 @@ const ApplicationDetailPanel = ({ app }) => {
             </div>
           ) : isOpenCallApplication(app) ? (
             <p className="text-sm font-bold text-zinc-500 leading-relaxed break-keep whitespace-pre-wrap">
-              {app.artistStatement || "아직 등록된 작업 소개가 없습니다."}
+              {app.artistStatement || "입력한 작가 소개가 없습니다."}
             </p>
           ) : app.inquiryType === "space-rental" ? (
             <div className="space-y-4">
@@ -593,14 +595,16 @@ const ApplicationDetailPanel = ({ app }) => {
           </p>
 
           <div className="space-y-4">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
-                Address
-              </p>
-              <p className="text-sm font-bold text-zinc-700 break-keep">
-                {`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"}
-              </p>
-            </div>
+            {app.addressMain ? (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
+                  Address
+                </p>
+                <p className="text-sm font-bold text-zinc-700 break-keep">
+                  {`${app.addressMain} ${app.addressDetail || ""}`.trim()}
+                </p>
+              </div>
+            ) : null}
 
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
@@ -677,14 +681,15 @@ const ApplicationDetailPanel = ({ app }) => {
                 return (
                   <div key={`${app.id}-work-${index}`} className="rounded-[22px] border border-zinc-100 bg-zinc-50 p-4">
                     <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-2">
-                      대표 작품 {index + 1}
+                      작품 {index + 1}
                     </p>
                     <div className="space-y-1.5 text-sm font-bold text-zinc-700 break-keep">
                       <p>제목: {work.title || "-"}</p>
                       <p>재료: {work.material || "-"}</p>
-                      <p>크기: {work.size || "-"}</p>
+                      {work.size ? <p>크기(세로 x 가로): {work.size}</p> : null}
                       <p>제작연도: {work.year || "-"}</p>
-                      <p>이미지: {work.imageUrl || "-"}</p>
+                      {work.price ? <p>작품가격: {work.price}</p> : null}
+                      {work.imageUrl ? <img src={work.imageUrl} alt={`작품 ${index + 1}`} loading="lazy" className="mt-2 max-h-40 rounded-lg object-contain" /> : null}
                     </div>
                   </div>
                 );

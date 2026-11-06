@@ -1,4 +1,7 @@
 import {
+  DEFAULT_OPEN_CALL_ACCENT,
+  DEFAULT_OPEN_CALL_SALES_CONSENT,
+  DEFAULT_OPEN_CALL_TERMS,
   normalizeOpenCallCompletionSettings,
   normalizeOpenCallFormSettings,
   normalizeOpenCallLandingLabels,
@@ -29,6 +32,11 @@ export const buildBlankOpenCall = ({ id, title }) => ({
   heroAccent: "",
   statusNoticeText: "현재 지원서를 접수하고 있습니다.",
   introText: "",
+  posterUrl: "",
+  accentColor: DEFAULT_OPEN_CALL_ACCENT,
+  requirementItems: [],
+  termsText: DEFAULT_OPEN_CALL_TERMS,
+  salesConsentText: DEFAULT_OPEN_CALL_SALES_CONSENT,
   descriptionSections: [],
   landingLabels: normalizeOpenCallLandingLabels(),
   mediumText: "",
@@ -54,6 +62,7 @@ export const getOpenCallChecklist = (draft = {}) =>
     ["title", "공고명", draft.title],
     ["introText", "공고 소개", draft.introText],
     ["applicationEndAt", "접수 마감일", draft.applicationEndAt],
+    ["termsText", "오픈콜 약관", draft.termsText],
   ].map(([key, label, value]) => ({ key, label, ok: Boolean(String(value ?? "").trim()) }));
 
 export const getOpenCallDateProblem = ({ applicationStartAt, applicationEndAt, announcementAt } = {}) => {

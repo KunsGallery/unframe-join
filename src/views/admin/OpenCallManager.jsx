@@ -43,6 +43,8 @@ import {
   normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
 import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
+import { splitIntroText } from "../open-call/openCallView";
+import { uploadImageToR2 } from "../../lib/uploads";
 import OpenCallContentEditor from "./open-call/OpenCallContentEditor";
 import OpenCallCreateDialog from "./open-call/OpenCallCreateDialog";
 import OpenCallPagePreview from "./open-call/OpenCallPagePreview";
@@ -471,6 +473,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const [createDialog, setCreateDialog] = useState(null);
   const [previewPage, setPreviewPage] = useState(false);
   const [savedSnapshots, setSavedSnapshots] = useState({});
+  const [posterUploading, setPosterUploading] = useState(false);
+  const [posterError, setPosterError] = useState("");
   const [drafts, setDrafts] = useState({});
   const [saveFeedbacks, setSaveFeedbacks] = useState({});
   const [managerNotice, setManagerNotice] = useState("");
@@ -565,7 +569,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
             benefitText: call.benefitText || "",
             magazineText: call.magazineText || "",
             status: call.status || "draft",
-            introText: call.introText || "",
+            // Older calls keep requirements as emoji blocks inside the intro; editing splits them into rows.
+            introText: Array.isArray(call.requirementItems) ? call.introText || "" : splitIntroText(call.introText).lead,
+            requirementItems: Array.isArray(call.requirementItems) ? call.requirementItems : splitIntroText(call.introText).details,
+            posterUrl: call.posterUrl || "",
+            accentColor: call.accentColor || "",
+            termsText: call.termsText || "",
+            salesConsentText: call.salesConsentText || "",
             badgeText: call.badgeText || "OPEN",
             heroTitle: call.heroTitle || "",
             heroAccent: call.heroAccent || "",
@@ -691,32 +701,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
         },
       };
     });
-  };
-
-  const updateFormSettingsSection = (callId, sectionKey, key, value) => {
-    updateFormSettings(callId, (current) => ({
-      ...current,
-      sections: {
-        ...current.sections,
-        [sectionKey]: {
-          ...current.sections[sectionKey],
-          [key]: value,
-        },
-      },
-    }));
-  };
-
-  const updateFormSettingsField = (callId, fieldKey, key, value) => {
-    updateFormSettings(callId, (current) => ({
-      ...current,
-      fields: {
-        ...current.fields,
-        [fieldKey]: {
-          ...current.fields[fieldKey],
-          [key]: value,
-        },
-      },
-    }));
   };
 
   const updateCustomFields = (callId, mutate) => {
@@ -913,6 +897,19 @@ const OpenCallManager = ({ db, appId, applications }) => {
     });
   };
 
+  const handlePosterUpload = async (callId, file) => {
+    setPosterError("");
+    setPosterUploading(true);
+    try {
+      const result = await uploadImageToR2({ file, folder: "open-call/posters", isAdminUpload: true });
+      updateDraft(callId, "posterUrl", result.url);
+    } catch (error) {
+      setPosterError(error.message || "포스터를 올리지 못했습니다.");
+    } finally {
+      setPosterUploading(false);
+    }
+  };
+
   const openCallDoc = (id) => doc(db, "artifacts", appId, "public", "data", "openCalls", id);
 
   const handleCreateOpenCall = async ({ title, sourceId }) => {
@@ -1004,6 +1001,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
       applicationEndAt: toStoredOpenCallDate(draft.applicationEndAt),
       announcementAt: toStoredOpenCallDate(draft.announcementAt),
     });
+    payload.requirementItems = (draft.requirementItems || []).filter(
+      (item) => String(item.title || "").trim() || String(item.body || "").trim()
+    );
     payload.descriptionSections = payload.descriptionSections.filter(
       (section) => section.title.trim() || section.body.trim()
     );
@@ -1154,90 +1154,54 @@ const OpenCallManager = ({ db, appId, applications }) => {
   };
 
   const buildOpenCallCsv = (call, rows) => {
-    const headers = [
-      "공고ID",
-      "공고명",
-      "심사상태",
-      "이름",
-      "이메일",
-      "연락처",
-      "출생연도",
-      "주소",
-      "우편번호",
-      "상세주소",
-      "매체",
-      "SNS",
-      "작업소개",
-      "작품1_제목",
-      "작품1_재료",
-      "작품1_크기",
-      "작품1_제작연도",
-      "작품1_이미지URL",
-      "작품2_제목",
-      "작품2_재료",
-      "작품2_크기",
-      "작품2_제작연도",
-      "작품2_이미지URL",
-      "작품3_제목",
-      "작품3_재료",
-      "작품3_크기",
-      "작품3_제작연도",
-      "작품3_이미지URL",
-      "포트폴리오URL",
-      "관리자메모",
-      "제출일",
-    ];
-    const customFieldColumns = buildCustomFieldCsvColumns(call, rows);
+    const hasAny = (key) => rows.some((app) => app[key]);
+    const workCount = rows.reduce((max, app) => Math.max(max, Array.isArray(app.works) ? app.works.length : 0), 0);
+    const hasWorkSize = rows.some((app) => (app.works || []).some((work) => work?.size));
+    const workColumns = Array.from({ length: workCount }, (_, index) => [
+      [`작품${index + 1}_작품명`, "title"],
+      [`작품${index + 1}_재료`, "material"],
+      ...(hasWorkSize ? [[`작품${index + 1}_크기(세로x가로)`, "size"]] : []),
+      [`작품${index + 1}_제작연도`, "year"],
+      [`작품${index + 1}_작품가격`, "price"],
+      [`작품${index + 1}_이미지URL`, "imageUrl"],
+    ].map(([header, key]) => [header, (app) => getWorkValue(app.works?.[index], key)])).flat();
 
-    const csvRows = [
-      [...headers, ...customFieldColumns.map((column) => column.header)]
-        .map(escapeCsv)
-        .join(","),
-      ...rows.map((app) => {
-        const works = Array.isArray(app.works) ? app.works : [];
-        const customFieldAnswers = app.customFieldAnswers || {};
-        return [
-          call.id,
-          call.title || OPEN_CALL_FALLBACK.title,
-          getOpenCallReviewMeta(app.openCallReviewStatus).label,
-          app.name || "",
-          app.email || app.applicantEmail || "",
-          app.phone || "",
-          app.birthYear || "",
-          app.addressMain || "",
-          app.postalCode || "",
-          app.addressDetail || "",
-          app.medium || "",
-          app.snsLink || "",
-          app.artistStatement || "",
-          getWorkValue(works[0], "title"),
-          getWorkValue(works[0], "material"),
-          getWorkValue(works[0], "size"),
-          getWorkValue(works[0], "year"),
-          getWorkValue(works[0], "imageUrl"),
-          getWorkValue(works[1], "title"),
-          getWorkValue(works[1], "material"),
-          getWorkValue(works[1], "size"),
-          getWorkValue(works[1], "year"),
-          getWorkValue(works[1], "imageUrl"),
-          getWorkValue(works[2], "title"),
-          getWorkValue(works[2], "material"),
-          getWorkValue(works[2], "size"),
-          getWorkValue(works[2], "year"),
-          getWorkValue(works[2], "imageUrl"),
-          app.portfolioUrl || "",
-          getAdminMemo(app),
-          formatDate(app.submittedAt),
-          ...customFieldColumns.map((column) =>
-            getCustomFieldCsvValue(customFieldAnswers[column.fieldId])
-          ),
-        ]
-          .map(escapeCsv)
-          .join(",");
-      }),
+    const columns = [
+      ["공고ID", () => call.id],
+      ["공고명", () => call.title || OPEN_CALL_FALLBACK.title],
+      ["심사상태", (app) => getOpenCallReviewMeta(app.openCallReviewStatus).label],
+      ["출생연도", (app) => app.birthYear || ""],
+      ["이름", (app) => app.name || ""],
+      ["영어이름", (app) => app.englishName || ""],
+      ["활동명", (app) => app.stageName || ""],
+      ["휴대폰번호", (app) => app.phone || ""],
+      ["이메일", (app) => app.email || app.applicantEmail || ""],
+      ["홈페이지/SNS", (app) => app.snsLink || ""],
+      ["기타사이트", (app) => app.otherLink || ""],
+      ["포트폴리오URL", (app) => app.portfolioUrl || ""],
+      ["작가소개", (app) => app.artistStatement || ""],
+      // Earlier calls collected these; they only appear when a row has them.
+      ...(hasAny("addressMain") ? [
+        ["주소", (app) => app.addressMain || ""],
+        ["우편번호", (app) => app.postalCode || ""],
+        ["상세주소", (app) => app.addressDetail || ""],
+      ] : []),
+      ...(hasAny("medium") ? [["매체", (app) => app.medium || ""]] : []),
+      ...workColumns,
+      ["약관동의", (app) => (app.termsAgreed ? "동의" : "")],
+      ["판매가능동의", (app) => (app.salesAgreed ? "동의" : "")],
+      ["관리자메모", (app) => getAdminMemo(app)],
+      ["제출일", (app) => formatDate(app.submittedAt)],
+      ...buildCustomFieldCsvColumns(call, rows).map((column) => [
+        column.header,
+        (app) => getCustomFieldCsvValue((app.customFieldAnswers || {})[column.fieldId]),
+      ]),
     ];
 
-    return "\uFEFF" + csvRows.join("\n");
+    return "\uFEFF" + [
+      columns.map(([header]) => escapeCsv(header)).join(","),
+      ...rows.map((app) => columns.map(([, read]) => escapeCsv(read(app))).join(",")),
+    ].join("\n");
   };
 
   const handleDownloadCsv = (call, rows) => {
@@ -1294,11 +1258,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
     () => (editingOpenCall ? createFallbackOpenCall(editingOpenCall) : null),
     [editingOpenCall]
   );
-  const handleFormSettingsChange = (nextSettings) => {
-    if (!previewedOpenCall?.id) return;
-    updateFormSettings(previewedOpenCall.id, () => nextSettings);
-  };
-
   useEffect(() => {
     if (activeOpenCallTab === "applications" && previewOpenCallId) {
       setSelectedOpenCallId(previewOpenCallId);
@@ -1389,8 +1348,6 @@ const OpenCallManager = ({ db, appId, applications }) => {
             const feedback = saveFeedbacks[call.id];
             const isDirty = savedSnapshots[call.id] !== undefined && savedSnapshots[call.id] !== JSON.stringify(draft);
             const completionEditId = `open-call-${call.id}-completion`;
-            const formEditId = `open-call-${call.id}-form`;
-            const privacyEditId = `open-call-${call.id}-privacy`;
 
             return (
               <div key={call.id} className="min-w-0">
@@ -1451,6 +1408,10 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     applicantCount={applicantCount}
                     onDuplicate={() => setCreateDialog({ sourceId: call.id })}
                     onDelete={() => handleDeleteOpenCall(call, applicantCount)}
+                    onGoToForm={() => setActiveOpenCallTab("form")}
+                    onPosterUpload={(file) => handlePosterUpload(call.id, file)}
+                    posterUploading={posterUploading}
+                    posterError={posterError}
                   />
                 ) : null}
 
@@ -1654,330 +1615,21 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       </div>
                     </div>
 
-                    <div
-                      id={formEditId}
-                      className="order-1 rounded-lg border border-zinc-200 bg-white p-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                        <div>
-                          <p className="text-base font-bold text-zinc-950">
-                            기본 항목
-                          </p>
-                          <p className="mt-1 text-sm text-zinc-600 break-keep">
-                            지원자에게 받을 기본 항목을 켜고 끕니다.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid gap-4">
-                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-zinc-700">
-                                지원자 정보
-                              </p>
-                              <p className="mt-1 text-sm font-bold text-zinc-700 break-keep">
-                                이름, 연락처, 이메일은 기본값으로 유지됩니다.
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {[
-                              ["birthYear", "출생연도"],
-                              ["address", "주소"],
-                              ["medium", "매체"],
-                              ["snsLink", "SNS / 웹사이트"],
-                            ].map(([fieldKey, label]) => {
-                              const field = formSettings.fields[fieldKey];
-                              return (
-                                <label
-                                  key={fieldKey}
-                                  className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3"
-                                >
-                                  <span className="block text-sm font-semibold text-zinc-700">
-                                    {label}
-                                  </span>
-                                  <div className="mt-2 flex items-center justify-between gap-3">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateFormSettingsField(
-                                          call.id,
-                                          fieldKey,
-                                          "enabled",
-                                          !field.enabled
-                                        )
-                                      }
-                                      className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                        field.enabled
-                                          ? "bg-[#004AAD] text-white"
-                                          : "border border-zinc-200 bg-white text-zinc-500"
-                                      }`}
-                                    >
-                                      {field.enabled ? "사용" : "미사용"}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        updateFormSettingsField(
-                                          call.id,
-                                          fieldKey,
-                                          "required",
-                                          !field.required
-                                        )
-                                      }
-                                      className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                        field.required
-                                          ? "bg-zinc-900 text-white"
-                                          : "border border-zinc-200 bg-white text-zinc-500"
-                                      }`}
-                                    >
-                                      {field.required ? "필수" : "선택"}
-                                    </button>
-                                  </div>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-                          <p className="text-sm font-semibold text-zinc-700">
-                            작품 / 소개 / 포트폴리오
-                          </p>
-
-                          <div className="mt-4 grid gap-3">
-                            <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
-                              <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-bold text-zinc-800">대표 작품</p>
-                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                      최대 3개까지 노출하고, 필요한 개수만 필수로 설정합니다.
-                                    </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateFormSettingsSection(
-                                      call.id,
-                                      "works",
-                                      "enabled",
-                                      !formSettings.sections.works.enabled
-                                    )
-                                  }
-                                  className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                    formSettings.sections.works.enabled
-                                      ? "bg-[#004AAD] text-white"
-                                      : "border border-zinc-200 bg-white text-zinc-500"
-                                  }`}
-                                >
-                                  {formSettings.sections.works.enabled ? "사용" : "미사용"}
-                                </button>
-                              </div>
-
-                              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                                <label className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
-                                  <span className="block text-sm font-semibold text-zinc-700">
-                                    필수 개수
-                                  </span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="3"
-                                    value={formSettings.sections.works.requiredCount}
-                                    onChange={(e) =>
-                                      updateFormSettingsSection(
-                                        call.id,
-                                        "works",
-                                        "requiredCount",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                  />
-                                </label>
-
-                                <label className="rounded-lg border border-zinc-200 bg-white px-3 py-3">
-                                  <span className="block text-sm font-semibold text-zinc-700">
-                                    최대 개수
-                                  </span>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="3"
-                                    value={formSettings.sections.works.maxCount}
-                                    onChange={(e) =>
-                                      updateFormSettingsSection(
-                                        call.id,
-                                        "works",
-                                        "maxCount",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                  />
-                                </label>
-                              </div>
-                            </div>
-
-                            <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
-                              <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-bold text-zinc-800">작업 소개</p>
-                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                      최대 글자 수를 조정할 수 있습니다.
-                                    </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateFormSettingsSection(
-                                      call.id,
-                                      "statement",
-                                      "enabled",
-                                      !formSettings.sections.statement.enabled
-                                    )
-                                  }
-                                  className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                    formSettings.sections.statement.enabled
-                                      ? "bg-[#004AAD] text-white"
-                                      : "border border-zinc-200 bg-white text-zinc-500"
-                                  }`}
-                                >
-                                  {formSettings.sections.statement.enabled ? "사용" : "미사용"}
-                                </button>
-                              </div>
-
-                              <label className="mt-4 block rounded-lg border border-zinc-200 bg-white px-3 py-3">
-                                <span className="block text-sm font-semibold text-zinc-700">
-                                  최대 글자 수
-                                </span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="50"
-                                  value={formSettings.sections.statement.maxLength}
-                                  onChange={(e) =>
-                                    updateFormSettingsSection(
-                                      call.id,
-                                      "statement",
-                                      "maxLength",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-                                />
-                              </label>
-                            </div>
-
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-bold text-zinc-800">포트폴리오</p>
-                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                      업로드 노출 여부와 필수 여부를 분리합니다.
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateFormSettingsSection(
-                                        call.id,
-                                        "portfolio",
-                                        "enabled",
-                                        !formSettings.sections.portfolio.enabled
-                                      )
-                                    }
-                                    className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                      formSettings.sections.portfolio.enabled
-                                        ? "bg-[#004AAD] text-white"
-                                        : "border border-zinc-200 bg-white text-zinc-500"
-                                    }`}
-                                  >
-                                    {formSettings.sections.portfolio.enabled ? "사용" : "미사용"}
-                                  </button>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateFormSettingsSection(
-                                      call.id,
-                                      "portfolio",
-                                      "required",
-                                      !formSettings.sections.portfolio.required
-                                    )
-                                  }
-                                  className={`mt-4 inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                    formSettings.sections.portfolio.required
-                                      ? "bg-zinc-900 text-white"
-                                      : "border border-zinc-200 bg-white text-zinc-500"
-                                  }`}
-                                >
-                                  {formSettings.sections.portfolio.required ? "필수" : "선택"}
-                                </button>
-                              </div>
-
-                              <div
-                                id={privacyEditId}
-                                className="rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3"
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-bold text-zinc-800">개인정보 동의</p>
-                                    <p className="mt-1 text-xs font-medium text-zinc-500 break-keep">
-                                      동의 섹션 노출 여부와 필수 여부를 조정합니다.
-                                    </p>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateFormSettingsSection(
-                                        call.id,
-                                        "privacy",
-                                        "enabled",
-                                        !formSettings.sections.privacy.enabled
-                                      )
-                                    }
-                                    className={`inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                      formSettings.sections.privacy.enabled
-                                        ? "bg-[#004AAD] text-white"
-                                        : "border border-zinc-200 bg-white text-zinc-500"
-                                    }`}
-                                  >
-                                    {formSettings.sections.privacy.enabled ? "사용" : "미사용"}
-                                  </button>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    updateFormSettingsSection(
-                                      call.id,
-                                      "privacy",
-                                      "required",
-                                      !formSettings.sections.privacy.required
-                                    )
-                                  }
-                                  className={`mt-4 inline-flex items-center gap-2 min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold ${
-                                    formSettings.sections.privacy.required
-                                      ? "bg-zinc-900 text-white"
-                                      : "border border-zinc-200 bg-white text-zinc-500"
-                                  }`}
-                                >
-                                  {formSettings.sections.privacy.required ? "필수" : "선택"}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    <div className="order-1 rounded-lg border border-zinc-200 bg-white p-4">
+                      <p className="text-base font-bold text-zinc-950">오픈콜 약관</p>
+                      <p className="mt-1 text-sm text-zinc-600 break-keep">지원자가 동의하는 내용입니다. 개인정보 수집·이용 안내도 여기에 함께 둡니다. 제출 시점의 약관이 지원서에 함께 남습니다.</p>
+                      <label className="mt-3 block text-sm font-semibold text-zinc-900">
+                        약관 전문
+                        <textarea rows={10} value={draft.termsText || ""} onChange={(event) => updateDraft(call.id, "termsText", event.target.value)} className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-normal leading-relaxed text-zinc-950 outline-none focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]" />
+                      </label>
+                      <label className="mt-4 block text-sm font-semibold text-zinc-900">
+                        판매 가능 동의 문구
+                        <input value={draft.salesConsentText || ""} onChange={(event) => updateDraft(call.id, "salesConsentText", event.target.value)} className="mt-1.5 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm font-normal text-zinc-950 outline-none focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]" />
+                      </label>
+                      <p className="mt-4 text-sm text-zinc-600 break-keep">기본 항목은 고정입니다: 출생연도, 이름, 영어 이름, 활동명(선택), 휴대폰번호, 이메일, 홈페이지 또는 SNS, 기타 사이트(선택), 포트폴리오 파일, 작가소개(선택), 출품작 2~6점(이미지, 작품명, 재료, 세로·가로 cm, 제작연도, 작품가격). 동의 2개를 모두 해야 제출 버튼이 나타납니다.</p>
                     </div>
 
-                    <p className="order-3 text-sm text-zinc-600 break-keep">접수 완료 화면과 메일·알림톡 문구는 시스템 탭의 메시지 설정에서 관리합니다.</p>
+<p className="order-3 text-sm text-zinc-600 break-keep">접수 완료 화면과 메일·알림톡 문구는 시스템 탭의 메시지 설정에서 관리합니다.</p>
                   <details className="order-4 rounded-lg border border-zinc-200 bg-white px-4">
                     <summary className="cursor-pointer py-3 text-sm font-semibold text-zinc-800">실제 신청서 미리보기</summary>
                     <div className="flex flex-wrap gap-2 pb-3">
@@ -1985,21 +1637,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
                       <button type="button" onClick={() => handleCopyFormLink(call.id)} className={QUIET_BUTTON}>링크 복사</button>
                       <button type="button" onClick={handleRefreshFormPreview} className={QUIET_BUTTON}>새로고침</button>
                     </div>
-                    <div className="mb-4 overflow-hidden rounded-lg border border-zinc-200">
-                      <OpenCallApplicationForm
-                        key={`${call.id}-${formPreviewVersion}`}
-                        openCall={previewedOpenCallView}
-                        db={db}
-                        appId={appId}
-                        initialProfileData={null}
-                        formSettings={previewedOpenCallView.formSettings}
-                        onFormSettingsChange={handleFormSettingsChange}
-                        previewMode
-                        adminMode
-                        bypassPeriodCheck
-                        editablePreview
-                        wideLayout
-                      />
+                    <div className="mb-4 overflow-hidden rounded-lg border border-zinc-200 bg-[#f6f4ee]">
+                      <OpenCallApplicationForm key={`${call.id}-${formPreviewVersion}`} openCall={previewedOpenCallView} previewMode />
                     </div>
                   </details>
                 </div>
@@ -2095,13 +1734,13 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                   {app.email || app.applicantEmail || "-"} · {app.phone || "-"}
                                 </p>
                                 <p className="mt-1 text-xs font-bold text-zinc-500 break-keep">
-                                  {app.medium || "-"} · {formatDate(app.submittedAt)}
+                                  {[app.birthYear && `${app.birthYear}년생`, app.englishName, app.stageName, app.medium].filter(Boolean).join(" · ")} · {formatDate(app.submittedAt)}
                                 </p>
 
                                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                                   <div className="rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
-                                      작업 소개
+                                      작가 소개
                                     </p>
                                     <p className="max-h-[4.5rem] overflow-hidden whitespace-pre-wrap break-keep text-sm font-bold leading-relaxed text-zinc-600">
                                       {app.artistStatement || "-"}
@@ -2110,7 +1749,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
                                   <div className="rounded-[20px] border border-zinc-100 bg-white px-4 py-4">
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
-                                      포트폴리오 링크
+                                      포트폴리오 · 사이트
                                     </p>
                                     {app.portfolioUrl ? (
                                       <a
@@ -2119,41 +1758,32 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                         rel="noreferrer"
                                         className="text-sm font-bold text-[#004aad] break-all"
                                       >
-                                        {app.portfolioUrl}
+                                        포트폴리오 열기
                                       </a>
                                     ) : (
                                       <p className="text-sm font-bold text-zinc-500">-</p>
                                     )}
+                                    {[app.snsLink, app.otherLink].filter(Boolean).map((link) => (
+                                      <p key={link} className="mt-1 text-sm font-medium text-zinc-700 break-all">{link}</p>
+                                    ))}
                                   </div>
 
                                   <div className="rounded-[20px] border border-zinc-100 bg-white px-4 py-4 md:col-span-2">
                                     <p className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300">
-                                      대표 작품 1
+                                      출품작 {(app.works || []).filter((work) => work?.imageUrl).length}점
                                     </p>
-                                    {app.works?.[0]?.imageUrl ? (
-                                      <a
-                                        href={app.works[0].imageUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex items-center gap-3"
-                                      >
-                                        <img
-                                          src={app.works[0].imageUrl}
-                                          alt="대표 작품 1 썸네일"
-                                          className="h-16 w-16 rounded-2xl border border-zinc-100 bg-zinc-50 object-cover"
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-bold text-zinc-700 break-keep">
-                                            {app.works[0].title || "이미지 보기"}
-                                          </p>
-                                          <p className="text-xs font-bold text-zinc-400 break-all">
-                                            {app.works[0].imageUrl}
-                                          </p>
-                                        </div>
-                                      </a>
-                                    ) : (
-                                      <p className="text-sm font-bold text-zinc-500">-</p>
-                                    )}
+                                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                      {(app.works || []).filter((work) => work?.imageUrl).map((work, index) => (
+                                        <a key={work.imageUrl + index} href={work.imageUrl} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-3">
+                                          <img src={work.imageUrl} alt={work.title || `작품 ${index + 1}`} loading="lazy" className="h-20 w-20 shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 object-contain" />
+                                          <span className="min-w-0 text-sm text-zinc-800 break-keep">
+                                            <span className="block font-bold">{work.title || "-"}</span>
+                                            <span className="block text-xs">{[work.material, work.size, work.year].filter(Boolean).join(" · ")}</span>
+                                            {work.price ? <span className="block text-xs font-semibold">{work.price}</span> : null}
+                                          </span>
+                                        </a>
+                                      ))}
+                                    </div>
                                   </div>
                                 </div>
 

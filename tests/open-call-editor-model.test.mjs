@@ -90,10 +90,10 @@ test("공고 ID는 호출마다 다르고 경로로 쓸 수 있다", () => {
 });
 
 test("공개 전 점검은 빠진 필수 항목을 알려 준다", () => {
-  const missing = getOpenCallChecklist({ title: "", introText: "  ", applicationEndAt: "" });
-  assert.deepEqual(missing.filter((item) => !item.ok).map((item) => item.key), ["title", "introText", "applicationEndAt"]);
+  const missing = getOpenCallChecklist({ title: "", introText: "  ", applicationEndAt: "", termsText: "" });
+  assert.deepEqual(missing.filter((item) => !item.ok).map((item) => item.key), ["title", "introText", "applicationEndAt", "termsText"]);
 
-  const filled = getOpenCallChecklist({ title: "공고", introText: "소개", applicationEndAt: "2027-01-01T10:00" });
+  const filled = getOpenCallChecklist({ title: "공고", introText: "소개", applicationEndAt: "2027-01-01T10:00", termsText: "약관" });
   assert.ok(filled.every((item) => item.ok));
 });
 

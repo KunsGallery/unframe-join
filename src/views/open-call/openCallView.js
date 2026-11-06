@@ -1,4 +1,5 @@
 import {
+  DEFAULT_OPEN_CALL_ACCENT,
   DEFAULT_OPEN_CALL_FAQS,
   OPEN_CALL_FALLBACK,
   createFallbackOpenCall,
@@ -32,6 +33,54 @@ export const splitIntroText = (text) => {
     });
 
   return { lead: lead.join("\n\n"), details };
+};
+
+const INK = "#151413";
+const PAPER = "#F6F4EE";
+const WHITE = "#FFFFFF";
+
+const hexToRgb = (hex) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+
+const luminance = (hex) => {
+  const [r, g, b] = hexToRgb(hex).map((value) => {
+    const channel = value / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+export const getContrastRatio = (first, second) => {
+  const [light, dark] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (light + 0.05) / (dark + 0.05);
+};
+
+// Admins pick one colour; everything drawn with it stays readable whichever colour they pick.
+export const getOpenCallTheme = (color) => {
+  const accent = /^#[0-9a-f]{6}$/i.test(String(color ?? "").trim())
+    ? String(color).trim().toUpperCase()
+    : DEFAULT_OPEN_CALL_ACCENT;
+  const paper = hexToRgb(PAPER);
+  const tint = hexToRgb(accent)
+    .map((value, index) => Math.round(value * 0.2 + paper[index] * 0.8).toString(16).padStart(2, "0"))
+    .join("");
+
+  return {
+    accent,
+    on: getContrastRatio(accent, WHITE) >= getContrastRatio(accent, INK) ? WHITE : INK,
+    tint: `#${tint.toUpperCase()}`,
+  };
+};
+
+// Korean characters are about twice as wide as Latin ones, which sets how large a theme word can go.
+export const getThemeWordWeight = (word) =>
+  Math.max(2, [...String(word ?? "")].reduce((sum, char) => sum + (char === " " ? 0.4 : char.charCodeAt(0) < 128 ? 0.62 : 1), 0));
+
+// Calls written before requirement rows existed keep their emoji-headed intro blocks.
+export const getOpenCallRequirements = (openCall) => {
+  const rows = (Array.isArray(openCall?.requirementItems) ? openCall.requirementItems : [])
+    .map((item) => ({ title: String(item?.title ?? "").trim(), body: String(item?.body ?? "").trim() }))
+    .filter((item) => item.title || item.body);
+  return rows.length > 0 ? rows : splitIntroText(openCall?.introText).details;
 };
 
 const formatDate = (value) => {
@@ -72,6 +121,10 @@ export const buildOpenCallView = (source) => {
 
   return {
     openCall,
+    theme: getOpenCallTheme(openCall.accentColor),
+    posterUrl: String(openCall.posterUrl ?? "").trim(),
+    lead: splitIntroText(openCall.introText).lead,
+    requirements: getOpenCallRequirements(openCall),
     sections: getOpenCallDescriptionSections(source || OPEN_CALL_FALLBACK),
     faqs: normalizeOpenCallFaqs(faqSource)
       .filter((faq) => faq?.isVisible !== false && faq?.question?.trim() && faq?.answer?.trim())

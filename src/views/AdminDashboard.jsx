@@ -1717,7 +1717,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                             <div className="flex items-center gap-6 flex-wrap text-left">
                               <p className="text-sm font-black text-zinc-400 uppercase">
                                 {isOpenCallApplication(app)
-                                  ? app.medium || app.name || "-"
+                                  ? app.name || app.medium || "-"
                                   : isSalonApplication(app)
                                   ? app.applicantName || app.nickname || "-"
                                   : app.partnerType === "brand"
@@ -1893,11 +1893,14 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                 ) : isOpenCallApplication(app) ? (
                                   <div className="grid gap-4 text-left">
                                     <DetailItem label="이름" value={app.name || "-"} />
+                                    {app.englishName ? <DetailItem label="영어 이름" value={app.englishName} /> : null}
+                                    {app.stageName ? <DetailItem label="활동명" value={app.stageName} /> : null}
                                     <DetailItem label="연락처" value={app.phone || "-"} />
                                     <DetailItem label="이메일" value={app.email || app.applicantEmail || "-"} />
                                     <DetailItem label="출생연도" value={app.birthYear || "-"} />
-                                    <DetailItem label="주소" value={`${app.addressMain || ""} ${app.addressDetail || ""}`.trim() || "-"} />
-                                    <DetailItem label="매체" value={app.medium || "-"} />
+                                    {app.addressMain ? <DetailItem label="주소" value={`${app.addressMain} ${app.addressDetail || ""}`.trim()} /> : null}
+                                    {app.medium ? <DetailItem label="매체" value={app.medium} /> : null}
+                                    {app.otherLink ? <DetailItem label="기타 사이트" value={app.otherLink} /> : null}
                                   </div>
                                 ) : app.inquiryType === "space-rental" ? (
                                   <div className="grid gap-4 text-left">
@@ -2082,7 +2085,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                               {isOpenCallApplication(app) ? (
                                 <div>
                                   <h5 className="text-[10px] font-black text-[#004aad] uppercase tracking-[0.2em] mb-6 border-b border-[#004aad]/10 pb-2">
-                                    대표 작품
+                                    출품작
                                   </h5>
                                   <div className="grid gap-4">
                                     {(app.works || []).map((work, index) => {
@@ -2102,14 +2105,15 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                           className="rounded-[22px] border border-zinc-100 bg-white p-4"
                                         >
                                           <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300 mb-2">
-                                            대표 작품 {index + 1}
+                                            작품 {index + 1}
                                           </p>
                                           <div className="space-y-1.5 text-sm font-bold text-zinc-700 break-keep">
                                             <p>제목: {work.title || "-"}</p>
                                             <p>재료: {work.material || "-"}</p>
-                                            <p>크기: {work.size || "-"}</p>
+                                            {work.size ? <p>크기(세로 x 가로): {work.size}</p> : null}
                                             <p>제작연도: {work.year || "-"}</p>
-                                            <p>이미지: {work.imageUrl || "-"}</p>
+                                            {work.price ? <p>작품가격: {work.price}</p> : null}
+                                            {work.imageUrl ? <a href={work.imageUrl} target="_blank" rel="noreferrer" className="block text-[#004aad] underline">이미지 원본 보기</a> : null}
                                           </div>
                                         </div>
                                       );

@@ -1,14 +1,13 @@
 import React, { useEffect, useRef } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { ChapterPage, FaqTiles, MarkFooter, Stages } from "../chapters/Chapters";
-import { VENUE_ADDRESS } from "../chapters/data";
-import { splitIntroText } from "./openCallView";
+import { ChapterPage, FaqTiles, MarkFooter } from "../chapters/Chapters";
+import { getThemeWordWeight } from "./openCallView";
+import "./openCallPage.css";
 
-const DETAIL_TONES = ["on-blue", "on-white", "on-deep", "on-paper", "on-coral"];
 const MAX_GHOSTS = 12;
 const MIN_TRAVEL_PX = 28;
 
-// The theme word leaves a fading complementary trace wherever the pointer or finger passes.
+// The theme word leaves a fading trace wherever the pointer or finger passes.
 export const Afterimage = ({ word }) => {
   const stageRef = useRef(null);
   const lastRef = useRef(null);
@@ -65,6 +64,10 @@ export const Afterimage = ({ word }) => {
 
 const OpenCallChapters = ({
   openCall,
+  theme,
+  posterUrl,
+  lead,
+  requirements,
   sections,
   faqs,
   statusLabel,
@@ -79,115 +82,119 @@ const OpenCallChapters = ({
   onBack,
 }) => {
   const word = String(openCall.themeKeyword || "").trim() || "OPEN";
-  const intro = splitIntroText(openCall.introText);
-  const applyButton = (tone) => (
-    <button type="button" className={`ch-btn ${tone}`} disabled={!canApply} onClick={onApply}>
+  const weight = getThemeWordWeight(word);
+  const applyButton = (
+    <button type="button" className="oc-btn" disabled={!canApply} onClick={onApply}>
       {canApply ? applyLabel : disabledLabel}
       {canApply ? <ArrowRight size={18} /> : null}
     </button>
   );
+  const pageStyle = {
+    "--oc-accent": theme.accent,
+    "--oc-on": theme.on,
+    "--oc-tint": theme.tint,
+    "--oc-word-wide": `min(${(posterUrl ? 46 : 84) / weight}vw, ${posterUrl ? 13 : 22}vw)`,
+    "--oc-word-narrow": `min(${82 / weight}vw, 34vw)`,
+  };
 
   return (
-    <ChapterPage>
-      <header className="ch-hero">
-        <div className="ch-panel">
-          <div>
-            <button type="button" className="ch-back" onClick={onBack}><ArrowLeft size={18} /> 메인으로</button>
-            <h1 className="ch-title" style={{ marginTop: 16 }}>{openCall.heroTitle || openCall.title}</h1>
-            <p className="ch-sub" style={{ marginTop: 8 }}>{openCall.subtitle}</p>
-          </div>
-          <Afterimage word={word} />
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
-            {applyButton("ch-btn--lime")}
-            {statusHelpText ? <p style={{ flex: "1 1 240px", maxWidth: "44ch" }}>{statusHelpText}</p> : null}
-          </div>
-        </div>
-        <dl className="ch-swatches" aria-label="모집 일정">
-          <div className="ch-swatch on-lime"><dt><small>상태</small></dt><dd>{statusLabel}</dd></div>
-          {dateEntries.map(([label, value], index) => (
-            <div key={label} className={`ch-swatch ${["on-coral", "on-deep", "on-ink"][index] || "on-white"}`}>
-              <dt><small>{label}</small></dt>
-              <dd>{value}</dd>
+    <div style={pageStyle} className="oc">
+      <ChapterPage>
+        <header className={`oc-hero ${posterUrl ? "has-poster" : ""}`}>
+          <div className="oc-panel">
+            <div>
+              <button type="button" className="oc-back" onClick={onBack}><ArrowLeft size={18} /> 메인으로</button>
+              <h1 className="ch-sub" style={{ marginTop: 16 }}>{openCall.heroTitle || openCall.title}</h1>
+              {openCall.subtitle ? <p style={{ marginTop: 6 }}>{openCall.subtitle}</p> : null}
             </div>
+            <Afterimage word={word} />
+            <div className="oc-panel__action">
+              {applyButton}
+              {statusHelpText ? <p>{statusHelpText}</p> : null}
+            </div>
+          </div>
+          {posterUrl ? (
+            <div className="oc-poster">
+              <img src={posterUrl} alt={`${openCall.title} 포스터`} fetchPriority="high" />
+            </div>
+          ) : null}
+        </header>
+
+        <dl className="oc-dates" aria-label="모집 일정">
+          <div><dt>상태</dt><dd>{statusLabel}</dd></div>
+          {dateEntries.map(([label, value]) => (
+            <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
           ))}
         </dl>
-      </header>
 
-      <section className="ch-field on-paper">
-        <div className="ch-intro" style={{ marginBottom: 0 }}>
-          <h2 className="ch-title rv">이번 주제, {word}</h2>
-          <p className="ch-prose rv" style={{ "--i": 1 }}>{intro.lead}</p>
-        </div>
-      </section>
+        {lead ? (
+          <section className="oc-section oc-split">
+            <h2 className="ch-title rv">이번 주제,<br />{word}</h2>
+            <p className="ch-prose rv" style={{ "--i": 1 }}>{lead}</p>
+          </section>
+        ) : null}
 
-      {intro.details.length > 0 || openCall.eligibilityText ? (
-        <section className="ch-field on-lime">
-          <h2 className="ch-title rv" style={{ marginBottom: 40 }}>모집 요강</h2>
-          <div className="ch-mosaic">
-            {intro.details.map((detail, index) => (
-              <div key={detail.title} className={`ch-tile ${DETAIL_TONES[index % DETAIL_TONES.length]} ${index < 2 ? "t-6-3" : "t-4-3"} rv`} style={{ "--i": index % 3 }}>
-                <h3 className="ch-sub">{detail.title}</h3>
-                <p style={{ whiteSpace: "pre-line" }}>{detail.body}</p>
-              </div>
-            ))}
-            {openCall.eligibilityText ? (
-              <div className="ch-tile on-ink t-12-2 rv">
-                <p className="ch-sub">확인해 주세요</p>
-                <p style={{ whiteSpace: "pre-line" }}>{openCall.eligibilityText}</p>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
+        {requirements.length > 0 || openCall.eligibilityText ? (
+          <section className="oc-section oc-on-tint">
+            <h2 className="ch-title rv oc-heading">모집 요강</h2>
+            <div className="oc-tiles">
+              {requirements.map((item) => (
+                <div key={`${item.title}-${item.body.slice(0, 12)}`} className="oc-tile rv">
+                  {item.title ? <h3 className="ch-sub">{item.title}</h3> : null}
+                  <p>{item.body}</p>
+                </div>
+              ))}
+              {openCall.eligibilityText ? (
+                <div className="oc-tile oc-tile--ink rv">
+                  <h3 className="ch-sub">확인해 주세요</h3>
+                  <p>{openCall.eligibilityText}</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
-      {sections.length > 0 ? (
-        <section className="ch-field on-white">
-          <div className="ch-intro">
-            <h2 className="ch-title rv">지원에서 전시까지</h2>
-            {openCall.mediumText ? <p className="rv" style={{ "--i": 1 }}>{openCall.mediumText}</p> : <span />}
-          </div>
-          <Stages stages={sections.map((section) => ({ title: section.title, body: section.body }))} />
-        </section>
-      ) : null}
+        {sections.length > 0 ? (
+          <section className="oc-section">
+            <h2 className="ch-title rv oc-heading">지원에서 전시까지</h2>
+            {openCall.mediumText ? <p className="rv oc-note">{openCall.mediumText}</p> : null}
+            <ol className="oc-stages">
+              {sections.map((section, index) => (
+                <li key={section.id || section.title} className="rv">
+                  <p className="oc-stages__no">{index + 1}</p>
+                  <h3 className="ch-sub">{section.title}</h3>
+                  {section.body ? <p>{section.body}</p> : null}
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
 
-      {openCall.benefitText || openCall.magazineText ? (
-        <section className="ch-field on-ink">
-          <div className="ch-split" style={{ alignItems: "start" }}>
+        {openCall.benefitText || openCall.magazineText ? (
+          <section className="oc-section oc-split oc-on-ink">
             <h2 className="ch-display rv" style={{ fontSize: "clamp(40px, 6vw, 92px)" }}>선정되면<br />함께하는 일</h2>
             <div>
-              {openCall.benefitText ? <p className="ch-sub rv" style={{ "--i": 1, whiteSpace: "pre-line" }}>{openCall.benefitText}</p> : null}
-              {openCall.magazineText ? <p className="ch-sub rv" style={{ "--i": 2, marginTop: 24, whiteSpace: "pre-line" }}>{openCall.magazineText}</p> : null}
+              {openCall.benefitText ? <p className="ch-sub rv oc-pre" style={{ "--i": 1 }}>{openCall.benefitText}</p> : null}
+              {openCall.magazineText ? <p className="ch-sub rv oc-pre" style={{ "--i": 2, marginTop: 24 }}>{openCall.magazineText}</p> : null}
             </div>
-          </div>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
 
-      <section className="ch-field on-coral">
-        <div className="ch-split">
-          <img className="ch-plate-img rv" src="/images/insadong/annyeong.jpg" alt="서울 인사동의 복합 문화 건물" loading="lazy" />
+        {faqs.length > 0 ? (
+          <FaqTiles title={faqTitle} description={faqDescription} items={faqs} id="open-call-faq" />
+        ) : null}
+
+        <section className="oc-close">
           <div>
-            <h2 className="ch-title rv">UNFRAME은<br />인사동에 있습니다</h2>
-            <p className="rv" style={{ "--i": 1, marginTop: 20 }}>{VENUE_ADDRESS}</p>
+            <h2 className="ch-title rv">{word}, 함께하실래요?</h2>
+            {statusHelpText ? <p className="rv" style={{ "--i": 1, marginTop: 12 }}>{statusHelpText}</p> : null}
           </div>
-        </div>
-      </section>
+          <div className="rv" style={{ "--i": 2 }}>{applyButton}</div>
+        </section>
 
-      {faqs.length > 0 ? (
-        <FaqTiles title={faqTitle} description={faqDescription} items={faqs} id="open-call-faq" />
-      ) : null}
-
-      <section className="ch-close">
-        <div className="ch-close__side"><img src="/images/insadong/insadong-gil.jpg" alt="인사동길" loading="lazy" /></div>
-        <div className="ch-close__main on-blue">
-          <h2 className="ch-title rv">{openCall.title}</h2>
-          <p className="rv" style={{ "--i": 1 }}>{statusHelpText || statusLabel}</p>
-          <div className="rv" style={{ "--i": 2 }}>{applyButton("ch-btn--lime")}</div>
-        </div>
-        <div className="ch-close__side"><img src="/images/insadong/pavilion.jpg" alt="인사동의 전통 정자" loading="lazy" /></div>
-      </section>
-
-      <MarkFooter />
-    </ChapterPage>
+        <MarkFooter credits={[]} />
+      </ChapterPage>
+    </div>
   );
 };
 
