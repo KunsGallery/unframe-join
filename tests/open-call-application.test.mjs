@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  MISSING_FIELD,
   addUploadedImages,
   applySavedProfile,
   buildSubmission,
@@ -22,7 +23,7 @@ test("필수 항목이 모두 있으면 오류가 없고 선택 항목은 비워
 
 test("빈 양식은 필수 항목마다 오류를 낸다", () => {
   const errors = validateApplication(createEmptyApplication());
-  for (const key of ["birthYear", "name", "englishName", "phone", "email", "snsLink", "portfolioUrl", "works", "work-0-imageUrl", "work-1-price"]) {
+  for (const key of ["birthYear", "name", "englishName", "phone", "email", "snsLink", "portfolioUrl", "work-0-imageUrl", "work-1-price"]) {
     assert.ok(errors[key], key);
   }
   assert.equal(errors.stageName, undefined);
@@ -31,7 +32,7 @@ test("빈 양식은 필수 항목마다 오류를 낸다", () => {
 });
 
 test("작품은 2점 미만이면 안 되고 쓰다 만 작품은 빠진 칸을 알려 준다", () => {
-  assert.ok(validateApplication(filled({ works: [work("a"), createEmptyWork()] })).works);
+  assert.equal(validateApplication(filled({ works: [work("a"), createEmptyWork()] }))["work-1-title"], MISSING_FIELD);
   const errors = validateApplication(filled({ works: [work("a"), work("b"), { ...work("c"), price: "" }] }));
   assert.ok(errors["work-2-price"]);
   assert.equal(errors.works, undefined);
@@ -67,4 +68,14 @@ test("여러 장 올리면 빈 줄부터 채우고 6점에서 멈춘다", () => 
   const works = addUploadedImages(createEmptyApplication().works, urls);
   assert.equal(works.length, 6);
   assert.deepEqual(works.map((item) => item.imageUrl), urls.slice(0, 6));
+});
+
+test("빈칸은 문장 없이 표시만 하고, 형식 오류에만 안내 문장을 쓴다", () => {
+  const empty = validateApplication(createEmptyApplication());
+  for (const key of ["name", "birthYear", "portfolioUrl", "work-0-title", "work-0-imageUrl", "work-1-height"]) {
+    assert.equal(empty[key], MISSING_FIELD, key);
+  }
+  const wrong = validateApplication(filled({ birthYear: "90", works: [work("a"), { ...work("b"), width: "90cm" }] }));
+  assert.notEqual(wrong.birthYear, MISSING_FIELD);
+  assert.notEqual(wrong["work-1-width"], MISSING_FIELD);
 });

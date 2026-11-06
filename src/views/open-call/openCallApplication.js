@@ -1,5 +1,8 @@
 import { OPEN_CALL_BIO_MAX_LENGTH, OPEN_CALL_MAX_WORKS, OPEN_CALL_MIN_WORKS } from "../../constants/openCall.js";
 
+// Empty required fields are only highlighted; a sentence is kept for values that need correcting.
+export const MISSING_FIELD = "missing";
+
 export const createEmptyWork = () => ({ imageUrl: "", title: "", material: "", height: "", width: "", year: "", price: "" });
 
 export const createEmptyApplication = () => ({
@@ -16,33 +19,17 @@ export const createEmptyApplication = () => ({
   works: Array.from({ length: OPEN_CALL_MIN_WORKS }, createEmptyWork),
 });
 
-const REQUIRED_FIELDS = [
-  ["birthYear", "출생연도를 입력해 주세요."],
-  ["name", "이름을 입력해 주세요."],
-  ["englishName", "영어 이름을 입력해 주세요."],
-  ["phone", "휴대폰번호를 입력해 주세요."],
-  ["email", "이메일을 입력해 주세요."],
-  ["snsLink", "홈페이지 또는 SNS를 입력해 주세요."],
-  ["portfolioUrl", "포트폴리오 파일을 올려 주세요."],
-];
-const WORK_FIELDS = [
-  ["imageUrl", "이미지를 올려 주세요."],
-  ["title", "작품명을 입력해 주세요."],
-  ["material", "재료를 입력해 주세요."],
-  ["height", "세로를 입력해 주세요."],
-  ["width", "가로를 입력해 주세요."],
-  ["year", "제작연도를 입력해 주세요."],
-  ["price", "작품가격을 입력해 주세요."],
-];
+const REQUIRED_FIELDS = ["birthYear", "name", "englishName", "phone", "email", "snsLink", "portfolioUrl"];
+const WORK_FIELDS = ["imageUrl", "title", "material", "height", "width", "year", "price"];
 
 const hasText = (value) => Boolean(String(value ?? "").trim());
 const isCentimetres = (value) => /^\d+(\.\d+)?$/.test(String(value ?? "").trim()) && Number(value) > 0;
-const isBlankWork = (work) => WORK_FIELDS.every(([key]) => !hasText(work[key]));
+const isBlankWork = (work) => WORK_FIELDS.every((key) => !hasText(work[key]));
 
 export const validateApplication = (data, customFields = [], customValues = {}) => {
   const errors = {};
-  REQUIRED_FIELDS.forEach(([key, message]) => {
-    if (!hasText(data[key])) errors[key] = message;
+  REQUIRED_FIELDS.forEach((key) => {
+    if (!hasText(data[key])) errors[key] = MISSING_FIELD;
   });
 
   if (hasText(data.birthYear) && !/^\d{4}$/.test(data.birthYear.trim())) errors.birthYear = "출생연도는 4자리 숫자로 입력해 주세요.";
@@ -52,13 +39,12 @@ export const validateApplication = (data, customFields = [], customValues = {}) 
   if (String(data.artistStatement ?? "").trim().length > OPEN_CALL_BIO_MAX_LENGTH) errors.artistStatement = `작가 소개는 ${OPEN_CALL_BIO_MAX_LENGTH}자 이내로 입력해 주세요.`;
 
   const filled = data.works.filter((work) => !isBlankWork(work));
-  if (filled.length < OPEN_CALL_MIN_WORKS) errors.works = `작품을 ${OPEN_CALL_MIN_WORKS}점 이상 올려 주세요.`;
-  if (filled.length > OPEN_CALL_MAX_WORKS) errors.works = `작품은 ${OPEN_CALL_MAX_WORKS}점까지 올릴 수 있습니다.`;
+    if (filled.length > OPEN_CALL_MAX_WORKS) errors.works = `작품은 ${OPEN_CALL_MAX_WORKS}점까지 올릴 수 있습니다.`;
   data.works.forEach((work, index) => {
     if (isBlankWork(work) && index >= OPEN_CALL_MIN_WORKS) return;
     if (isBlankWork(work) && filled.length >= OPEN_CALL_MIN_WORKS) return;
-    WORK_FIELDS.forEach(([key, message]) => {
-      if (!hasText(work[key])) errors[`work-${index}-${key}`] = message;
+    WORK_FIELDS.forEach((key) => {
+      if (!hasText(work[key])) errors[`work-${index}-${key}`] = MISSING_FIELD;
     });
     ["height", "width"].forEach((key) => {
       if (hasText(work[key]) && !isCentimetres(work[key])) errors[`work-${index}-${key}`] = "숫자만 입력해 주세요.";
@@ -67,7 +53,7 @@ export const validateApplication = (data, customFields = [], customValues = {}) 
 
   customFields.filter((field) => field.required).forEach((field) => {
     const value = customValues[field.id];
-    if (field.type === "checkbox" ? value !== true : !hasText(value)) errors[`custom-${field.id}`] = `${field.label || "이 항목"}을 입력해 주세요.`;
+    if (field.type === "checkbox" ? value !== true : !hasText(value)) errors[`custom-${field.id}`] = MISSING_FIELD;
   });
   return errors;
 };

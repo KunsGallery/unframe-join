@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, Check, FileText, Loader2, Plus, Upload, X } from "lucide-react";
+import { ArrowLeft, Check, FileText, Loader2, Plus, Upload, X } from "lucide-react";
 import { auth } from "../../lib/firebase";
 import { callSalonFunction } from "../../lib/salonApi";
 import {
@@ -22,6 +22,7 @@ import {
   normalizeOpenCallNotificationSettings,
 } from "../../constants/openCall";
 import {
+  MISSING_FIELD,
   addUploadedImages,
   applySavedProfile,
   buildSubmission,
@@ -61,11 +62,13 @@ const clearDraft = (openCallId) => {
   }
 };
 
+const MISSING_STYLE = "[&_input]:border-amber-500 [&_input]:bg-amber-50 [&_textarea]:border-amber-500 [&_textarea]:bg-amber-50 [&_select]:border-amber-500 [&_select]:bg-amber-50";
+
 const FieldError = ({ message }) =>
-  message ? <p className="mt-1 text-sm font-medium text-red-700">{message}</p> : null;
+  message && message !== MISSING_FIELD ? <p className="mt-1 text-sm text-amber-900">{message}</p> : null;
 
 const Field = ({ label, optional, error, className = "", children }) => (
-  <label className={`block min-w-0 ${className}`}>
+  <label data-missing={error === MISSING_FIELD || undefined} className={`block min-w-0 ${className} ${error === MISSING_FIELD ? MISSING_STYLE : ""}`}>
     <span className="mb-1 block text-sm font-semibold text-zinc-900">
       {label}
       {optional ? <span className="ml-1 font-normal text-zinc-500">선택</span> : null}
@@ -227,7 +230,16 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
     const nextErrors = validateApplication(form, customFields, customValues);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
-      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Wait for the highlights to render, then take the applicant to the first one.
+      requestAnimationFrame(() => {
+        const first = document.querySelector("form [data-missing]");
+        if (!first) {
+          summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+        first.scrollIntoView({ behavior: "smooth", block: "center" });
+        first.querySelector("input:not([type=file]), textarea, select")?.focus({ preventScroll: true });
+      });
       return;
     }
     if (previewMode) {
@@ -317,9 +329,9 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
             <Field label="이메일" error={errors.email}><input type="email" autoComplete="email" className={INPUT} {...field("email")} /></Field>
             <Field label="홈페이지 또는 SNS" error={errors.snsLink}><input className={INPUT} placeholder="https:// 또는 @아이디" {...field("snsLink")} /></Field>
             <Field label="기타 사이트" optional error={errors.otherLink}><input className={INPUT} {...field("otherLink")} /></Field>
-            <div className="min-w-0">
+            <div className="min-w-0" data-missing={errors.portfolioUrl === MISSING_FIELD || undefined}>
               <span className="mb-1 block text-sm font-semibold text-zinc-900">포트폴리오 파일</span>
-              <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-sm border border-dashed border-zinc-400 bg-white px-3 text-sm text-zinc-800 focus-within:ring-1 focus-within:ring-[#004aad]">
+              <label className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-sm border border-dashed px-3 text-sm text-zinc-800 focus-within:ring-1 focus-within:ring-[#004aad] ${errors.portfolioUrl === MISSING_FIELD ? "border-amber-500 bg-amber-50" : "border-zinc-400 bg-white"}`}>
                 {form.portfolioUrl ? <Check size={16} className="shrink-0 text-emerald-700" /> : <FileText size={16} className="shrink-0" />}
                 <span className="truncate">{form.portfolioUrl ? "올림 완료 (누르면 교체)" : "PDF 파일 올리기"}</span>
                 <input type="file" accept=".pdf,.zip,.doc,.docx" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadPortfolio(file); }} />
@@ -362,7 +374,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
             {form.works.map((work, index) => (
               <li key={index} className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-zinc-300 pb-3 sm:grid-cols-[88px_minmax(0,1fr)]">
                 <div>
-                  <label className="relative flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed border-zinc-400 bg-white text-zinc-500 focus-within:ring-1 focus-within:ring-[#004aad]">
+                  <label data-missing={errors[`work-${index}-imageUrl`] === MISSING_FIELD || undefined} className={`relative flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed text-zinc-500 focus-within:ring-1 focus-within:ring-[#004aad] ${errors[`work-${index}-imageUrl`] === MISSING_FIELD ? "border-amber-500 bg-amber-50" : "border-zinc-400 bg-white"}`}>
                     {work.imageUrl ? <img src={work.imageUrl} alt={`작품 ${index + 1} 미리보기`} className="h-full w-full object-contain" /> : <Upload size={18} aria-hidden="true" />}
                     <span className="sr-only">작품 {index + 1} 이미지 {work.imageUrl ? "교체" : "올리기"}</span>
                     <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadImages([file], index); }} />
@@ -411,7 +423,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
 
           <div ref={summaryRef} className="mt-4">
             {errorCount > 0 ? (
-              <p role="alert" className="mb-3 flex items-center gap-2 text-sm font-medium text-red-700"><AlertCircle size={16} className="shrink-0" />입력을 확인해야 할 항목이 {errorCount}개 있습니다.</p>
+              <p role="status" className="mb-3 text-sm text-zinc-800">표시된 칸 {errorCount}곳을 확인해 주세요.</p>
             ) : null}
             {notice ? <p role="status" className="mb-3 text-sm font-medium text-zinc-900">{notice}</p> : null}
             {bothAgreed ? (
