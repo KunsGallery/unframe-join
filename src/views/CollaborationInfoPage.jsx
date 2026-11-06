@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Send } from "lucide-react";
+import { fillContactFromProfile } from "../lib/profilePrefill";
 import { callSalonFunction } from "../lib/salonApi";
 
 const options = ["공동 기획", "브랜드·콘텐츠", "음악·미디어", "기술·인터랙티브", "기타 제안"];
@@ -17,12 +18,17 @@ const fields = [
 ];
 const inputClass = "min-h-12 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm font-normal outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15";
 
-export default function CollaborationInfoPage({ user, onBack, handleLogin, onViewInquiry }) {
+export default function CollaborationInfoPage({ user, initialProfileData, onBack, handleLogin, onViewInquiry }) {
   const [form, setForm] = useState({ category: options[0], privacyAgreed: false });
   const [state, setState] = useState("idle");
   const [error, setError] = useState("");
   const [inquiryId, setInquiryId] = useState("");
   const signedIn = user && !user.isAnonymous;
+  useEffect(() => {
+    // The saved profile arrives after this form mounts, and typed values must survive it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((current) => fillContactFromProfile(current, initialProfileData, user?.email || ""));
+  }, [initialProfileData, user?.email]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const submit = async (event) => {
     event.preventDefault();

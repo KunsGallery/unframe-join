@@ -77,6 +77,7 @@ export const buildSubmission = (data, customFields = [], customValues = {}) => (
 // Fills empty fields from the saved profile without overwriting what was already typed.
 export const applySavedProfile = (data, profile = {}, email = "") => ({
   ...data,
+  birthYear: data.birthYear || profile?.birthYear || "",
   name: data.name || profile?.realName || "",
   englishName: data.englishName || profile?.englishName || "",
   stageName: data.stageName || profile?.stageName || "",

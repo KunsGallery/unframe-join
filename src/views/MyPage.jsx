@@ -39,6 +39,7 @@ const EMPTY_PROFILE = {
   stageName: "",
   englishName: "",
   brandName: "",
+  birthYear: "",
   phone: "",
   addressMain: "",
   addressDetail: "",
@@ -739,6 +740,22 @@ const ProfileForm = ({
 
       <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
         <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
+          출생연도
+        </label>
+        <input
+          inputMode="numeric"
+          maxLength={4}
+          value={profileForm.birthYear}
+          onChange={(e) =>
+            setProfileForm((prev) => ({ ...prev, birthYear: e.target.value.replace(/\D/g, "") }))
+          }
+          className="w-full rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-4 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
+          placeholder="예: 1994"
+        />
+      </div>
+
+      <div className="rounded-[28px] border border-zinc-100 bg-white px-5 py-5">
+        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-zinc-300 mb-2">
           활동명 / 예명
         </label>
         <input
@@ -1095,8 +1112,10 @@ const MyPage = ({
   appId,
   user,
   focusedApplicationId,
+  initialTab = "dashboard",
+  onProfileSaved,
 }) => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [selectedAppId, setSelectedAppId] = useState(focusedApplicationId || "");
   const [profileForm, setProfileForm] = useState(EMPTY_PROFILE);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -1169,7 +1188,7 @@ const MyPage = ({
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
-          setProfileForm({ ...EMPTY_PROFILE, ...snap.data() });
+          setProfileForm({ ...EMPTY_PROFILE, ...snap.data(), realName: snap.data().realName || user.displayName || "" });
         } else {
           setProfileForm({
             ...EMPTY_PROFILE,
@@ -1202,6 +1221,7 @@ const MyPage = ({
         { merge: true }
       );
 
+      onProfileSaved?.(profileForm);
       alert("기본정보가 저장되었습니다.");
     } catch (error) {
       console.error(error);

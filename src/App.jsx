@@ -5,9 +5,11 @@ import {
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-import { collection, onSnapshot, query, where, doc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { isAdminEmail } from "./constants/admin";
+import { shouldShowWelcomeGuide } from "./lib/profilePrefill";
+import WelcomeGuide from "./views/WelcomeGuide";
 import { auth, db, googleProvider, appId } from "./lib/firebase";
 import LoadingOverlay from "./components/ui/LoadingOverlay";
 import ParticleBackground from "./components/ui/ParticleBackground";
@@ -39,6 +41,7 @@ const EMPTY_PROFILE_DATA = {
   stageName: "",
   englishName: "",
   brandName: "",
+  birthYear: "",
   phone: "",
   addressMain: "",
   addressDetail: "",
@@ -168,6 +171,8 @@ const App = () => {
 
 
   const [savedProfileData, setSavedProfileData] = useState(EMPTY_PROFILE_DATA);
+  const [showWelcomeGuide, setShowWelcomeGuide] = useState(false);
+  const [myPageTab, setMyPageTab] = useState("dashboard");
 
   const myApplications = useMemo(() => {
     if (!user || user.isAnonymous) return [];
@@ -296,11 +301,15 @@ const App = () => {
       try {
         const ref = doc(db, "artifacts", appId, "users", user.uid, "profile", "basic");
         const snap = await getDoc(ref);
+        if (shouldShowWelcomeGuide(snap.exists() ? snap.data() : null) && !isAdminEmail(user.email)) {
+          setShowWelcomeGuide(true);
+        }
 
         if (snap.exists()) {
           setSavedProfileData({
             ...EMPTY_PROFILE_DATA,
             ...snap.data(),
+            realName: snap.data().realName || user.displayName || "",
           });
         } else {
           setSavedProfileData({
@@ -420,6 +429,30 @@ const App = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Someone mid-application stays there; leaving for the profile page would lose what they typed.
+  const isFillingForm =
+    viewMode === "user" &&
+    (selectedTrack === "collaboration" ||
+      (selectedTrack === "rental" && rentalMode === "apply") ||
+      (selectedTrack === "open-call" && openCallMode === "form") ||
+      (selectedTrack === "salon" && salonMode === "apply"));
+
+  // Remembered on the account, so the guide does not return on another device.
+  const closeWelcomeGuide = () => {
+    setShowWelcomeGuide(false);
+    if (!user || user.isAnonymous) return;
+    setDoc(
+      doc(db, "artifacts", appId, "users", user.uid, "profile", "basic"),
+      { welcomeSeenAt: serverTimestamp() },
+      { merge: true }
+    ).catch((error) => console.error(error));
+  };
+  const openProfileFromWelcome = () => {
+    closeWelcomeGuide();
+    setMyPageTab("profile");
+    setViewMode("my-page");
+    window.scrollTo({ top: 0 });
+  };
   const handleLogin = () => signInWithPopup(auth, googleProvider);
   const handleSignOut = () => signOut(auth).then(() => window.location.reload());
   const handleSalonApply = async () => {
@@ -521,12 +554,15 @@ const App = () => {
             applications={myApplications}
             handleReturn={() => {
               setFocusedApplicationId("");
+              setMyPageTab("dashboard");
               setViewMode("user");
             }}
             db={db}
             appId={appId}
             user={user}
             focusedApplicationId={focusedApplicationId}
+            initialTab={myPageTab}
+            onProfileSaved={(profile) => setSavedProfileData((current) => ({ ...current, ...profile }))}
           />
         ) : (
           <div className="transition-all duration-700">
@@ -580,6 +616,7 @@ const App = () => {
                   key={JSON.stringify(rentalPrefill)}
                   initial={rentalPrefill}
                   user={user}
+                  initialProfileData={savedProfileData}
                   handleLogin={handleLogin}
                   onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }}
                   onBack={() => {
@@ -589,7 +626,7 @@ const App = () => {
                 />
               )
             ) : selectedTrack === "collaboration" ? (
-              <CollaborationInfoPage db={db} user={user} onBack={handleReturnToJoinHome} handleLogin={handleLogin} onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }} />
+              <CollaborationInfoPage db={db} user={user} initialProfileData={savedProfileData} onBack={handleReturnToJoinHome} handleLogin={handleLogin} onViewInquiry={(id) => { setFocusedApplicationId(id); setViewMode("my-page"); }} />
             ) : selectedTrack === "salon" ? (
               salonMode === "detail" ? (
                 <SalonDetail
@@ -664,6 +701,15 @@ const App = () => {
         </Suspense>
         </ErrorBoundary>
       </main>
+
+      {showWelcomeGuide ? (
+        <WelcomeGuide
+          name={user?.displayName || ""}
+          canOpenMyPage={!isFillingForm}
+          onClose={closeWelcomeGuide}
+          onOpenProfile={openProfileFromWelcome}
+        />
+      ) : null}
 
       <Footer />
     </div>

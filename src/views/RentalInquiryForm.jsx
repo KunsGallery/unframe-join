@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Send } from "lucide-react";
+import { fillContactFromProfile } from "../lib/profilePrefill";
 import { callSalonFunction } from "../lib/salonApi";
 import { ChapterPage, MarkFooter } from "./chapters/Chapters";
 
@@ -8,11 +9,16 @@ const INITIAL = { title: "", organization: "", name: "", phone: "", email: "", p
 const SUPPORT_SCOPES = ["공간 이용", "공간 이용 + 운영 지원 상담", "전시 기획·디렉팅 상담", "아직 미정"];
 const inputClass = "min-h-12 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-[#004AAD] focus:ring-2 focus:ring-[#004AAD]/15";
 
-export default function RentalInquiryForm({ initial, user, handleLogin, onBack, onViewInquiry }) {
+export default function RentalInquiryForm({ initial, user, initialProfileData, handleLogin, onBack, onViewInquiry }) {
   const [form, setForm] = useState(() => ({ ...INITIAL, supportScope: "공간 이용", ...initial }));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [inquiryId, setInquiryId] = useState("");
+  useEffect(() => {
+    // The saved profile arrives after this form mounts, and typed values must survive it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((current) => fillContactFromProfile(current, initialProfileData, user?.email || ""));
+  }, [initialProfileData, user?.email]);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const submit = async (event) => {
     event.preventDefault();

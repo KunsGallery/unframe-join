@@ -140,3 +140,8 @@ test("올리는 동안의 상태는 제출과 임시 저장에 포함되지 않�
   assert.equal("uploadId" in stripUploadState(data).works[0], false);
   assert.equal(stripUploadState(data).works[0].title, "제목");
 });
+
+test("저장된 프로필의 출생연도도 빈칸에 채운다", () => {
+  assert.equal(applySavedProfile(createEmptyApplication(), { birthYear: "1994" }).birthYear, "1994");
+  assert.equal(applySavedProfile({ ...createEmptyApplication(), birthYear: "1980" }, { birthYear: "1994" }).birthYear, "1980");
+});
