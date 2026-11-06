@@ -14,7 +14,7 @@ const SOLAPI_API_BASE = "https://api.solapi.com";
 const PF_ID = "KA01PF260325031321194kcKwc6ZYXsv";
 
 const TEMPLATE_IDS = {
-  application_received: "KA01TP260325034339068F1cDumvabAJ",
+  application_received: "KA01TP261106065800163RqIuHqhyOOW",
   approved: "KA01TP260325034526065GQ9XimofAfW",
   rejected: "KA01TP260325034622780vfd4ywQIfcW",
   additional_requested: "KA01TP260325034817679Im8S9Aminvm",
@@ -53,6 +53,8 @@ const buildAuthHeaders = ({
   };
 };
 
+const SCHEDULE_FALLBACK = "추후 안내";
+
 const buildKakaoPayload = ({
   type,
   to,
@@ -64,6 +66,9 @@ const buildKakaoPayload = ({
   applicationId,
   applicationDetailUrl,
   kakaoMessage,
+  receivedAt,
+  deadlineLabel,
+  announcementLabel,
 }) => {
   const normalizedTo = normalizeKoreanPhone(to);
 
@@ -97,11 +102,15 @@ const buildKakaoPayload = ({
       kakaoOptions: {
         pfId: PF_ID,
         templateId,
+        // Solapi matches these against the approved template, so they stay exactly these five.
         variables: {
-          ...commonVariables,
-          ...customVariables,
-          "#{selected_date}": selectedDate || "-",
-          "#{program_name}": formatProgram(selectedProgram),
+          "#{작가명}": applicantName || "지원자",
+          "#{공모명}": exhibitionTitle || "-",
+          "#{접수일시}":
+            receivedAt ||
+            new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "medium", timeStyle: "short" }).format(new Date()),
+          "#{모집마감일}": deadlineLabel || SCHEDULE_FALLBACK,
+          "#{결과발표일}": announcementLabel || SCHEDULE_FALLBACK,
         },
       },
     };
@@ -212,7 +221,7 @@ const sendKakaoMessage = async ({ apiKey, apiSecret, payload }) => {
 
 const handleApplicantReceipt = async (body, event, credentials) => {
   const notice = await loadApplicantNotification(event, body.applicationId);
-  const { identity, ref, context, settings, render, details } = notice;
+  const { identity, ref, context, settings, details } = notice;
 
   if (!settings.kakaoEnabled) return json(200, { ok: true, skipped: true });
   if (!context.phone) return json(400, { error: "Recipient phone is required" });
@@ -228,11 +237,9 @@ const handleApplicantReceipt = async (body, event, credentials) => {
         to: context.phone,
         applicantName: context.name,
         exhibitionTitle: details.title,
-        selectedDate: details.dateLabel,
-        selectedProgram: details.program,
-        applicationId: context.applicationId,
-        applicationDetailUrl: details.detailUrl,
-        kakaoMessage: render(settings.kakaoMessage),
+        receivedAt: context.submittedAt,
+        deadlineLabel: details.deadlineLabel,
+        announcementLabel: details.announcementLabel,
       }),
     });
     return json(200, { ok: true, result });

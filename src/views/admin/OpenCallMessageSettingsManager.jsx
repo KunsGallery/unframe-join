@@ -10,6 +10,7 @@ import {
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import {
   OPEN_CALL_FALLBACK,
+  OPEN_CALL_KAKAO_TEMPLATE_TEXT,
   OPEN_CALL_TEMPLATE_VARIABLES,
   createFallbackOpenCall,
   getOpenCallDisplayStatus,
@@ -465,8 +466,8 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
         ].join("\n\n")}
       />
       <PreviewBlock
-        title="알림톡 미리보기"
-        body={getTemplatePreview(notificationSettings.kakaoMessage, previewContext)}
+        title="알림톡 내용 (솔라피 승인 템플릿)"
+        body={OPEN_CALL_KAKAO_TEMPLATE_TEXT}
       />
       <PreviewBlock
         title="SMS 미리보기"
@@ -737,14 +738,9 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
               rows={4}
               placeholder="{{openCallTitle}}에 새 지원서가 접수되었습니다."
             />
-            <FieldBlock
-              label="알림톡 문구"
-              value={notificationSettings.kakaoMessage || ""}
-              onChange={(value) => updateNotificationSetting("kakaoMessage", value)}
-              textarea
-              rows={3}
-              placeholder="{{name}} 작가님, {{openCallTitle}} 지원이 정상적으로 접수되었습니다."
-            />
+            <p className="rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm leading-relaxed text-zinc-700 break-keep">
+              알림톡은 솔라피에서 승인된 템플릿 내용으로 발송되어 여기서 고칠 수 없습니다. 작가명, 공모명, 접수일시는 자동으로 들어가고, 모집 마감일과 결과 발표일은 공고 일정에서 가져옵니다. 일정이 비어 있으면 &quot;추후 안내&quot;로 나갑니다.
+            </p>
             <FieldBlock
               label="SMS 문구"
               value={notificationSettings.smsMessage || ""}

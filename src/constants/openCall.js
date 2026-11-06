@@ -18,6 +18,31 @@ export const DEFAULT_OPEN_CALL_TERMS = `이 오픈콜에 지원하면 아래 내
 
 지원자는 동의하지 않을 권리가 있으나, 동의하지 않으면 오픈콜에 지원할 수 없습니다.`;
 
+// The approved Solapi template. Changing this wording requires approving a new template there.
+export const OPEN_CALL_KAKAO_TEMPLATE_TEXT = `안녕하세요, #{작가명}님.
+UNFRAME입니다.
+
+《#{공모명}》 오픈콜에 지원해 주셔서 감사합니다.
+
+보내주신 신청서와 자료가 정상적으로 접수되었습니다. 💌
+
+■ 신청 내역
+공모: #{공모명}
+접수일시: #{접수일시}
+
+■ 향후 일정
+모집 마감: #{모집마감일}
+결과 발표: #{결과발표일}
+
+제출해 주신 자료는 UNFRAME 운영팀에서 검토할 예정입니다.
+
+선정 결과 및 이후 절차는 안내된 일정에 따라 등록하신 연락처로 개별 안내해 드리겠습니다.
+
+소중한 시간과 정성을 들여 지원해 주셔서 진심으로 감사드립니다.
+작가님의 새로운 시도와 가능성을 응원합니다.
+
+UNFRAME`;
+
 export const OPEN_CALL_TEMPLATE_VARIABLES = [
   "{{name}}",
   "{{email}}",

@@ -1,6 +1,7 @@
 import {
   OPEN_CALL_TITLE,
   normalizeOpenCallNotificationSettings,
+  parseOpenCallDate,
   renderOpenCallTemplate,
 } from "../../../src/constants/openCall.js";
 import { adminDb, verifyUserRequest } from "./firebaseAdmin.mjs";
@@ -21,6 +22,16 @@ const formatSeoulDateTime = (date) =>
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+
+const SCHEDULE_FALLBACK = "추후 안내";
+
+const formatSeoulDate = (value) => {
+  const date = parseOpenCallDate(value);
+  if (!date) return SCHEDULE_FALLBACK;
+  const parts = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type).value;
+  return `${part("year")}년 ${part("month")}월 ${part("day")}일`;
+};
 
 // Applicants trigger their own receipt notice, so everything sent is derived from
 // stored documents. Request bodies only ever identify which application it is.
@@ -66,6 +77,8 @@ export const loadApplicantNotification = async (event, applicationId) => {
       program: { name: title, price: 0 },
       stageName: singleLine(openCall.heroAccent, 100),
       submittedAtIso: submittedAt.toISOString(),
+      deadlineLabel: formatSeoulDate(openCall.applicationEndAt),
+      announcementLabel: formatSeoulDate(openCall.announcementAt),
       detailUrl: `${getBaseUrl()}/?view=my-page&applicationId=${encodeURIComponent(applicationId)}&app=${encodeURIComponent(applicationId)}`,
     },
   };

@@ -207,9 +207,42 @@ test("알림톡: 수신번호와 내용은 서버 문서 기준이다", async ()
   assert.equal(kakaos().length, 1);
   assert.equal(kakaos()[0].to, "01011112222");
   assert.equal(JSON.stringify(kakaos()).includes("FORGED"), false);
-  assert.equal(kakaos()[0].kakaoOptions.variables["#{name}"], "지원자");
-  assert.equal(kakaos()[0].kakaoOptions.variables["#{project_name}"], "서버 공고");
-  assert.equal(kakaos()[0].kakaoOptions.variables["#{message}"], "지원자님 서버 공고");
+  assert.equal(kakaos()[0].kakaoOptions.templateId, "KA01TP261106065800163RqIuHqhyOOW");
+  const variables = kakaos()[0].kakaoOptions.variables;
+  assert.deepEqual(Object.keys(variables).sort(), ["#{결과발표일}", "#{공모명}", "#{모집마감일}", "#{작가명}", "#{접수일시}"].sort());
+  assert.equal(variables["#{작가명}"], "지원자");
+  assert.equal(variables["#{공모명}"], "서버 공고");
+});
+
+test("알림톡: 접수일시·마감일·발표일을 서울 시간으로 채운다", async () => {
+  store[APPLICATIONS].mine.submittedAt = new Date("2026-11-06T15:30:00.000Z");
+  Object.assign(store[OPEN_CALLS]["call-1"], {
+    applicationEndAt: "2026-11-27T15:30:00.000Z",
+    announcementAt: "2026-12-01T01:00:00.000Z",
+  });
+  await call(sendKakao, { type: "application_received", applicationId: "mine" });
+  const variables = kakaos()[0].kakaoOptions.variables;
+  assert.match(variables["#{접수일시}"], /2026\. 11\. 7\./);
+  assert.equal(variables["#{모집마감일}"], "2026년 11월 28일");
+  assert.equal(variables["#{결과발표일}"], "2026년 12월 1일");
+});
+
+test("알림톡: 일정이 없는 공고도 빈칸 없이 보낸다", async () => {
+  await call(sendKakao, { type: "application_received", applicationId: "mine" });
+  const variables = kakaos()[0].kakaoOptions.variables;
+  assert.equal(variables["#{모집마감일}"], "추후 안내");
+  assert.equal(variables["#{결과발표일}"], "추후 안내");
+});
+
+test("알림톡: 관리자 테스트 발송도 새 템플릿 변수를 빠짐없이 채운다", async () => {
+  const result = await call(sendKakao, {
+    type: "application_received", adminTest: true, to: "01012345678", applicantName: "테스트", exhibitionTitle: "테스트 공고",
+  }, "admin");
+  assert.equal(result.statusCode, 200);
+  const variables = kakaos()[0].kakaoOptions.variables;
+  assert.equal(variables["#{작가명}"], "테스트");
+  assert.equal(variables["#{공모명}"], "테스트 공고");
+  for (const key of ["#{접수일시}", "#{모집마감일}", "#{결과발표일}"]) assert.ok(variables[key], key);
 });
 
 test("알림톡: 같은 신청으로 두 번 호출해도 한 번만 발송된다", async () => {
