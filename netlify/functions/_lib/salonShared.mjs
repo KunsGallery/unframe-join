@@ -78,7 +78,7 @@ export const extractOpenChatCode = (value) => {
   return match?.[1] || raw.replace(/^\/+|\/+$/g, "");
 };
 
-const buildAuthHeaders = ({ apiKey, apiSecret }) => {
+export const buildAuthHeaders = ({ apiKey, apiSecret }) => {
   const date = new Date().toISOString();
   const salt = crypto.randomUUID();
   const signature = crypto.createHmac("sha256", apiSecret).update(date + salt).digest("hex");

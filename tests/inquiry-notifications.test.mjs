@@ -189,3 +189,99 @@ test("오픈콜은 기존 접수 알림 흐름을 쓰므로 여기서 보내지 
   assert.equal(saved().adminNotifiedAt, undefined);
   assert.equal(saved().adminNotifyError, undefined);
 });
+
+const withSolapi = () => {
+  process.env.SOLAPI_API_KEY = "solapi-key";
+  process.env.SOLAPI_API_SECRET = "solapi-secret";
+};
+const clearSolapi = () => {
+  delete process.env.SOLAPI_API_KEY;
+  delete process.env.SOLAPI_API_SECRET;
+};
+const kakaos = () => sent.filter((request) => request.url.includes("solapi")).map((request) => request.body.message);
+const EXPECTED_KEYS = ["#{name}", "#{program_name}", "#{project_name}", "#{selected_date}"];
+
+test("대관 문의자에게 접수 알림톡이 가고 값은 문의 내용으로 채워진다", async () => {
+  withSolapi();
+  assert.equal((await post(rental())).statusCode, 201);
+  clearSolapi();
+
+  assert.equal(kakaos().length, 1);
+  const message = kakaos()[0];
+  assert.equal(message.to, "01011112222");
+  assert.equal(message.kakaoOptions.templateId, "KA01TP260325034339068F1cDumvabAJ");
+  assert.deepEqual(Object.keys(message.kakaoOptions.variables).sort(), [...EXPECTED_KEYS].sort());
+  assert.deepEqual(message.kakaoOptions.variables, {
+    "#{name}": "김담당",
+    "#{project_name}": "봄 팝업 전시",
+    "#{selected_date}": "2027-03-02",
+    "#{program_name}": "전시",
+  });
+  assert.ok(saved().applicantKakaoSentAt instanceof Date);
+});
+
+test("대관 희망 날짜가 없으면 협의 후 결정으로 보낸다", async () => {
+  withSolapi();
+  await post(rental({ date: "" }));
+  clearSolapi();
+  assert.equal(kakaos()[0].kakaoOptions.variables["#{selected_date}"], "협의 후 결정");
+});
+
+test("협업 제안자에게도 접수 알림톡이 간다", async () => {
+  withSolapi();
+  await post(collaboration());
+  clearSolapi();
+  assert.deepEqual(kakaos()[0].kakaoOptions.variables, {
+    "#{name}": "이담당",
+    "#{project_name}": "브랜드 협업 제안",
+    "#{selected_date}": "협의 후 결정",
+    "#{program_name}": "공동 기획",
+  });
+});
+
+test("메시지에 실리는 입력값은 한 줄로 줄이고 길이를 제한한다", async () => {
+  withSolapi();
+  await post(rental({ title: `첫 줄\r\n둘째 줄 ${"가".repeat(150)}` }));
+  clearSolapi();
+  const title = kakaos()[0].kakaoOptions.variables["#{project_name}"];
+  assert.ok(!/[\r\n]/.test(title));
+  assert.ok(title.length <= 60);
+});
+
+test("같은 사용자의 접수 알림톡은 하루 3건까지만 보내고 접수는 계속 받는다", async () => {
+  withSolapi();
+  for (let index = 0; index < 4; index += 1) {
+    assert.equal((await post(rental())).statusCode, 201);
+  }
+  clearSolapi();
+  assert.equal(kakaos().length, 3);
+});
+
+test("알림톡 발송이 실패해도 접수는 성공하고 실패가 기록된다", async () => {
+  withSolapi();
+  const mail = resendResponse;
+  resendResponse = () => new Response(JSON.stringify({ errorMessage: "fail" }), { status: 400 });
+  const result = await post(rental());
+  resendResponse = mail;
+  clearSolapi();
+  assert.equal(result.statusCode, 201);
+  assert.ok(saved().applicantKakaoError);
+  assert.equal(saved().applicantKakaoSentAt, undefined);
+});
+
+test("오픈콜은 기존 접수 알림 흐름을 쓰므로 이 알림톡을 보내지 않는다", async () => {
+  withSolapi();
+  store["artifacts/unframe-join/public/data/openCalls"] = {
+    "call-1": { title: "공고", isVisible: true, status: "open", formSettings: { customFields: [] } },
+  };
+  process.env.R2_PUBLIC_BASE_URL = "https://files.unframe.kr";
+  const result = await post({
+    trackType: "open-call", openCallId: "call-1", name: "지원자", englishName: "Ji Won", phone: "01011112222",
+    email: "a@example.com", birthYear: "1990", snsLink: "https://x",
+    works: ["a", "b"].map((name) => ({ imageUrl: `https://files.unframe.kr/open-call/works/2026/11/owner/${name}.jpg`, title: "t", material: "m", height: "60", width: "90", year: "2026", price: "100" })),
+    portfolioUrl: "https://files.unframe.kr/open-call/portfolio/2026/11/owner/p.pdf", termsAgreed: true, salesAgreed: true,
+  });
+  clearSolapi();
+  assert.equal(result.statusCode, 201);
+  assert.equal(kakaos().length, 0);
+});

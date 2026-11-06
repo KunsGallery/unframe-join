@@ -9,7 +9,7 @@ import {
   normalizeOpenCallFormSettings,
 } from "../../src/constants/openCall.js";
 import { adminDb, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
-import { notifyAdminOfInquiry } from "./_lib/inquiryNotifications.mjs";
+import { notifyAdminOfInquiry, notifyApplicantOfInquiry } from "./_lib/inquiryNotifications.mjs";
 import { enforceRateLimit } from "./_lib/rateLimit.mjs";
 import { ROOT_PATH, applicationsPath, json, parseBody } from "./_lib/salonShared.mjs";
 
@@ -227,7 +227,7 @@ export async function handler(event) {
 
     const ref = adminDb.collection(applicationsPath).doc();
     await ref.set({ ...fields, status: "review", userId: identity.uid, submittedAt: new Date() });
-    await notifyAdminOfInquiry(ref, fields);
+    await Promise.all([notifyAdminOfInquiry(ref, fields), notifyApplicantOfInquiry(ref, fields, identity.uid)]);
     return json(201, { ok: true, applicationId: ref.id });
   } catch (error) {
     if (!error.statusCode) console.error("submit-application error");

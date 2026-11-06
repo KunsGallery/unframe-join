@@ -1,6 +1,13 @@
-import { getBaseUrl } from "./salonShared.mjs";
+import { enforceRateLimit } from "./rateLimit.mjs";
+import { buildAuthHeaders, getBaseUrl } from "./salonShared.mjs";
 
 const SEND_TIMEOUT_MS = 5000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const KAKAO_DAILY_LIMIT = 3;
+const KAKAO_VALUE_MAX = 60;
+const KAKAO_TEMPLATE_ID = "KA01TP260325034339068F1cDumvabAJ";
+const KAKAO_PF_ID = "KA01PF260325031321194kcKwc6ZYXsv";
+const SCHEDULE_UNDECIDED = "협의 후 결정";
 
 const INQUIRIES = {
   rental: {
@@ -95,5 +102,47 @@ export const notifyAdminOfInquiry = async (ref, fields) => {
   } catch (error) {
     console.error("inquiry notification failed:", error?.message);
     await ref.update({ adminNotifyError: new Date() }).catch(() => {});
+  }
+};
+
+const kakaoValue = (value, fallback) => singleLine(value).slice(0, KAKAO_VALUE_MAX) || fallback;
+
+const buildKakaoVariables = (fields) => ({
+  "#{name}": kakaoValue(fields.name, "신청자"),
+  "#{project_name}": kakaoValue(fields.title, "-"),
+  "#{selected_date}": kakaoValue(fields.trackType === "rental" ? fields.date : "", SCHEDULE_UNDECIDED),
+  "#{program_name}": kakaoValue(fields.trackType === "rental" ? fields.purpose : fields.category, "-"),
+});
+
+const sendInquiryKakao = async (fields) => {
+  const { SOLAPI_API_KEY: apiKey, SOLAPI_API_SECRET: apiSecret, SOLAPI_PF_ID: pfId } = process.env;
+  const response = await fetch("https://api.solapi.com/messages/v4/send", {
+    method: "POST",
+    headers: buildAuthHeaders({ apiKey, apiSecret }),
+    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    body: JSON.stringify({
+      message: {
+        to: fields.phone,
+        kakaoOptions: { pfId: pfId || KAKAO_PF_ID, templateId: KAKAO_TEMPLATE_ID, variables: buildKakaoVariables(fields) },
+      },
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result?.errorCode) throw new Error(`kakao service responded ${response.status}`);
+};
+
+// Applicants choose the number and the title, so the channel's sends per account are capped.
+// As with the admin mail, a problem here never turns into a failed submission.
+export const notifyApplicantOfInquiry = async (ref, fields, uid) => {
+  if (!Object.hasOwn(INQUIRIES, fields.trackType)) return;
+
+  try {
+    if (!process.env.SOLAPI_API_KEY || !process.env.SOLAPI_API_SECRET) throw new Error("kakao environment missing");
+    await enforceRateLimit({ scope: "inquiry-kakao", subject: uid, limit: KAKAO_DAILY_LIMIT, windowMs: DAY_MS });
+    await sendInquiryKakao(fields);
+    await ref.update({ applicantKakaoSentAt: new Date() });
+  } catch (error) {
+    console.error("inquiry kakao failed:", error?.message);
+    await ref.update({ applicantKakaoError: new Date() }).catch(() => {});
   }
 };
