@@ -55,7 +55,7 @@ const buildAuthHeaders = ({
 
 const SCHEDULE_FALLBACK = "추후 안내";
 
-const buildKakaoPayload = ({
+export const buildKakaoPayload = ({
   type,
   to,
   applicantName,
@@ -182,7 +182,7 @@ const buildKakaoPayload = ({
   throw new Error("지원하지 않는 알림톡 타입입니다.");
 };
 
-const sendKakaoMessage = async ({ apiKey, apiSecret, payload }) => {
+export const sendKakaoMessage = async ({ apiKey, apiSecret, payload }) => {
   const headers = buildAuthHeaders({ apiKey, apiSecret });
 
   const response = await fetch(`${SOLAPI_API_BASE}/messages/v4/send`, {
@@ -219,9 +219,20 @@ const sendKakaoMessage = async ({ apiKey, apiSecret, payload }) => {
   return result;
 };
 
+export const buildReceiptKakaoPayload = ({ context, details }) =>
+  buildKakaoPayload({
+    type: "application_received",
+    to: context.phone,
+    applicantName: context.name,
+    exhibitionTitle: details.title,
+    receivedAt: context.submittedAt,
+    deadlineLabel: details.deadlineLabel,
+    announcementLabel: details.announcementLabel,
+  });
+
 const handleApplicantReceipt = async (body, event, credentials) => {
   const notice = await loadApplicantNotification(event, body.applicationId);
-  const { identity, ref, context, settings, details } = notice;
+  const { identity, ref, context, settings } = notice;
 
   if (!settings.kakaoEnabled) return json(200, { ok: true, skipped: true });
   if (!context.phone) return json(400, { error: "Recipient phone is required" });
@@ -232,15 +243,7 @@ const handleApplicantReceipt = async (body, event, credentials) => {
   try {
     const result = await sendKakaoMessage({
       ...credentials,
-      payload: buildKakaoPayload({
-        type: "application_received",
-        to: context.phone,
-        applicantName: context.name,
-        exhibitionTitle: details.title,
-        receivedAt: context.submittedAt,
-        deadlineLabel: details.deadlineLabel,
-        announcementLabel: details.announcementLabel,
-      }),
+      payload: buildReceiptKakaoPayload(notice),
     });
     return json(200, { ok: true, result });
   } catch (error) {

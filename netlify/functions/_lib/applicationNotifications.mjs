@@ -53,6 +53,11 @@ export const loadApplicantNotification = async (event, applicationId) => {
   if (!openCallSnapshot.exists) throw fail(404, "공고를 찾을 수 없습니다.");
   const openCall = openCallSnapshot.data();
 
+  return { identity, ref, ...buildOpenCallNotice({ application, applicationId, openCall }) };
+};
+
+// What an open call's receipt says, shared by real sends and admin test sends.
+export const buildOpenCallNotice = ({ application, applicationId, openCall }) => {
   const title = singleLine(openCall.title || OPEN_CALL_TITLE, 200);
   const submittedAt = asDate(application.submittedAt) || new Date();
   const context = {
@@ -66,8 +71,6 @@ export const loadApplicantNotification = async (event, applicationId) => {
   };
 
   return {
-    identity,
-    ref,
     context,
     settings: normalizeOpenCallNotificationSettings(openCall.notificationSettings || {}),
     render: (template) => renderOpenCallTemplate(template, context),

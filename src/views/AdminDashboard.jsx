@@ -42,7 +42,7 @@ import DetailItem from "../components/ui/DetailItem";
 import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
 import { sendApplicationStatusEmail } from "../lib/uploads";
-import EmailTestPanel from "./EmailTestPanel";
+import NotificationTestPanel from "./admin/NotificationTestPanel";
 import JoinHomeContentManager from "./admin/JoinHomeContentManager";
 import OpenCallMessageSettingsManager from "./admin/OpenCallMessageSettingsManager";
 import OpenCallManager from "./admin/OpenCallManager";
@@ -51,6 +51,12 @@ import JoinPopupManager from "./admin/JoinPopupManager";
 import SalonManager from "./admin/SalonManager";
 import { isAdminEmail } from "../constants/admin";
 
+const SYSTEM_SECTIONS = [
+  { id: "test", label: "발송 테스트" },
+  { id: "messages", label: "오픈콜 메시지" },
+  { id: "account", label: "계정 상태" },
+];
+
 const ADMIN_TABS = [
   { id: "applications", label: "신청 현황", description: "전체 신청서를 확인하고 심사 상태를 관리합니다." },
   { id: "openCalls", label: "오픈콜 관리", description: "오픈콜 공고와 양식을 관리합니다." },
@@ -58,7 +64,7 @@ const ADMIN_TABS = [
   { id: "joinHome", label: "메인 문구 관리", description: "JoinHome 상단의 히어로와 브랜드 노트를 수정합니다." },
   { id: "joinTracks", label: "메인 입구 관리", description: "JoinHome에서 보여줄 트랙의 문구와 상태를 조정합니다." },
   { id: "popups", label: "팝업 관리", description: "JoinHome 팝업과 피쳐드 공지를 관리합니다." },
-  { id: "system", label: "시스템", description: "로그인 상태, 메시지 설정, 진단 도구를 확인합니다." },
+  { id: "system", label: "시스템", description: "메일·알림톡 발송 테스트, 오픈콜 메시지, 계정 상태를 확인합니다." },
 ];
 
 const getCustomFieldAnswerOrder = (fieldId, answer, index) => {
@@ -440,6 +446,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
   const [expandedId, setExpandedId] = useState(null);
   const [activeDetailTool, setActiveDetailTool] = useState({});
   const [activeAdminTab, setActiveAdminTab] = useState("applications");
+  const [systemSection, setSystemSection] = useState(SYSTEM_SECTIONS[0].id);
 
   const [manualBlock, setManualBlock] = useState(DEFAULT_MANUAL_BLOCK);
   const [editingScheduleId, setEditingScheduleId] = useState(null);
@@ -1284,33 +1291,25 @@ const handleAction = async (appDoc, date, status, reason = "") => {
 
       {activeAdminTab === "system" ? (
         <div className="mt-6">
-          <DashboardPanel className="space-y-6">
-            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.28em] text-zinc-400">
-                  System
-                </p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900">
-                  관리자 진단 / 도구
-                </h3>
-                <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-                  로그인 상태, 오픈콜 메시지 설정, 이메일 / 알림톡 테스트를 한곳에서 확인합니다.
-                </p>
-              </div>
-
-              <div className="rounded-full border border-zinc-100 bg-zinc-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-                {user?.email || "anonymous"}
-              </div>
+          <DashboardPanel>
+            <div role="tablist" aria-label="시스템 메뉴" className="mb-5 flex gap-1 overflow-x-auto">
+              {SYSTEM_SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={systemSection === section.id}
+                  onClick={() => setSystemSection(section.id)}
+                  className={`min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold ${systemSection === section.id ? "bg-zinc-200 text-zinc-950" : "text-zinc-600 hover:bg-zinc-100"}`}
+                >
+                  {section.label}
+                </button>
+              ))}
             </div>
 
-            <AdminAuthDebug user={user} isAdmin={isAdmin} />
-            <OpenCallMessageSettingsManager db={db} appId={appId} currentUser={user} />
-            <EmailTestPanel user={user} />
-
-            <div className="rounded-[24px] border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-4 text-sm font-bold leading-relaxed text-[#004aad] break-keep">
-              Firebase Console &gt; Firestore Rules에 joinHome / joinTracks / joinPopups 권한이
-              추가되어야 합니다.
-            </div>
+            {systemSection === "test" ? <NotificationTestPanel db={db} appId={appId} user={user} /> : null}
+            {systemSection === "messages" ? <OpenCallMessageSettingsManager db={db} appId={appId} currentUser={user} /> : null}
+            {systemSection === "account" ? <AdminAuthDebug user={user} isAdmin={isAdmin} /> : null}
           </DashboardPanel>
         </div>
       ) : null}

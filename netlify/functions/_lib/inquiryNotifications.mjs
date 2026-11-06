@@ -5,7 +5,7 @@ const SEND_TIMEOUT_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KAKAO_DAILY_LIMIT = 3;
 const KAKAO_VALUE_MAX = 60;
-const KAKAO_TEMPLATE_ID = "KA01TP260325034339068F1cDumvabAJ";
+export const INQUIRY_KAKAO_TEMPLATE_ID = "KA01TP260325034339068F1cDumvabAJ";
 const KAKAO_PF_ID = "KA01PF260325031321194kcKwc6ZYXsv";
 const SCHEDULE_UNDECIDED = "협의 후 결정";
 
@@ -72,7 +72,7 @@ ${body}
   };
 };
 
-const sendAdminMail = async (mail, fields) => {
+const sendAdminMail = async (mail, fields, recipients) => {
   const { RESEND_API_KEY, MAIL_FROM, MAIL_TO_ADMIN } = process.env;
   if (!RESEND_API_KEY || !MAIL_FROM || !MAIL_TO_ADMIN) throw new Error("mail environment missing");
 
@@ -82,7 +82,7 @@ const sendAdminMail = async (mail, fields) => {
     signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     body: JSON.stringify({
       from: MAIL_FROM,
-      to: MAIL_TO_ADMIN.split(",").map((address) => address.trim()).filter(Boolean),
+      to: recipients || MAIL_TO_ADMIN.split(",").map((address) => address.trim()).filter(Boolean),
       ...(fields.email ? { reply_to: fields.email } : {}),
       ...mail,
     }),
@@ -107,14 +107,14 @@ export const notifyAdminOfInquiry = async (ref, fields) => {
 
 const kakaoValue = (value, fallback) => singleLine(value).slice(0, KAKAO_VALUE_MAX) || fallback;
 
-const buildKakaoVariables = (fields) => ({
+export const buildInquiryKakaoVariables = (fields) => ({
   "#{name}": kakaoValue(fields.name, "신청자"),
   "#{project_name}": kakaoValue(fields.title, "-"),
   "#{selected_date}": kakaoValue(fields.trackType === "rental" ? fields.date : "", SCHEDULE_UNDECIDED),
   "#{program_name}": kakaoValue(fields.trackType === "rental" ? fields.purpose : fields.category, "-"),
 });
 
-const sendInquiryKakao = async (fields) => {
+export const sendInquiryKakao = async (fields) => {
   const { SOLAPI_API_KEY: apiKey, SOLAPI_API_SECRET: apiSecret, SOLAPI_PF_ID: pfId } = process.env;
   const response = await fetch("https://api.solapi.com/messages/v4/send", {
     method: "POST",
@@ -123,12 +123,14 @@ const sendInquiryKakao = async (fields) => {
     body: JSON.stringify({
       message: {
         to: fields.phone,
-        kakaoOptions: { pfId: pfId || KAKAO_PF_ID, templateId: KAKAO_TEMPLATE_ID, variables: buildKakaoVariables(fields) },
+        kakaoOptions: { pfId: pfId || KAKAO_PF_ID, templateId: INQUIRY_KAKAO_TEMPLATE_ID, variables: buildInquiryKakaoVariables(fields) },
       },
     }),
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok || result?.errorCode) throw new Error(`kakao service responded ${response.status}`);
+  if (!response.ok || result?.errorCode) {
+    throw new Error(result?.errorMessage || result?.message || `kakao service responded ${response.status}`);
+  }
 };
 
 // Applicants choose the number and the title, so the channel's sends per account are capped.
@@ -145,4 +147,11 @@ export const notifyApplicantOfInquiry = async (ref, fields, uid) => {
     console.error("inquiry kakao failed:", error?.message);
     await ref.update({ applicantKakaoError: new Date() }).catch(() => {});
   }
+};
+
+// The real inquiry mail, addressed to whoever is testing instead of the operators.
+export const sendInquiryMailTo = async (fields, recipient) => {
+  const mail = buildMail(INQUIRIES[fields.trackType], fields);
+  await sendAdminMail(mail, fields, [recipient]);
+  return mail;
 };

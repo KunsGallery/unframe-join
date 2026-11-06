@@ -376,9 +376,6 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
     }
   };
 
-  const displayStatus = selectedOpenCall
-    ? getOpenCallDisplayStatus(selectedOpenCall)
-    : { key: "none", label: "-", canApply: false };
 
   const selectedCallOptions = sortedCalls.map((call) => {
     const pieces = [
@@ -422,7 +419,6 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
     );
   }
 
-  const isActiveOpenCall = selectedOpenCall?.id === activeOpenCallId;
   const completionPreview = (
     <div className="space-y-3">
       <PreviewBlock
@@ -478,25 +474,8 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
   );
 
   return (
-    <section className="rounded-[40px] border border-zinc-100 bg-white p-6 shadow-xl md:p-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#004aad]">
-            Open Call System
-          </p>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-zinc-900">
-            오픈콜 접수 완료 / 알림 메시지
-          </h3>
-          <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-zinc-500 break-keep">
-            오픈콜 지원 완료 후 보여줄 완료 화면과 접수 메일, 운영자 알림, 알림톡 문구를
-            관리합니다. 테스트 발송 전에 실제 문구를 먼저 확인해 주세요.
-          </p>
-        </div>
-
-        <div className="rounded-full border border-zinc-100 bg-zinc-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-zinc-500">
-          {selectedOpenCall?.id || "-"}
-        </div>
-      </div>
+    <section>
+      <p className="text-sm leading-relaxed text-zinc-700 break-keep">오픈콜 지원 후 보이는 완료 화면과 접수 메일 문구를 공고별로 관리합니다. 알림톡은 솔라피 승인 템플릿으로 나갑니다.</p>
 
       {managerNotice ? (
         <div className="mt-5 rounded-[24px] border border-[#004aad]/15 bg-[#004aad]/5 px-4 py-3 text-sm font-bold leading-relaxed text-[#004aad] whitespace-pre-wrap break-keep">
@@ -504,124 +483,33 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <SectionCard
-          eyebrow="현재 메시지 설정 대상 공고"
-          title={selectedOpenCall?.title || "-"}
-          description="공고별로 완료 화면과 알림 메시지를 따로 저장합니다. 전역 설정으로 옮기지 않고, 선택한 공고 문서에 그대로 기록합니다."
-        >
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <label className="block rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3 xl:col-span-3">
-              <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-zinc-300">
-                메시지를 편집할 공고
-              </span>
-              <select
-                value={selectedOpenCall?.id || ""}
-                onChange={(e) => setSelectedOpenCallId(e.target.value)}
-                className="mt-3 w-full rounded-2xl border border-zinc-100 bg-white px-4 py-3 text-sm font-bold outline-none transition-all focus:border-[#004aad]/20 focus:bg-white"
-              >
-                {selectedCallOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                공고명
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900 break-keep">
-                {selectedOpenCall?.title || "-"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                openCallId
-              </p>
-              <p className="mt-2 break-all text-sm font-black text-zinc-900">
-                {selectedOpenCall?.id || "-"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                대표 공고 여부
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900">
-                {selectedOpenCall?.isFeatured ? "YES" : "NO"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                공개 여부
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900">
-                {selectedOpenCall?.isVisible === false ? "비공개" : "공개"}
-              </p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                접수 상태
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900">{displayStatus.label}</p>
-            </div>
-            <div className="rounded-[22px] border border-zinc-100 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">
-                마지막 수정
-              </p>
-              <p className="mt-2 text-sm font-black text-zinc-900">
-                {formatDateTime(selectedOpenCall?.updatedAt || selectedOpenCall?.createdAt)}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-[22px] border border-dashed border-[#004aad]/15 bg-[#004aad]/5 px-4 py-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#004aad]">
-              사용 가능한 변수
-            </p>
-            <p className="mt-2 font-mono text-[11px] leading-relaxed text-[#004aad] select-all break-all">
-              {OPEN_CALL_TEMPLATE_VARIABLES.join(", ")}
-            </p>
-          </div>
-
-          <div className="mt-4 rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-sm font-bold leading-relaxed text-zinc-500 break-keep">
-            {isActiveOpenCall
-              ? "현재 선택한 공고는 /opencall 대표 공고와 일치합니다. 이 설정이 실제 외부 페이지 흐름에 반영됩니다."
-              : "현재 선택한 공고는 /opencall 대표 공고와 다를 수 있습니다. 메시지 수정은 가능하지만, 외부 페이지 반영 여부는 별도로 확인해 주세요."}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          eyebrow="저장"
-          title="선택한 공고에 메시지 저장"
-          description="문구를 수정한 뒤 저장 버튼을 눌러 Firestore의 기존 openCalls/{openCallId} 문서에 반영합니다."
-        >
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
-              <Sparkles size={12} />
-              Completion Settings
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#004aad]/15 bg-[#004aad]/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-[#004aad]">
-              <MessageSquareText size={12} />
-              Notification Settings
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !selectedOpenCall}
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-zinc-950 px-5 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      <div className="mt-5 flex flex-wrap items-end gap-3 rounded-lg border border-zinc-200 bg-white p-4">
+        <label className="min-w-0 flex-1 basis-64 text-sm font-semibold text-zinc-900">
+          메시지를 편집할 공고
+          <select
+            value={selectedOpenCall?.id || ""}
+            onChange={(e) => setSelectedOpenCallId(e.target.value)}
+            className="mt-1 min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm font-normal outline-none focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]"
           >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {saving ? "저장 중..." : "저장하기"}
-          </button>
-
-          <div className="mt-4 rounded-[22px] border border-zinc-100 bg-zinc-50 px-4 py-3 text-xs font-bold leading-relaxed text-zinc-500 break-keep">
-            이메일과 알림톡 템플릿은 기존 발송 함수와 동일한 변수 치환 방식을 사용합니다.
-          </div>
-        </SectionCard>
+            {selectedCallOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !selectedOpenCall}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-zinc-950 px-5 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? "저장 중…" : "저장"}
+        </button>
+        <p className="w-full text-sm text-zinc-600 break-all">
+          문구에 쓸 수 있는 값: <span className="font-mono text-xs">{OPEN_CALL_TEMPLATE_VARIABLES.join(", ")}</span>
+        </p>
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
@@ -751,15 +639,13 @@ const OpenCallMessageSettingsManager = ({ db, appId, currentUser }) => {
             />
           </div>
 
-          <div className="mt-4 space-y-3">{notificationPreview}</div>
+          <details className="mt-4 rounded-lg border border-zinc-200 px-4">
+            <summary className="cursor-pointer py-3 text-sm font-semibold text-zinc-800">메일·알림톡 내용 미리보기</summary>
+            <div className="space-y-3 pb-4">{notificationPreview}</div>
+          </details>
         </SectionCard>
       </div>
 
-      <div className="mt-6 rounded-[24px] border border-dashed border-[#004aad]/20 bg-[#004aad]/5 px-4 py-4 text-sm font-bold leading-relaxed text-[#004aad] break-keep">
-        테스트 발송은 상단의 시스템 도구와 함께 확인하면 좋습니다. 실제 접수 흐름은 기존
-        <code className="px-1 font-mono text-[11px] text-[#004aad]">openCalls/{selectedOpenCall?.id || "openCallId"}</code>{" "}
-        저장 구조와 발송 함수를 그대로 사용합니다.
-      </div>
     </section>
   );
 };

@@ -326,7 +326,7 @@ const sendMail = async ({ apiKey, from, to, subject, html }) => {
   return result;
 };
 
-const deliver = async ({ apiKey, from, adminTo, message }) => {
+export const deliver = async ({ apiKey, from, adminTo, message }) => {
   const {
     applicantName,
     applicantEmail,
@@ -396,9 +396,30 @@ const deliver = async ({ apiKey, from, adminTo, message }) => {
   }
 };
 
+export const buildReceiptMessage = ({ context, settings, render, details }, { applicantEmail, sendApplicantEmail, sendAdminEmail }) => ({
+  applicantName: context.name,
+  applicantEmail,
+  exhibitionTitle: details.title,
+  selectedDate: details.dateLabel,
+  selectedProgram: details.program,
+  partnerType: "open-call",
+  phone: context.phone,
+  brandName: "",
+  stageName: details.stageName,
+  applicationDetailUrl: details.detailUrl,
+  submittedAt: details.submittedAtIso,
+  applicationId: context.applicationId,
+  sendApplicantEmail,
+  sendAdminEmail,
+  applicantEmailSubject: render(settings.applicantEmailSubject),
+  applicantEmailBody: render(settings.applicantEmailBody),
+  adminEmailSubject: render(settings.adminEmailSubject),
+  adminEmailBody: render(settings.adminEmailBody),
+});
+
 const handleApplicantReceipt = async (event, payload, mail) => {
   const notice = await loadApplicantNotification(event, payload.applicationId);
-  const { identity, ref, context, settings, render, details } = notice;
+  const { identity, ref, context, settings } = notice;
   // A typed address is unverified, so the applicant copy only goes to the signed-in account.
   const sendApplicantEmail =
     settings.applicantEmailEnabled && identity.email_verified === true && Boolean(identity.email);
@@ -412,26 +433,11 @@ const handleApplicantReceipt = async (event, payload, mail) => {
   try {
     await deliver({
       ...mail,
-      message: {
-        applicantName: context.name,
+      message: buildReceiptMessage(notice, {
         applicantEmail: identity.email || context.email,
-        exhibitionTitle: details.title,
-        selectedDate: details.dateLabel,
-        selectedProgram: details.program,
-        partnerType: "open-call",
-        phone: context.phone,
-        brandName: "",
-        stageName: details.stageName,
-        applicationDetailUrl: details.detailUrl,
-        submittedAt: details.submittedAtIso,
-        applicationId: context.applicationId,
         sendApplicantEmail,
         sendAdminEmail,
-        applicantEmailSubject: render(settings.applicantEmailSubject),
-        applicantEmailBody: render(settings.applicantEmailBody),
-        adminEmailSubject: render(settings.adminEmailSubject),
-        adminEmailBody: render(settings.adminEmailBody),
-      },
+      }),
     });
   } catch (error) {
     await ref.update({ receivedEmailError: String(error?.message || "메일 발송 실패").slice(0, 500) });

@@ -147,5 +147,6 @@ export const sendSalonAlimtalk = async ({ kind, application, salon, passUrl = ""
   if (!response.ok || result?.errorCode) {
     throw new Error(result?.errorMessage || result?.message || `SOLAPI error (${response.status})`);
   }
-  return { ok: true, result };
+  const shownVariables = Object.fromEntries(Object.entries(variables).filter(([key]) => key.startsWith("#{")));
+  return { ok: true, result, templateId, variables: shownVariables };
 };
