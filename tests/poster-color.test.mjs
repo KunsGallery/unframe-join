@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { pickPaletteFromPixels } from "../src/views/admin/open-call/posterColor.js";
+import { pickPaletteFromPixels, toReadablePosterUrl } from "../src/views/admin/open-call/posterColor.js";
 
 const pixels = (...groups) => {
   const data = [];
@@ -48,4 +48,18 @@ test("최대 개수를 넘지 않는다", () => {
     4
   );
   assert.equal(palette.length, 4);
+});
+
+test("저장소의 포스터는 같은 주소의 중계 경로로 읽는다", () => {
+  assert.equal(
+    toReadablePosterUrl("https://pub-abc.r2.dev/open-call/posters/2026/11/u/a-b_c.png"),
+    "/poster-image/2026/11/u/a-b_c.png"
+  );
+});
+
+test("내 파일과 포스터 폴더 밖 주소는 바꾸지 않는다", () => {
+  assert.equal(toReadablePosterUrl("blob:https://join.unframe.kr/abc"), "blob:https://join.unframe.kr/abc");
+  assert.equal(toReadablePosterUrl("/_harness/poster.png"), "/_harness/poster.png");
+  assert.equal(toReadablePosterUrl("https://evil.example/images/a.png"), "https://evil.example/images/a.png");
+  assert.equal(toReadablePosterUrl(""), "");
 });

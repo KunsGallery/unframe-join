@@ -52,23 +52,28 @@ export const pickPaletteFromPixels = (data, limit = 4) => {
   return picked.map(toHex);
 };
 
-// The poster store allows this site's origin, so a stored poster can be read as well as a new file.
-export const readPosterPalette = (src, limit = 4) =>
+const POSTER_PATH = /^https:\/\/[^/]+\.r2\.dev\/open-call\/posters\/(.+)$/;
+
+// A canvas can only read pixels the browser may access, so stored posters go through this site's proxy.
+export const toReadablePosterUrl = (src) => {
+  const match = String(src ?? "").match(POSTER_PATH);
+  return match ? `/poster-image/${match[1]}` : String(src ?? "");
+};
+
+export const loadPosterImage = (src) =>
   new Promise((resolve, reject) => {
     const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = SAMPLE_SIZE;
-        canvas.height = SAMPLE_SIZE;
-        const context = canvas.getContext("2d", { willReadFrequently: true });
-        context.drawImage(image, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-        resolve(pickPaletteFromPixels(context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data, limit));
-      } catch (error) {
-        reject(error);
-      }
-    };
+    image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("포스터 이미지를 읽지 못했습니다."));
-    image.src = src;
+    image.src = toReadablePosterUrl(src);
   });
+
+export const readPosterPalette = async (src, limit = 4) => {
+  const image = await loadPosterImage(src);
+  const canvas = document.createElement("canvas");
+  canvas.width = SAMPLE_SIZE;
+  canvas.height = SAMPLE_SIZE;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+  return pickPaletteFromPixels(context.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data, limit);
+};

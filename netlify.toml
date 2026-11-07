@@ -1,3 +1,9 @@
+# The poster store only allows PUT and HEAD across origins, so canvases read posters through this site.
+[[redirects]]
+  from = "/poster-image/*"
+  to = "https://pub-df8c93bf6e604f3194a32f69bcdb0e90.r2.dev/open-call/posters/:splat"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

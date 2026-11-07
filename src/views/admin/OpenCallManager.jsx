@@ -49,6 +49,7 @@ import { readPosterPalette } from "./open-call/posterColor";
 import OpenCallContentEditor from "./open-call/OpenCallContentEditor";
 import OpenCallCreateDialog from "./open-call/OpenCallCreateDialog";
 import OpenCallPagePreview from "./open-call/OpenCallPagePreview";
+import OpenCallStoryMaker from "./open-call/OpenCallStoryMaker";
 import {
   buildBlankOpenCall,
   buildDuplicateOpenCall,
@@ -62,6 +63,7 @@ const OPEN_CALL_MANAGER_TABS = [
   { id: "landing", label: "공고 내용" },
   { id: "form", label: "신청 양식" },
   { id: "applications", label: "지원서" },
+  { id: "promotion", label: "홍보 이미지" },
 ];
 
 const OPEN_CALL_REVIEW_STATUS_OPTIONS = [
@@ -1649,6 +1651,16 @@ const OpenCallManager = ({ db, appId, applications }) => {
                     </div>
                   </details>
                 </div>
+                ) : null}
+
+                {activeOpenCallTab === "promotion" ? (
+                  <OpenCallStoryMaker
+                    call={{ ...call, ...draft }}
+                    onGoToBasics={() => {
+                      setEditorStep("basics");
+                      setActiveOpenCallTab("landing");
+                    }}
+                  />
                 ) : null}
 
                 {activeOpenCallTab === "applications" && selectedOpenCallId === call.id ? (
