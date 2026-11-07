@@ -2,7 +2,7 @@ import React from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { ChapterPage, FaqTiles, MarkFooter } from "../chapters/Chapters";
 import KeywordEffect from "./KeywordEffect";
-import { getKeywordsWeight, parseThemeKeywords } from "./openCallView";
+import { getKeywordsWeight, resolveThemeKeywords } from "./openCallView";
 import "./openCallPage.css";
 
 const OpenCallChapters = ({
@@ -26,8 +26,7 @@ const OpenCallChapters = ({
   heroEffect = "rotate",
   closingEffect = "spotlight",
 }) => {
-  const parsedKeywords = parseThemeKeywords(openCall.themeKeyword);
-  const keywords = parsedKeywords.length > 0 ? parsedKeywords : ["OPEN"];
+  const keywords = resolveThemeKeywords(openCall);
   const word = keywords.join(", ");
   const weight = getKeywordsWeight(keywords);
   const applyButton = (
@@ -40,6 +39,7 @@ const OpenCallChapters = ({
     "--oc-accent": theme.accent,
     "--oc-on": theme.on,
     "--oc-tint": theme.tint,
+    "--oc-accent-text": theme.accentText,
     "--oc-word-wide": `clamp(56px, min(${(posterUrl ? 46 : 84) / weight}vw, ${posterUrl ? 11 : 14}vw), 160px)`,
     "--oc-word-narrow": `min(${82 / weight}vw, 24vw)`,
   };
@@ -85,8 +85,9 @@ const OpenCallChapters = ({
           <section className="oc-section oc-on-tint">
             <h2 className="ch-title rv oc-heading">모집 요강</h2>
             <div className="oc-tiles">
-              {requirements.map((item) => (
+              {requirements.map((item, index) => (
                 <div key={`${item.title}-${item.body.slice(0, 12)}`} className="oc-tile rv">
+                  <p className="oc-tile__no" aria-hidden="true">{String(index + 1).padStart(2, "0")}</p>
                   {item.title ? <h3 className="ch-sub">{item.title}</h3> : null}
                   <p>{item.body}</p>
                 </div>

@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Check, Copy, Eye, EyeOff, Loader2, Plus, Trash2, Upload } from "lucide-react";
-import { getOpenCallTheme } from "../../open-call/openCallView";
+import { getOpenCallTheme, parseThemeKeywords, suggestThemeKeywords } from "../../open-call/openCallView";
+import { readPosterPalette } from "./posterColor";
 import { getOpenCallChecklist, getOpenCallDateProblem, moveListItem } from "./openCallEditorModel";
 
 const INPUT = "min-h-11 w-full rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-950 outline-none placeholder:text-zinc-400 focus:border-[#004aad] focus:ring-1 focus:ring-[#004aad]";
@@ -45,6 +46,24 @@ const ACCENT_PRESETS = ["#004AAD", "#AAD004", "#C2410C", "#151413"];
 
 const FaceGroup = ({ draft, onChange, onPosterUpload, posterUploading, posterError }) => {
   const theme = getOpenCallTheme(draft.accentColor);
+  const [palette, setPalette] = useState({ url: "", colors: [] });
+  const posterColors = palette.url === draft.posterUrl ? palette.colors : [];
+  const suggested = suggestThemeKeywords(draft);
+  const hasWrittenKeywords = parseThemeKeywords(draft.themeKeyword).length > 0;
+
+  useEffect(() => {
+    if (!draft.posterUrl) return undefined;
+    let stale = false;
+    readPosterPalette(draft.posterUrl)
+      .then((colors) => {
+        if (!stale) setPalette({ url: draft.posterUrl, colors });
+      })
+      .catch((error) => console.error(error));
+    return () => {
+      stale = true;
+    };
+  }, [draft.posterUrl]);
+
   return (
     <Group title="공고의 얼굴">
       <div className="grid gap-5 md:grid-cols-[180px_minmax(0,1fr)]">
@@ -66,9 +85,9 @@ const FaceGroup = ({ draft, onChange, onPosterUpload, posterUploading, posterErr
         <div className="space-y-5">
           <div>
             <span className="block text-sm font-semibold text-zinc-900">포인트 색</span>
-            <span className="mt-0.5 block text-sm text-zinc-600 break-keep">포스터에서 색을 하나 고르세요. 글자색과 연한 바탕색은 읽기 좋게 자동으로 맞춥니다.</span>
+            <span className="mt-0.5 block text-sm text-zinc-600 break-keep">포스터를 올리면 그림에서 색을 뽑아 자동으로 적용합니다. 다른 색으로 바꿀 수도 있고, 글자색과 연한 바탕색은 읽기 좋게 맞춰집니다.</span>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {ACCENT_PRESETS.map((color) => (
+              {(posterColors.length > 0 ? posterColors : ACCENT_PRESETS).map((color) => (
                 <button key={color} type="button" aria-label={`${color} 선택`} aria-pressed={theme.accent === color} onClick={() => onChange("accentColor", color)} style={{ background: color }} className={`h-11 w-11 rounded-lg border-2 ${theme.accent === color ? "border-zinc-950 ring-2 ring-white ring-inset" : "border-transparent"}`} />
               ))}
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-zinc-300 px-3 text-sm font-semibold text-zinc-700">
@@ -76,9 +95,18 @@ const FaceGroup = ({ draft, onChange, onPosterUpload, posterUploading, posterErr
                 직접 고르기
               </label>
             </div>
+            {posterColors.length > 0 ? <p className="mt-2 text-sm text-zinc-600">위 색은 지금 포스터에서 뽑았습니다.</p> : null}
             <p className="mt-3 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-bold" style={{ background: theme.accent, color: theme.on }}>이렇게 보입니다 · {theme.accent}</p>
           </div>
-          <Field label="주제어" hint="공개 페이지에 크게 표시됩니다. 쉼표로 나누면 한 단어씩 번갈아 나옵니다. 비우면 OPEN으로 표시됩니다."><input className={INPUT} placeholder="예: 연말, 선물, 파티" value={draft.themeKeyword || ""} onChange={(event) => onChange("themeKeyword", event.target.value)} /></Field>
+          <div>
+            <Field label="주제어" hint="공개 페이지에 크게 나오고, 쉼표로 나누면 한 단어씩 번갈아 나옵니다. 비워 두면 본문에서 뽑은 단어가 자동으로 나옵니다."><input className={INPUT} placeholder={suggested.join(", ") || "예: 연말, 선물, 파티"} value={draft.themeKeyword || ""} onChange={(event) => onChange("themeKeyword", event.target.value)} /></Field>
+            {suggested.length > 0 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-700">
+                <span>{hasWrittenKeywords ? "본문 추천" : "지금 자동으로 나오는 단어"}: {suggested.join(", ")}</span>
+                <button type="button" className="min-h-10 font-semibold text-[#004aad] underline underline-offset-2" onClick={() => onChange("themeKeyword", suggested.join(", "))}>이 단어를 넣고 고치기</button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </Group>

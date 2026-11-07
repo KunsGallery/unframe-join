@@ -54,6 +54,14 @@ export const getContrastRatio = (first, second) => {
   return (light + 0.05) / (dark + 0.05);
 };
 
+// accentText only colours large numerals, where 3:1 is the readable threshold.
+const darkenUntilReadable = (hex) => {
+  let channels = hexToRgb(hex);
+  const toHex = (values) => `#${values.map((value) => Math.round(value).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  while (getContrastRatio(toHex(channels), WHITE) < 3) channels = channels.map((value) => value * 0.92);
+  return toHex(channels);
+};
+
 // Admins pick one colour; everything drawn with it stays readable whichever colour they pick.
 export const getOpenCallTheme = (color) => {
   const accent = /^#[0-9a-f]{6}$/i.test(String(color ?? "").trim())
@@ -66,6 +74,7 @@ export const getOpenCallTheme = (color) => {
 
   return {
     accent,
+    accentText: darkenUntilReadable(accent),
     on: getContrastRatio(accent, WHITE) >= getContrastRatio(accent, INK) ? WHITE : INK,
     tint: `#${tint.toUpperCase()}`,
   };
@@ -80,6 +89,71 @@ export const parseThemeKeywords = (value) =>
 
 // Keywords appear one at a time, so only the longest one has to fit.
 export const getKeywordsWeight = (keywords) => Math.max(2, ...keywords.map(getThemeWordWeight));
+
+// An intro only holds requirement blocks on calls written before requirement rows existed.
+const getIntroLead = (openCall) => {
+  const hasRows = (Array.isArray(openCall?.requirementItems) ? openCall.requirementItems : []).some(
+    (item) => String(item?.title ?? "").trim() || String(item?.body ?? "").trim()
+  );
+  return hasRows ? String(openCall?.introText ?? "").trim() : splitIntroText(openCall?.introText).lead;
+};
+
+const TITLE_WEIGHT = 3;
+const SUGGESTED_KEYWORDS = 5;
+const ENGLISH_TO_KOREAN = {
+  christmas: "크리스마스", spring: "봄", summer: "여름", autumn: "가을", winter: "겨울", memory: "기억", memories: "기억",
+  light: "빛", love: "사랑", dream: "꿈", dreams: "꿈", home: "집", city: "도시", forest: "숲", gift: "선물", gifts: "선물",
+};
+const ENGLISH_STOPWORDS = new Set(["unframe", "open", "call", "calls", "want", "with", "from", "that", "this", "your", "edition", "exhibition", "artist", "artists", "project", "gallery"]);
+const KOREAN_STOPWORDS = new Set([
+  "작품", "작가", "전시", "예술", "미술", "모집", "참여", "단체전", "기획전", "오픈콜", "공모", "지원", "지원서", "선정", "신청", "접수", "소개", "장르",
+  "이번", "올해", "내년", "당신", "우리", "여러분", "누군가", "사람", "공간", "마지막", "시간", "순간", "경험", "하나", "다양", "소중", "특별", "작은", "소형",
+  "직접", "함께", "만들어가", "설명", "먼저", "자기", "머무", "고르", "오래", "오래도록", "가까이", "조금", "그리고", "하지만", "대한", "위한", "통해", "모든", "있는", "없는", "같은", "많은",
+]);
+const KOREAN_VERB_SUFFIX = /(합니다|하는|하며|하고|하여|하기|한다|하다)$/;
+const KOREAN_PARTICLE = /(으로부터|에게서|만의|부터|까지|에서|에게|으로|처럼|보다|마다|을|를|이|가|은|는|의|에|와|과|로|도|만)$/;
+const NOT_A_NOUN = /(니다|다면|고자|는다|고|며|어|아|여|게)$/;
+
+const toKoreanKeyword = (token) => {
+  const word = token.replace(KOREAN_VERB_SUFFIX, "");
+  const noun = word === token ? token.replace(KOREAN_PARTICLE, "") : word;
+  if (noun.length < 2 || NOT_A_NOUN.test(token) || KOREAN_STOPWORDS.has(noun)) return "";
+  return noun;
+};
+
+const toEnglishKeyword = (token) => {
+  const lower = token.toLowerCase();
+  if (Object.hasOwn(ENGLISH_TO_KOREAN, lower)) return ENGLISH_TO_KOREAN[lower];
+  return token.length >= 4 && !ENGLISH_STOPWORDS.has(lower) ? token : "";
+};
+
+// Picks the words a call talks about most, with its title and subtitle counting for more.
+export const suggestThemeKeywords = (openCall) => {
+  const scores = new Map();
+  const count = (text, weight) => {
+    for (const token of String(text ?? "").match(/[가-힣]{2,}|[A-Za-z]{2,}/g) || []) {
+      const keyword = /[가-힣]/.test(token) ? toKoreanKeyword(token) : toEnglishKeyword(token);
+      if (keyword) scores.set(keyword, (scores.get(keyword) || 0) + weight);
+    }
+  };
+
+  count(openCall?.title, TITLE_WEIGHT);
+  count(openCall?.subtitle, TITLE_WEIGHT);
+  count(getIntroLead(openCall), 1);
+
+  // Map keeps first-seen order, so equal scores stay in the order the text uses them.
+  return [...scores.entries()]
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, SUGGESTED_KEYWORDS)
+    .map(([keyword]) => keyword);
+};
+
+export const resolveThemeKeywords = (openCall) => {
+  const written = parseThemeKeywords(openCall?.themeKeyword);
+  if (written.length > 0) return written;
+  const suggested = suggestThemeKeywords(openCall);
+  return suggested.length > 0 ? suggested : ["OPEN"];
+};
 
 // Calls written before requirement rows existed keep their emoji-headed intro blocks.
 export const getOpenCallRequirements = (openCall) => {
@@ -129,7 +203,7 @@ export const buildOpenCallView = (source) => {
     openCall,
     theme: getOpenCallTheme(openCall.accentColor),
     posterUrl: String(openCall.posterUrl ?? "").trim(),
-    lead: splitIntroText(openCall.introText).lead,
+    lead: getIntroLead(openCall),
     requirements: getOpenCallRequirements(openCall),
     sections: getOpenCallDescriptionSections(source || OPEN_CALL_FALLBACK),
     faqs: normalizeOpenCallFaqs(faqSource)

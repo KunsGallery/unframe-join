@@ -45,6 +45,7 @@ import {
 import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
 import { splitIntroText } from "../open-call/openCallView";
 import { uploadImageToR2 } from "../../lib/uploads";
+import { readPosterPalette } from "./open-call/posterColor";
 import OpenCallContentEditor from "./open-call/OpenCallContentEditor";
 import OpenCallCreateDialog from "./open-call/OpenCallCreateDialog";
 import OpenCallPagePreview from "./open-call/OpenCallPagePreview";
@@ -903,6 +904,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
     try {
       const result = await uploadImageToR2({ file, folder: "open-call/posters", isAdminUpload: true });
       updateDraft(callId, "posterUrl", result.url);
+
+      // Read from the local file: a colour problem must not undo a poster that already uploaded.
+      const preview = URL.createObjectURL(file);
+      const [mainColor] = await readPosterPalette(preview).catch(() => []);
+      URL.revokeObjectURL(preview);
+      if (mainColor) updateDraft(callId, "accentColor", mainColor);
     } catch (error) {
       setPosterError(error.message || "포스터를 올리지 못했습니다.");
     } finally {
