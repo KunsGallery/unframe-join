@@ -371,21 +371,31 @@ a.ch-swatch:hover { padding-bottom: 24px; }
 
 /* Closing mark */
 .ch-mark { padding: var(--m); }
-.ch-mark__blocks { display: flex; align-items: flex-end; gap: 4px; height: clamp(120px, 30svh, 300px); margin-bottom: 40px; }
-.ch-mark__blocks span {
+.ch-mark__blocks { display: flex; align-items: stretch; gap: 4px; touch-action: pan-y; height: clamp(120px, 30svh, 300px); margin-bottom: 40px; }
+.ch-mark__blocks > span {
+  position: relative;
   flex: 1 1 0;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   min-width: 0;
   padding-bottom: 8px;
+  background: transparent;
   font-size: clamp(30px, 8.6vw, 148px);
   font-weight: 800;
   line-height: 1;
 }
-.ch-mark__info { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
-.ch-mark__info > :first-child { grid-column: 1 / span 5; }
-.ch-mark__info > :last-child { grid-column: 7 / span 6; }
+/* The block never shrinks below its letter, whose colour is only readable on the block. */
+.ch-mark__fill {
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--h);
+  min-height: calc(1em + 16px);
+  transition: height 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ch-mark__blocks b { position: relative; font-weight: inherit; }
+.ch-mark__info { display: grid; justify-items: center; gap: 12px; text-align: center; }
+.ch-mark__line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 16px; }
 .ch-credits { font-size: 14px; line-height: 1.55; }
 .ch-credits a { text-decoration: underline; text-underline-offset: 2px; }
 
@@ -421,8 +431,6 @@ a.ch-swatch:hover { padding-bottom: 24px; }
   .ch-close__main { grid-column: 1 / -1; order: -1; min-height: 300px; margin-inline: 8px; }
   .ch-close__side { grid-column: span 6; min-height: 120px; height: 120px; }
   .ch-mark__blocks { height: 22svh; gap: 3px; }
-  .ch-mark__info { display: block; }
-  .ch-mark__info > :last-child { margin-top: 24px; }
   .ch-plate { grid-template-columns: minmax(0, 1fr); }
   .ch-plate__room { padding: 10px 14px; }
   .ch-plate__row .ch-btn { width: 100%; }

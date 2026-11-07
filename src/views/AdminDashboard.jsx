@@ -36,6 +36,7 @@ import {
   normalizeSnsOrWebsiteUrl,
 } from "../lib/links";
 import StatCard from "../components/ui/StatCard";
+import { getApplicationStats, getListStatus } from "../lib/applicationStats";
 import CheckCard from "../components/ui/CheckCard";
 import AdminLink from "../components/ui/AdminLink";
 import DetailItem from "../components/ui/DetailItem";
@@ -481,14 +482,7 @@ const AdminDashboard = ({ applications, reservations, db, appId, user, isAdmin }
       [applicationId]: current[applicationId] === tool ? "" : tool,
     }));
 
-  const stats = useMemo(
-    () => ({
-      total: applications.length,
-      pending: applications.filter((a) => a.status === "review").length,
-      confirmed: applications.filter((a) => a.status === "confirmed").length,
-    }),
-    [applications]
-  );
+  const stats = useMemo(() => getApplicationStats(applications), [applications]);
 
   const managedSchedules = useMemo(() => {
     return Object.entries(reservations || {})
@@ -1097,7 +1091,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
           .some((value) => String(value).toLowerCase().includes(term));
 
       const matchesStatus =
-        statusFilter === "all" ? true : app.status === statusFilter;
+        statusFilter === "all" ? true : getListStatus(app) === statusFilter;
 
       const matchesProgram =
         programFilter === "all" ? true : app.selectedProgram?.id === programFilter;
@@ -1679,11 +1673,13 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                   const requestDraft = getRequestDraft(app);
                   const activeTool = activeDetailTool[app.id] || "";
 
+                  const listStatus = getListStatus(app);
+
                   return (
                     <div
                       key={app.id}
                       className={`bg-white rounded-[40px] border overflow-hidden transition-all ${
-                        app.status === "confirmed"
+                        listStatus === "confirmed"
                           ? "border-green-400 shadow-xl shadow-green-100/10"
                           : "border-gray-50 shadow-2xl shadow-gray-200/50"
                       }`}
@@ -1693,16 +1689,16 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                           <div className="flex-1 space-y-6 text-left">
                             <div
                               className={`mb-4 px-3 py-1 inline-block rounded text-[8px] font-black uppercase text-white ${
-                                app.status === "review" || app.status === "submitted"
+                                listStatus === "review" || listStatus === "submitted"
                                   ? "bg-[#004aad]"
-                                  : app.status === "confirmed" || app.status === "approved"
+                                  : listStatus === "confirmed" || listStatus === "approved"
                                   ? "bg-green-500"
-                                  : app.status === "additional_requested" || app.status === "waitlisted"
+                                  : listStatus === "additional_requested" || listStatus === "waitlisted"
                                   ? "bg-amber-500"
                                   : "bg-red-400"
                               }`}
                             >
-                              {app.status}
+                              {listStatus}
                             </div>
 
                             <h4 className="text-2xl md:text-4xl font-black uppercase leading-tight wrap-break-word text-left">

@@ -22,3 +22,18 @@ export const PHOTO_CREDITS = [
     url: "https://commons.wikimedia.org/wiki/File:Insa-dong_%EC%9D%B8%EC%82%AC%EB%8F%99_October_1_2020_12.jpg",
   },
 ];
+
+const MARK_REACH = 1.6;
+const MARK_REST_SCALE = 0.82;
+
+// With a pointer over the mark, the nearest block rises fully and the rest settle lower.
+export const getMarkHeights = (bases, pointerRatio) => {
+  if (pointerRatio === null || pointerRatio === undefined) return bases;
+  const pointer = Math.min(1, Math.max(0, pointerRatio)) * bases.length;
+  return bases.map((base, index) => {
+    const distance = Math.abs(index + 0.5 - pointer);
+    const lift = Math.max(0, 1 - distance / MARK_REACH);
+    const rest = base * MARK_REST_SCALE;
+    return Math.round(rest + (100 - rest) * lift);
+  });
+};

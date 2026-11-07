@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { PHOTO_CREDITS, VENUE_ADDRESS } from "./data";
+import { PHOTO_CREDITS, VENUE_ADDRESS, getMarkHeights } from "./data";
 import "./chapters.css";
 
 const MARK_COLOURS = ["on-blue", "on-lime", "on-coral", "on-ink", "on-paper", "on-blue", "on-lime"];
@@ -76,21 +76,41 @@ export const FaqTiles = ({ title, description, items, id = "faq" }) => {
   );
 };
 
-export const MarkFooter = ({ className = "on-paper", children, credits = PHOTO_CREDITS }) => (
-  <footer className={`ch-mark ${className}`}>
-    <div className="ch-mark__blocks" aria-hidden="true">
+const MarkBlocks = () => {
+  const rootRef = useRef(null);
+
+  const applyHeights = (pointerRatio) => {
+    const heights = getMarkHeights(MARK_HEIGHTS, pointerRatio);
+    [...rootRef.current.children].forEach((block, index) => block.style.setProperty("--h", `${heights[index]}%`));
+  };
+  const track = (event) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const box = rootRef.current.getBoundingClientRect();
+    applyHeights((event.clientX - box.left) / box.width);
+  };
+  const release = () => applyHeights(null);
+
+  return (
+    <div ref={rootRef} className="ch-mark__blocks" aria-hidden="true" onPointerMove={track} onPointerLeave={release} onPointerCancel={release}>
       {"UNFRAME".split("").map((letter, index) => (
-        <span key={`${letter}-${index}`} className={MARK_COLOURS[index]} style={{ height: `${MARK_HEIGHTS[index]}%` }}>
-          {letter}
+        <span key={`${letter}-${index}`} className={MARK_COLOURS[index]} style={{ "--h": `${MARK_HEIGHTS[index]}%` }}>
+          <i className={`ch-mark__fill ${MARK_COLOURS[index]}`} />
+          <b>{letter}</b>
         </span>
       ))}
     </div>
+  );
+};
+
+export const MarkFooter = ({ className = "on-paper", children, credits = PHOTO_CREDITS }) => (
+  <footer className={`ch-mark ${className}`}>
+    <MarkBlocks />
     <div className="ch-mark__info">
-      <div>
-        <p className="ch-sub">UNFRAME</p>
-        <p style={{ marginTop: 8 }}>{VENUE_ADDRESS}</p>
-        {children}
-      </div>
+      <p className="ch-mark__line">
+        <strong className="ch-sub">UNFRAME</strong>
+        <span>{VENUE_ADDRESS}</span>
+      </p>
+      {children}
       {credits.length > 0 ? (
         <p className="ch-credits">
           거리 사진:{" "}
