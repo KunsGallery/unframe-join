@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PRIVATE_FOLDERS, toPrivateRef } from "../../src/constants/storedFiles.js";
 import { verifyAdminRequest, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
+import { isR2Configured, r2Client, r2Settings, usesPrivateBucket } from "./_lib/r2.mjs";
 import { enforceRateLimit } from "./_lib/rateLimit.mjs";
 
 const EXTENSIONS_BY_TYPE = {
@@ -51,27 +53,15 @@ export async function handler(event) {
       return json(400, { error: "fileName and contentType are required" });
     }
 
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const bucket = process.env.R2_BUCKET_NAME;
-    const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL;
-
-    if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !publicBaseUrl) {
-      console.error("R2 env check failed", {
-        hasAccountId: !!accountId,
-        hasAccessKeyId: !!accessKeyId,
-        hasSecretAccessKey: !!secretAccessKey,
-        hasBucket: !!bucket,
-        hasPublicBaseUrl: !!publicBaseUrl,
-      });
-
+    const settings = r2Settings();
+    if (!isR2Configured(settings)) {
+      console.error("R2 env check failed");
       return json(500, { error: "Missing R2 environment variables" });
     }
 
     const allowedFolders = isAdminUpload
-      ? new Set(["documents", "open-call/portfolio", "open-call/works", "salon-answers", "salon-posters", "open-call/posters", "images", "join-home", "join-tracks", "join-popups"])
-      : new Set(["documents", "open-call/portfolio", "open-call/works", "salon-answers"]);
+      ? new Set([...PRIVATE_FOLDERS, "documents", "salon-answers", "salon-posters", "open-call/posters", "images", "join-home", "join-tracks", "join-popups"])
+      : new Set([...PRIVATE_FOLDERS, "documents", "salon-answers"]);
     if (!allowedFolders.has(folder)) return json(400, { error: "허용되지 않은 업로드 위치입니다." });
     const allowedExtensions = Object.hasOwn(EXTENSIONS_BY_TYPE, contentType) ? EXTENSIONS_BY_TYPE[contentType] : null;
     if (!allowedExtensions) return json(400, { error: "허용되지 않은 파일 형식입니다." });
@@ -87,34 +77,25 @@ export async function handler(event) {
       await enforceRateLimit({ scope: "r2-sign-upload", subject: identity.uid, limit: 60, windowMs: 60 * 60 * 1000 });
     }
     const key = makeKey({ folder, userId: identity.uid, fileName });
-
-    const client = new S3Client({
-      region: "auto",
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
+    const isPrivate = usesPrivateBucket(folder, settings);
 
     const command = new PutObjectCommand({
-      Bucket: bucket,
+      Bucket: isPrivate ? settings.privateBucket : settings.publicBucket,
       Key: key,
       ContentType: contentType,
       ContentLength: claimedSize,
     });
 
-    const signedUrl = await getSignedUrl(client, command, {
+    const signedUrl = await getSignedUrl(r2Client(settings), command, {
       expiresIn: 60 * 5,
       // Otherwise the uploader may choose any Content-Type, such as text/html, at PUT time.
       signableHeaders: new Set(["content-type"]),
     });
 
-    return json(200, {
-      key,
-      signedUrl,
-      publicUrl: `${publicBaseUrl}/${key}`,
-    });
+    // Applicant files get a private reference instead of an address anyone could open.
+    return json(200, isPrivate
+      ? { key, signedUrl, publicUrl: "", fileRef: toPrivateRef(key) }
+      : { key, signedUrl, publicUrl: `${settings.publicBaseUrl}/${key}`, fileRef: `${settings.publicBaseUrl}/${key}` });
   } catch (error) {
     console.error("r2-sign-upload error:", error?.statusCode || 500);
     return json(error?.statusCode || 500, {

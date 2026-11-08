@@ -39,6 +39,7 @@ import StatCard from "../components/ui/StatCard";
 import { getApplicationStats, getListStatus } from "../lib/applicationStats";
 import CheckCard from "../components/ui/CheckCard";
 import AdminLink from "../components/ui/AdminLink";
+import StoredFileAnchor from "../components/ui/StoredFileAnchor";
 import DetailItem from "../components/ui/DetailItem";
 import { PROGRAMS } from "../constants/programs";
 import { addDays } from "../utils/date";
@@ -2003,14 +2004,12 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                     )}
 
                                     {app.portfolioUrl && (
-                                      <a
-                                        href={app.portfolioUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                      <StoredFileAnchor
+                                        value={app.portfolioUrl}
                                         className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-zinc-100 text-[#004aad] text-xs font-black hover:bg-[#004aad] hover:text-white transition-all shadow-sm"
                                       >
                                         <FileText size={18} /> 포트폴리오 링크 바로가기
-                                      </a>
+                                      </StoredFileAnchor>
                                     )}
 
                                     {getCustomFieldAnswersList(app.customFieldAnswers).length > 0 && (
@@ -2108,7 +2107,7 @@ const handleAction = async (appDoc, date, status, reason = "") => {
                                             {work.size ? <p>크기(세로 x 가로): {work.size}</p> : null}
                                             <p>제작연도: {work.year || "-"}</p>
                                             {work.price ? <p>작품가격: {work.price}</p> : null}
-                                            {work.imageUrl ? <a href={work.imageUrl} target="_blank" rel="noreferrer" className="block text-[#004aad] underline">이미지 원본 보기</a> : null}
+                                            {work.imageUrl ? <StoredFileAnchor value={work.imageUrl} className="block text-[#004aad] underline">이미지 원본 보기</StoredFileAnchor> : null}
                                           </div>
                                         </div>
                                       );

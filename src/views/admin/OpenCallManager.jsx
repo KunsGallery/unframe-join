@@ -33,6 +33,7 @@ import {
   OPEN_CALL_CUSTOM_FIELD_TYPES,
   OPEN_CALL_TITLE,
   createFallbackOpenCall,
+  getOpenCallDisplayStatus,
   buildFallbackDescriptionSections,
   normalizeOpenCallCompletionSettings,
   pickActiveOpenCall,
@@ -44,12 +45,16 @@ import {
 } from "../../constants/openCall";
 import OpenCallApplicationForm from "../open-call/OpenCallApplicationForm";
 import { splitIntroText } from "../open-call/openCallView";
+import StoredFileAnchor from "../../components/ui/StoredFileAnchor";
+import { isPrivateRef } from "../../constants/storedFiles";
+import { useFileUrls } from "../../lib/privateFiles";
 import { uploadImageToR2 } from "../../lib/uploads";
 import { readPosterPalette } from "./open-call/posterColor";
 import OpenCallContentEditor from "./open-call/OpenCallContentEditor";
 import OpenCallCreateDialog from "./open-call/OpenCallCreateDialog";
 import OpenCallPagePreview from "./open-call/OpenCallPagePreview";
 import OpenCallStoryMaker from "./open-call/OpenCallStoryMaker";
+import PurgeApplicationsDialog from "./open-call/PurgeApplicationsDialog";
 import {
   buildBlankOpenCall,
   buildDuplicateOpenCall,
@@ -474,6 +479,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const [formPreviewVersion, setFormPreviewVersion] = useState(0);
   const [editorStep, setEditorStep] = useState("basics");
   const [createDialog, setCreateDialog] = useState(null);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [previewPage, setPreviewPage] = useState(false);
   const [savedSnapshots, setSavedSnapshots] = useState({});
   const [posterUploading, setPosterUploading] = useState(false);
@@ -1162,6 +1168,9 @@ const OpenCallManager = ({ db, appId, applications }) => {
     return counts;
   };
 
+  // Private files have no address to put in a spreadsheet; they open from the applicant list.
+  const csvFile = (value) => (isPrivateRef(value) ? "비공개 파일 (관리자 화면에서 열기)" : value);
+
   const buildOpenCallCsv = (call, rows) => {
     const hasAny = (key) => rows.some((app) => app[key]);
     const workCount = rows.reduce((max, app) => Math.max(max, Array.isArray(app.works) ? app.works.length : 0), 0);
@@ -1173,7 +1182,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       [`작품${index + 1}_제작연도`, "year"],
       [`작품${index + 1}_작품가격`, "price"],
       [`작품${index + 1}_이미지URL`, "imageUrl"],
-    ].map(([header, key]) => [header, (app) => getWorkValue(app.works?.[index], key)])).flat();
+    ].map(([header, key]) => [header, (app) => csvFile(getWorkValue(app.works?.[index], key))])).flat();
 
     const columns = [
       ["공고ID", () => call.id],
@@ -1187,7 +1196,7 @@ const OpenCallManager = ({ db, appId, applications }) => {
       ["이메일", (app) => app.email || app.applicantEmail || ""],
       ["홈페이지/SNS", (app) => app.snsLink || ""],
       ["기타사이트", (app) => app.otherLink || ""],
-      ["포트폴리오URL", (app) => app.portfolioUrl || ""],
+      ["포트폴리오URL", (app) => csvFile(app.portfolioUrl || "")],
       ["작가소개", (app) => app.artistStatement || ""],
       // Earlier calls collected these; they only appear when a row has them.
       ...(hasAny("addressMain") ? [
@@ -1234,6 +1243,8 @@ const OpenCallManager = ({ db, appId, applications }) => {
   const selectedApplications = selectedOpenCallId
     ? getApplicantItems(applications, selectedOpenCallId)
     : [];
+  // Artwork images are private files; one request signs short-lived links for the whole list.
+  const fileUrl = useFileUrls(selectedApplications.flatMap((app) => (app.works || []).map((work) => work?.imageUrl)));
   const selectedOpenCall = useMemo(
     () => sortedCalls.find((call) => call.id === selectedOpenCallId) || null,
     [selectedOpenCallId, sortedCalls]
@@ -1686,8 +1697,28 @@ const OpenCallManager = ({ db, appId, applications }) => {
                           <Download size={14} />
                           CSV 다운로드
                         </button>
+                        {selectedOpenCall && ["closed", "archived"].includes(getOpenCallDisplayStatus(selectedOpenCall).key) ? (
+                          <button
+                            type="button"
+                            onClick={() => setPurgeDialogOpen(true)}
+                            disabled={selectedApplications.length === 0}
+                            className="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-white px-4 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                            지원 자료 파기
+                          </button>
+                        ) : null}
                       </div>
                     </div>
+
+                    {Array.isArray(selectedOpenCall?.applicantDataPurges) && selectedOpenCall.applicantDataPurges.length > 0 ? (
+                      <p className="mb-4 text-sm text-zinc-600 break-keep">
+                        {(() => {
+                          const last = selectedOpenCall.applicantDataPurges.at(-1);
+                          return `마지막 파기 ${formatDateTime(last.at)} · 지원서 ${last.applications}건, 파일 ${last.files}개${last.kept ? ` · 선정 ${last.kept}명 보관 중` : ""}`;
+                        })()}
+                      </p>
+                    ) : null}
 
                     {selectedOpenCallCounts ? (
                       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -1771,14 +1802,12 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                       포트폴리오 · 사이트
                                     </p>
                                     {app.portfolioUrl ? (
-                                      <a
-                                        href={app.portfolioUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sm font-bold text-[#004aad] break-all"
+                                      <StoredFileAnchor
+                                        value={app.portfolioUrl}
+                                        className="text-sm font-bold text-[#004aad] break-all underline-offset-4 hover:underline"
                                       >
                                         포트폴리오 열기
-                                      </a>
+                                      </StoredFileAnchor>
                                     ) : (
                                       <p className="text-sm font-bold text-zinc-500">-</p>
                                     )}
@@ -1793,14 +1822,18 @@ const OpenCallManager = ({ db, appId, applications }) => {
                                     </p>
                                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                                       {(app.works || []).filter((work) => work?.imageUrl).map((work, index) => (
-                                        <a key={work.imageUrl + index} href={work.imageUrl} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-3">
-                                          <img src={work.imageUrl} alt={work.title || `작품 ${index + 1}`} loading="lazy" className="h-20 w-20 shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 object-contain" />
+                                        <StoredFileAnchor key={work.imageUrl + index} value={work.imageUrl} className="flex min-w-0 items-center gap-3 text-left">
+                                          {fileUrl(work.imageUrl) ? (
+                                            <img src={fileUrl(work.imageUrl)} alt={work.title || `작품 ${index + 1}`} loading="lazy" className="h-20 w-20 shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 object-contain" />
+                                          ) : (
+                                            <span className="h-20 w-20 shrink-0 rounded-lg border border-zinc-200 bg-zinc-100" aria-hidden="true" />
+                                          )}
                                           <span className="min-w-0 text-sm text-zinc-800 break-keep">
                                             <span className="block font-bold">{work.title || "-"}</span>
                                             <span className="block text-xs">{[work.material, work.size, work.year].filter(Boolean).join(" · ")}</span>
                                             {work.price ? <span className="block text-xs font-semibold">{work.price}</span> : null}
                                           </span>
-                                        </a>
+                                        </StoredFileAnchor>
                                       ))}
                                     </div>
                                   </div>
@@ -1892,6 +1925,17 @@ const OpenCallManager = ({ db, appId, applications }) => {
 
       {createDialog ? (
         <OpenCallCreateDialog calls={sortedCalls} initialSourceId={createDialog.sourceId} onCreate={handleCreateOpenCall} onClose={closeCreateDialog} />
+      ) : null}
+      {purgeDialogOpen && selectedOpenCall ? (
+        <PurgeApplicationsDialog
+          call={selectedOpenCall}
+          applications={selectedApplications}
+          onClose={() => setPurgeDialogOpen(false)}
+          onDone={({ deleted, files, kept }) => {
+            setPurgeDialogOpen(false);
+            setManagerNotice(`지원서 ${deleted}건과 파일 ${files}개를 파기했습니다.${kept ? ` 선정 ${kept}명의 자료는 남겨 두었습니다.` : ""}`);
+          }}
+        />
       ) : null}
     </section>
   );

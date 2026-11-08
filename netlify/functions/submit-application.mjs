@@ -8,6 +8,7 @@ import {
   getOpenCallDisplayStatus,
   normalizeOpenCallFormSettings,
 } from "../../src/constants/openCall.js";
+import { isPrivateRef, keyFromPrivateRef, parseStoredKey } from "../../src/constants/storedFiles.js";
 import { adminDb, verifyUserRequest } from "./_lib/firebaseAdmin.mjs";
 import { notifyAdminOfInquiry, notifyApplicantOfInquiry } from "./_lib/inquiryNotifications.mjs";
 import { enforceRateLimit } from "./_lib/rateLimit.mjs";
@@ -59,9 +60,15 @@ const isStoredFileUrl = (value, folder) => {
   }
 };
 
-const readFileUrl = (value, folder, label) => {
+// A private reference must point into the right folder and at a file this applicant uploaded.
+const isOwnPrivateFile = (value, folder, uid) => {
+  const parsed = isPrivateRef(value) ? parseStoredKey(keyFromPrivateRef(value)) : null;
+  return Boolean(parsed && parsed.isPrivate && parsed.folder === folder && parsed.uid === uid && process.env.R2_PRIVATE_BUCKET_NAME);
+};
+
+const readFileUrl = (value, folder, label, uid) => {
   const url = text(value, MEDIUM, label);
-  if (url && !isStoredFileUrl(url, folder)) throw fail(400, `${label} 파일을 다시 업로드해 주세요.`);
+  if (url && !isStoredFileUrl(url, folder) && !isOwnPrivateFile(url, folder, uid)) throw fail(400, `${label} 파일을 다시 업로드해 주세요.`);
   return url;
 };
 
@@ -83,13 +90,13 @@ const readCustomAnswers = (submitted, fields) =>
 
 const isCentimetres = (value) => /^\d+(\.\d+)?$/.test(value) && Number(value) > 0;
 
-const readWorks = (submitted) => {
+const readWorks = (submitted, uid) => {
   const works = (Array.isArray(submitted) ? submitted : [])
     .filter((work) => work && typeof work === "object")
     .map((work, index) => {
       const label = `작품 ${index + 1}`;
       return {
-        imageUrl: readFileUrl(work.imageUrl, "open-call/works", `${label} 이미지`),
+        imageUrl: readFileUrl(work.imageUrl, "open-call/works", `${label} 이미지`, uid),
         title: text(work.title, SHORT, `${label} 작품명`),
         material: text(work.material, SHORT, `${label} 재료`),
         height: text(work.height, 20, `${label} 세로`),
@@ -142,8 +149,8 @@ const buildOpenCall = async (body, identity) => {
     phone: readPhone(body.phone, { min: 10, max: 11 }),
     email,
     artistStatement: text(body.artistStatement, OPEN_CALL_BIO_MAX_LENGTH, "작가 소개"),
-    portfolioUrl: required(readFileUrl(body.portfolioUrl, "open-call/portfolio", "포트폴리오"), "포트폴리오"),
-    works: readWorks(body.works),
+    portfolioUrl: required(readFileUrl(body.portfolioUrl, "open-call/portfolio", "포트폴리오", identity.uid), "포트폴리오"),
+    works: readWorks(body.works, identity.uid),
     termsAgreed: true,
     salesAgreed: true,
     privacyAgreed: true,

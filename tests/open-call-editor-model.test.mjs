@@ -117,3 +117,8 @@ test("순서 이동은 순번을 다시 매기고 범위 밖 이동은 무시한
   assert.equal(moveListItem(list, 0, -1), list);
   assert.equal(moveListItem(list, 2, 1), list);
 });
+
+test("공고를 복제해도 원래 공고의 파기 기록은 따라가지 않는다", () => {
+  const copy = buildDuplicateOpenCall({ title: "원본", applicantDataPurges: [{ applications: 3 }] }, { id: "new", title: "사본" });
+  assert.equal(copy.applicantDataPurges, undefined);
+});

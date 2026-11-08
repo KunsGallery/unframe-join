@@ -53,7 +53,8 @@ export const buildBlankOpenCall = ({ id, title }) => ({
 });
 
 export const buildDuplicateOpenCall = (source, { id, title }) => {
-  const { createdAt: _createdAt, updatedAt: _updatedAt, ...content } = source;
+  // The purge log belongs to the source call's applicants, not to a new call.
+  const { createdAt: _createdAt, updatedAt: _updatedAt, applicantDataPurges: _purges, ...content } = source;
   return { ...structuredClone(content), id, title, ...NO_DATES, ...UNPUBLISHED };
 };
 

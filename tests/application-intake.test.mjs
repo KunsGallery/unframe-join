@@ -51,6 +51,7 @@ mock.module("firebase-admin/auth", {
 const { handler: submit } = await import("../netlify/functions/submit-application.mjs");
 const { handler: sign } = await import("../netlify/functions/r2-sign-upload.mjs");
 const { handler: searchMusic } = await import("../netlify/functions/search-youtube-music.mjs");
+const { handler: viewFiles } = await import("../netlify/functions/view-files.mjs");
 const { sendSalonAlimtalk } = await import("../netlify/functions/_lib/salonShared.mjs");
 
 const post = (handler, body, token = "owner") => handler({
@@ -96,6 +97,7 @@ beforeEach(() => {
   process.env.R2_ACCESS_KEY_ID = "dummy";
   process.env.R2_SECRET_ACCESS_KEY = "dummy";
   process.env.R2_BUCKET_NAME = "bucket";
+  delete process.env.R2_PRIVATE_BUCKET_NAME;
   process.env.YOUTUBE_API_KEY = "yt";
   store = {
     [OPEN_CALLS]: {
@@ -310,6 +312,68 @@ test("업로드: 사용자당 빈도 제한을 넘으면 429, 관리자 업로�
   for (let i = 0; i < 60; i += 1) assert.equal((await post(sign, signBody())).statusCode, 200);
   assert.equal((await post(sign, signBody())).statusCode, 429);
   assert.equal((await post(sign, signBody({ isAdminUpload: true }), "admin")).statusCode, 200);
+});
+
+const PRIVATE = "r2-private://";
+// The SDK may sign path-style (/bucket/key) or virtual-hosted (bucket.host/key) URLs.
+const inBucket = (signed, bucket) => { const url = new URL(signed); return url.hostname.startsWith(`${bucket}.`) || url.pathname.startsWith(`/${bucket}/`); };
+const privateWork = (name, uid = "owner") => work(name, { imageUrl: `${PRIVATE}open-call/works/2026/11/${uid}/${name}.jpg` });
+const privatePortfolio = (uid = "owner") => `${PRIVATE}open-call/portfolio/2026/11/${uid}/p.pdf`;
+
+test("비공개 파일: 비공개 버킷을 설정하면 지원자 파일은 공개 주소 없이 참조만 받는다", async () => {
+  process.env.R2_PRIVATE_BUCKET_NAME = "private-bucket";
+  for (const folder of ["open-call/works", "open-call/portfolio"]) {
+    const contentType = folder.endsWith("works") ? "image/png" : "application/pdf";
+    const fileName = folder.endsWith("works") ? "a.png" : "a.pdf";
+    const body = JSON.parse((await post(sign, signBody({ folder, contentType, fileName }))).body);
+    assert.equal(body.publicUrl, "", folder);
+    assert.match(body.fileRef, new RegExp(`^r2-private://${folder}/\\d{4}/\\d{2}/owner/`));
+    assert.ok(inBucket(body.signedUrl, "private-bucket"), "비공개 버킷에 올린다");
+  }
+  const poster = JSON.parse((await post(sign, signBody({ folder: "open-call/posters", isAdminUpload: true }), "admin")).body);
+  assert.equal(poster.fileRef, poster.publicUrl, "공고 포스터는 계속 공개");
+  assert.ok(poster.publicUrl.startsWith(BASE));
+});
+
+test("비공개 파일: 버킷을 설정하기 전에는 지금처럼 공개 주소를 쓴다", async () => {
+  const body = JSON.parse((await post(sign, signBody())).body);
+  assert.ok(body.publicUrl.startsWith(`${BASE}/open-call/works/`));
+  assert.equal(body.fileRef, body.publicUrl);
+});
+
+test("비공개 파일: 지원서에는 본인이 올린 비공개 파일만 넣을 수 있다", async () => {
+  process.env.R2_PRIVATE_BUCKET_NAME = "private-bucket";
+  const ok = await post(submit, withQ1({ works: [privateWork("a"), privateWork("b")], portfolioUrl: privatePortfolio() }));
+  assert.equal(ok.statusCode, 201);
+  assert.equal(onlyApplication().portfolioUrl, privatePortfolio());
+  assert.equal(onlyApplication().works[0].imageUrl, privateWork("a").imageUrl);
+
+  const cases = [
+    { portfolioUrl: privatePortfolio("someone-else") },
+    { works: [privateWork("a"), privateWork("b", "someone-else")] },
+    { portfolioUrl: `${PRIVATE}open-call/works/2026/11/owner/p.pdf` },
+    { portfolioUrl: `${PRIVATE}open-call/portfolio/2026/11/owner/../x/p.pdf` },
+  ];
+  for (const overrides of cases) assert.equal((await post(submit, withQ1(overrides))).statusCode, 400, JSON.stringify(overrides));
+  delete process.env.R2_PRIVATE_BUCKET_NAME;
+  assert.equal((await post(submit, withQ1({ portfolioUrl: privatePortfolio() }))).statusCode, 400, "버킷이 없으면 참조를 받지 않는다");
+});
+
+test("비공개 파일: 본인 파일과 관리자만 열람 링크를 받는다", async () => {
+  process.env.R2_PRIVATE_BUCKET_NAME = "private-bucket";
+  const mine = privatePortfolio();
+  const theirs = privatePortfolio("someone-else");
+  const asOwner = JSON.parse((await post(viewFiles, { refs: [mine, theirs, `${BASE}/x.png`] })).body);
+  assert.deepEqual(Object.keys(asOwner.urls), [mine]);
+  assert.ok(inBucket(asOwner.urls[mine], "private-bucket"));
+  assert.ok(new URL(asOwner.urls[mine]).pathname.includes("/open-call/portfolio/2026/11/owner/"));
+  assert.ok(Number(new URL(asOwner.urls[mine]).searchParams.get("X-Amz-Expires")) <= 600);
+  const asAdmin = JSON.parse((await post(viewFiles, { refs: [mine, theirs] }, "admin")).body);
+  assert.deepEqual(Object.keys(asAdmin.urls).sort(), [mine, theirs].sort());
+  assert.equal((await post(viewFiles, { refs: [mine] }, "anonymous")).statusCode, 403);
+  assert.equal((await post(viewFiles, { refs: [mine] }, "nobody")).statusCode, 401);
+  delete process.env.R2_PRIVATE_BUCKET_NAME;
+  assert.equal((await post(viewFiles, { refs: [mine] })).statusCode, 503);
 });
 
 test("YouTube 검색: 로그인이 필요하고 빈도 제한이 있다", async () => {

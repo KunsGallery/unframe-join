@@ -80,7 +80,7 @@ export const uploadDocumentToR2 = async ({ file, folder, onProgress, signal }) =
 
   return {
     key: signed.key,
-    url: signed.publicUrl,
+    url: signed.fileRef || signed.publicUrl,   // a private "r2-private://" reference for applicant files
   };
 };
 
@@ -100,7 +100,7 @@ export const uploadImageToR2 = async ({ file, folder = "images", isAdminUpload =
 
   return {
     key: signed.key,
-    url: signed.publicUrl,
+    url: signed.fileRef || signed.publicUrl,   // a private "r2-private://" reference for applicant files
   };
 };
 

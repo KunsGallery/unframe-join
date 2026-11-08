@@ -29,6 +29,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "firebase/firestore";
+import { openStoredFile, useFileUrls } from "../lib/privateFiles";
 import {
   getSnsOrWebsiteLinkLabel,
   normalizeSnsOrWebsiteUrl,
@@ -333,6 +334,8 @@ const ApplicationCard = ({ app, isActive, onClick }) => {
 };
 
 const ApplicationDetailPanel = ({ app }) => {
+  // Artwork images are private files; the applicant gets short-lived links to their own.
+  const fileUrl = useFileUrls(app ? (app.works || []).map((work) => work?.imageUrl) : []);
   if (!app) {
     return (
       <EmptyPanel
@@ -631,9 +634,17 @@ const ApplicationDetailPanel = ({ app }) => {
               <p className="text-[10px] font-black uppercase tracking-[0.12em] text-zinc-300 mb-1">
                 Portfolio
               </p>
-              <p className="text-sm font-bold text-zinc-700 break-all">
-                {app.portfolioUrl || "-"}
-              </p>
+              {app.portfolioUrl ? (
+                <button
+                  type="button"
+                  onClick={() => openStoredFile(app.portfolioUrl)}
+                  className="inline-flex min-h-10 items-center text-sm font-bold text-[#004aad] underline underline-offset-4"
+                >
+                  포트폴리오 파일 열기
+                </button>
+              ) : (
+                <p className="text-sm font-bold text-zinc-700">-</p>
+              )}
             </div>
 
             {customFieldAnswers.length > 0 ? (
@@ -690,7 +701,7 @@ const ApplicationDetailPanel = ({ app }) => {
                       {work.size ? <p>크기(세로 x 가로): {work.size}</p> : null}
                       <p>제작연도: {work.year || "-"}</p>
                       {work.price ? <p>작품가격: {work.price}</p> : null}
-                      {work.imageUrl ? <img src={work.imageUrl} alt={`작품 ${index + 1}`} loading="lazy" className="mt-2 max-h-40 rounded-lg object-contain" /> : null}
+                      {fileUrl(work.imageUrl) ? <img src={fileUrl(work.imageUrl)} alt={`작품 ${index + 1}`} loading="lazy" className="mt-2 max-h-40 rounded-lg object-contain" /> : null}
                     </div>
                   </div>
                 );

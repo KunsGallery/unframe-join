@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, FileText, Loader2, Plus, Upload, X } from "lucide-react";
 import { auth } from "../../lib/firebase";
+import { useFileUrls } from "../../lib/privateFiles";
 import { callSalonFunction } from "../../lib/salonApi";
 import {
   DOCUMENT_MAX_SIZE,
@@ -205,6 +206,8 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
   const [errors, setErrors] = useState({});
   const [uploadError, setUploadError] = useState("");
   const [uploads, setUploads] = useState({});
+  // Uploaded works are private references; this turns them into short-lived preview links.
+  const fileUrl = useFileUrls(form.works.map((work) => work.imageUrl));
   const [batchIds, setBatchIds] = useState([]);
   const [submitStage, setSubmitStage] = useState("");
   const [submitError, setSubmitError] = useState("");
@@ -495,7 +498,7 @@ const OpenCallApplicationForm = ({ openCall, user, handleLogin, initialProfileDa
               <li key={index} className="grid grid-cols-1 gap-3 border-b border-zinc-300 pb-3 sm:grid-cols-[88px_minmax(0,1fr)]">
                 <div className="flex items-start gap-3 sm:block">
                   <label data-missing={errors[`work-${index}-imageUrl`] === MISSING_FIELD || undefined} className={`relative flex aspect-square w-[88px] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-sm border border-dashed text-zinc-500 focus-within:ring-1 focus-within:ring-[#004aad] ${errors[`work-${index}-imageUrl`] === MISSING_FIELD ? "border-amber-500 bg-amber-50" : "border-zinc-400 bg-white"}`}>
-                    {work.imageUrl ? <img src={work.imageUrl} alt={`작품 ${index + 1} 미리보기`} className="h-full w-full object-contain" /> : <Upload size={18} aria-hidden="true" />}
+                    {work.imageUrl && fileUrl(work.imageUrl) ? <img src={fileUrl(work.imageUrl)} alt={`작품 ${index + 1} 미리보기`} className="h-full w-full object-contain" /> : work.imageUrl ? <Check size={18} className="text-emerald-700" aria-hidden="true" /> : <Upload size={18} aria-hidden="true" />}
                     <span className="sr-only">작품 {index + 1} 이미지 {work.imageUrl ? "교체" : "올리기"}</span>
                     <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadImages([file], index); }} />
                   </label>
